@@ -46,6 +46,7 @@ class AlgorithmFactory:
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> DESOptimizer: ...
 
@@ -62,6 +63,7 @@ class AlgorithmFactory:
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> BaseOptimizer: ...
 
@@ -78,6 +80,7 @@ class AlgorithmFactory:
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> "MFCMAESOptimizer": ...
 
@@ -93,6 +96,7 @@ class AlgorithmFactory:
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> "CMAESOptimizer": ...
 
@@ -107,6 +111,7 @@ class AlgorithmFactory:
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> BaseOptimizer:
         """Create an optimizer instance with proper typing."""
@@ -128,6 +133,7 @@ class AlgorithmFactory:
             boundary_strategy=boundary_strategy,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
+            seed=seed,
             **kwargs,
         )
 

@@ -24,7 +24,7 @@ class CMA:
         sigma: float,
         bounds: Optional[np.ndarray] = None,
         n_max_resampling: int = 100,
-        seed: Optional[int] = None,
+        seed: int | np.random.Generator | None = None,
         population_size: Optional[int] = None,
         cov: Optional[np.ndarray] = None,
         lr_adapt: bool = False,
@@ -137,7 +137,10 @@ class CMA:
         self._n_max_resampling = n_max_resampling
 
         self._g = 0
-        self._rng = np.random.RandomState(seed)
+        if isinstance(seed, np.random.Generator):
+            self._rng = seed
+        else:
+            self._rng = np.random.default_rng(seed)
 
         # for learning rate adaptation
         self._lr_adapt = lr_adapt
@@ -184,7 +187,7 @@ class CMA:
         return self._mean
 
     def reseed_rng(self, seed: int) -> None:
-        self._rng.seed(seed)
+        self._rng = np.random.default_rng(seed)
 
     def set_bounds(self, bounds: Optional[np.ndarray]) -> None:
         """Update boundary constraints"""
@@ -215,7 +218,7 @@ class CMA:
 
     def _sample_solution(self) -> np.ndarray:
         B, D = self._eigen_decomposition()
-        z = self._rng.randn(self._n_dim)  # ~ N(0, I)
+        z = self._rng.standard_normal(self._n_dim)  # ~ N(0, I)
         y = cast(np.ndarray, B.dot(np.diag(D))).dot(z)  # ~ N(0, C)
         x = self._mean + self._sigma * y  # ~ N(m, σ^2 C)
         return x
