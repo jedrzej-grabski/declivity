@@ -228,7 +228,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 midpoint_fitness=self.midpoint_fitness,
                 constraint_violations=self.constraint_violations,
                 fitness=fitness_values,
-                population=vx if self.config.diag_pop else None,
+                population=vx.T if self.config.diag_pop else None,
                 best_solution=best_solution,
                 pc=self.pc,
                 mean_vector=self.mean,
