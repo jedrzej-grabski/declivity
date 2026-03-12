@@ -72,6 +72,29 @@ class Sphere(BenchmarkFunction):
         return np.zeros(self.dimensions), 0.0
 
 
+class Ellipsoid(BenchmarkFunction):
+    """
+    Ellipsoid function.
+    f(x) = sum(10^(6*(i-1)/(n-1)) * x_i^2)
+    Global minimum: f(0, 0, ..., 0) = 0
+    """
+
+    def __call__(self, x: NDArray[np.float64]) -> float:
+        n = len(x)
+        if n == 1:
+            return float(x[0] ** 2)
+        scales = 10.0 ** (6.0 * np.arange(n) / (n - 1))
+        return float(np.sum(scales * x**2))
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return -100.0 * np.ones(self.dimensions), 100.0 * np.ones(self.dimensions)
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        return np.zeros(self.dimensions), 0.0
+
+
 class Rosenbrock(BenchmarkFunction):
     """
     Rosenbrock function (Valley function).
