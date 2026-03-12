@@ -25,6 +25,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
     ) -> None:
 
         if config is None:
@@ -39,6 +40,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
             boundary_strategy=boundary_strategy,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
+            seed=seed,
         )
 
         self.logger = MFCMAESLogger(config=self.config)
@@ -93,7 +95,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
         w = np.tile(np.sqrt(self.config.weights), window_size)[: len(decay_rep)]
 
-        r_mu = np.random.randn(len(decay_rep), self.config.population_size)
+        r_mu = self.rng.standard_normal((len(decay_rep), self.config.population_size))
 
         relevant_d_size = min(generation * self.config.mu, self.d_history.shape[1])
         d_relevant = self.d_history[:, :relevant_d_size]
@@ -101,7 +103,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         weighted_d = d_relevant * (decay_rep[:relevant_d_size] * w[:relevant_d_size])
         rank_mu = np.sqrt(self.config.c_mu) * (weighted_d @ r_mu[:relevant_d_size, :])
 
-        r_1 = np.random.randn(window_size, self.config.population_size)
+        r_1 = self.rng.standard_normal((window_size, self.config.population_size))
         p_relevant = self.p_history[:, :window_size]
         rank_1 = np.sqrt(self.config.c_1) * (
             p_relevant @ (r_1 * decay[:window_size, np.newaxis])
@@ -116,7 +118,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 * (1 - self.config.c_cov) ** (generation - self.config.window - 1)
             )
 
-        r_last = np.random.randn(self.config.dimensions, self.config.population_size)
+        r_last = self.rng.standard_normal((self.config.dimensions, self.config.population_size))
         last_term = last_decay * r_last
 
         # Combine all terms to get difference vectors
@@ -137,7 +139,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self.midpoint_fitness = np.inf
         self.prev_midpoint_fitness = np.inf
 
-        initial_d = np.random.randn(self.config.dimensions, self.config.population_size)
+        initial_d = self.rng.standard_normal((self.config.dimensions, self.config.population_size))
         initial_arx = self.mean[:, np.newaxis] + self.sigma * initial_d
         initial_vx = np.clip(
             initial_arx,
@@ -146,9 +148,8 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         )
 
         initial_fitness = np.array(
-            [self.func(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
+            [self.evaluate(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
         )
-        self.evaluations += self.config.population_size
 
         arindex = np.argsort(initial_fitness)
         aripop = arindex[: self.config.mu]
@@ -188,8 +189,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
             self.constraint_violations = int(np.sum(np.any(vx != arx, axis=0)))
 
-            fitness_values = np.array([self.func(vx[:, i]) for i in range(vx.shape[1])])
-            self.evaluations += self.config.population_size
+            fitness_values = np.array([self.evaluate(vx[:, i]) for i in range(vx.shape[1])])
 
             best_idx = np.argmin(fitness_values)
             if fitness_values[best_idx] < best_fitness:
@@ -280,8 +280,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self.prev_midpoint_fitness = self.midpoint_fitness
 
         population_midpoint = np.mean(vx, axis=1)
-        self.midpoint_fitness = self.func(population_midpoint)
-        self.evaluations += 1
+        self.midpoint_fitness = self.evaluate(population_midpoint)
 
         num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
         self.p_succ = num_successes / self.config.population_size
@@ -297,8 +296,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         if not self.config.use_ppmf:
             # Keep sigma constant, just calculate p_succ for logging
             population_midpoint = np.mean(vx, axis=1)
-            self.midpoint_fitness = self.func(population_midpoint)
-            self.evaluations += 1
+            self.midpoint_fitness = self.evaluate(population_midpoint)
 
             num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
             self.p_succ = num_successes / self.config.population_size
@@ -310,8 +308,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
         population_midpoint = np.mean(vx, axis=1)
 
-        self.midpoint_fitness = self.func(population_midpoint)
-        self.evaluations += 1
+        self.midpoint_fitness = self.evaluate(population_midpoint)
 
         num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
         self.p_succ = num_successes / self.config.population_size
