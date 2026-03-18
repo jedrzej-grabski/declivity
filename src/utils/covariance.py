@@ -146,12 +146,10 @@ def _decompose(
     """Eigendecompose a symmetric matrix and wrap in CovarianceMatrix."""
     eigenvalues, eigenvectors = np.linalg.eigh(cov)
 
-    # Sort descending
     order = np.argsort(eigenvalues)[::-1]
     eigenvalues = eigenvalues[order]
     eigenvectors = eigenvectors[:, order]
 
-    # Effective rank: eigenvalues above the noise floor, capped by max_rank
     significant = np.sum(eigenvalues > _EIGENVALUE_FLOOR)
     effective_rank = min(int(significant), max_rank)
 
