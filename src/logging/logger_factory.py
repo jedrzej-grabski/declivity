@@ -4,6 +4,7 @@ from src.logging.base_logger import BaseLogger
 from src.logging.des_logger import DESLogger
 from src.logging.mfcmaes_logger import MFCMAESLogger
 from src.logging.cmaes_logger import CMAESLogger
+from src.logging.lbfgsb_logger import LBFGSBLogger
 
 
 class LoggerFactory:
@@ -30,3 +31,4 @@ class LoggerFactory:
 LoggerFactory.register_logger(AlgorithmChoice.DES, DESLogger)
 LoggerFactory.register_logger(AlgorithmChoice.MFCMAES, MFCMAESLogger)
 LoggerFactory.register_logger(AlgorithmChoice.CMAES, CMAESLogger)
+LoggerFactory.register_logger(AlgorithmChoice.LBFGSB, LBFGSBLogger)

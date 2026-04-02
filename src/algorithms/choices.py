@@ -6,3 +6,4 @@ class AlgorithmChoice(Enum):
     DES = "DES"
     MFCMAES = "MFCMAES"
     CMAES = "CMAES"
+    LBFGSB = "LBFGSB"
