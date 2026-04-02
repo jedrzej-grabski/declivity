@@ -89,6 +89,8 @@ def empirical_covariance(
     if mean is None:
         mean = np.mean(population, axis=0)
 
+    assert mean is not None
+
     centered = population - mean
     n = population.shape[0]
     cov = (centered.T @ centered) / (n - 1)
