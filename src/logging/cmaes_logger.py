@@ -57,6 +57,11 @@ class CMAESLogData(BaseLogData):
     coordinate_std: list[NDArray[np.float64]] = field(default_factory=list)
     """Standard deviation in each coordinate"""
 
+    # Full covariance matrix (stored only for the final generation to avoid
+    # excessive memory usage; use covariance_matrix[-1] after optimization)
+    covariance_matrix: list[NDArray[np.float64]] = field(default_factory=list)
+    """Full covariance matrix C (logged when diag_eigen is enabled)"""
+
     def clear(self) -> None:
         """Reset all log data including CMA-ES-specific."""
         self.clear_common()
@@ -73,6 +78,7 @@ class CMAESLogData(BaseLogData):
         self.max_eigenvalue.clear()
         self.min_eigenvalue.clear()
         self.coordinate_std.clear()
+        self.covariance_matrix.clear()
 
     def to_dict(self) -> dict[str, list[Any]]:
         """Convert all log data to dictionary format."""
@@ -92,6 +98,7 @@ class CMAESLogData(BaseLogData):
                 "max_eigenvalue": self.max_eigenvalue,
                 "min_eigenvalue": self.min_eigenvalue,
                 "coordinate_std": self.coordinate_std,
+                "covariance_matrix": self.covariance_matrix,
             }
         )
         return result
@@ -177,6 +184,15 @@ class CMAESLogger(BaseLogger[CMAESLogData]):
             det = np.linalg.det(covariance_matrix)
             self.logs.covariance_determinant.append(float(det))
 
-            # Coordinate-wise standard deviation
             coord_std = np.sqrt(np.diag(covariance_matrix))
             self.logs.coordinate_std.append(coord_std)
+
+            if self.config.diag_covariance_matrix:
+                # Store every generation (expensive but allows tracking evolution)
+                self.logs.covariance_matrix.append(covariance_matrix.copy())
+            else:
+                # Store only the latest generation to keep memory bounded
+                if len(self.logs.covariance_matrix) > 0:
+                    self.logs.covariance_matrix[-1] = covariance_matrix.copy()
+                else:
+                    self.logs.covariance_matrix.append(covariance_matrix.copy())

@@ -733,6 +733,8 @@ class MultiAlgorithmPlotter:
         colors: dict[str, str],
         title: str = "Convergence Comparison",
         save_path: Optional[Union[str, Path]] = None,
+        handoff_eval: Optional[int] = None,
+        handoff_iter: Optional[int] = None,
     ) -> Figure:
         """Four-panel comparison of labeled optimization runs.
 
@@ -744,6 +746,10 @@ class MultiAlgorithmPlotter:
             colors: Dictionary mapping the same labels to hex color strings.
             title: Suptitle for the figure.
             save_path: Path to save the figure.
+            handoff_eval: If set, draws a vertical line at this evaluation
+                count on evaluation-based panels to mark an algorithm handoff.
+            handoff_iter: If set, draws a vertical line at this iteration
+                count on iteration-based panels to mark an algorithm handoff.
         """
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
@@ -760,6 +766,10 @@ class MultiAlgorithmPlotter:
         ax.set_title("Convergence by Evaluations", fontsize=14)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
+        if handoff_eval is not None:
+            ax.axvline(x=handoff_eval, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7, label="Handoff")
+            ax.legend(fontsize=9)
 
         ax = axes[0, 1]
         for label, result in results.items():
@@ -773,6 +783,10 @@ class MultiAlgorithmPlotter:
         ax.set_title("Convergence by Iteration", fontsize=14)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
+        if handoff_iter is not None:
+            ax.axvline(x=handoff_iter, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7, label="Handoff")
+            ax.legend(fontsize=9)
 
         ax = axes[1, 0]
         for label, result in results.items():
@@ -788,6 +802,9 @@ class MultiAlgorithmPlotter:
         ax.set_title("Projected Gradient Norm", fontsize=14)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
+        if handoff_eval is not None:
+            ax.axvline(x=handoff_eval, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7)
 
         ax = axes[1, 1]
         for label, result in results.items():
@@ -802,6 +819,9 @@ class MultiAlgorithmPlotter:
         ax.set_xlabel("Iteration", fontsize=12)
         ax.set_ylabel("Step Length (log scale)", fontsize=12)
         ax.set_title("Line Search Step Length", fontsize=14)
+        if handoff_iter is not None:
+            ax.axvline(x=handoff_iter, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
 
@@ -848,6 +868,261 @@ class MultiAlgorithmPlotter:
         ax.set_xlabel("Function Evaluations to Converge", fontsize=13)
         ax.set_title(title, fontsize=14)
         ax.invert_yaxis()
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_function_landscape(
+        self,
+        func: Any,
+        title: str = "Function Landscape",
+        dim1: int = 0,
+        dim2: int = 1,
+        center: Optional[NDArray[np.float64]] = None,
+        extent: float = 10.0,
+        resolution: int = 200,
+        log_scale: bool = True,
+        show_eigenvectors: bool = False,
+        hessian: Optional[NDArray[np.float64]] = None,
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Contour plot of a 2D slice through a benchmark function.
+
+        Fixes all variables except dim1 and dim2 at the center point,
+        then evaluates the function on a grid. Optionally overlays the
+        Hessian eigenvectors at the center to show principal curvature
+        directions.
+
+        Args:
+            func: Callable taking an n-dimensional vector.
+            title: Plot title.
+            dim1, dim2: Which two coordinates form the slice.
+            center: Point where non-plotted dimensions are fixed (default: origin).
+            extent: Half-width of the plot region in each direction.
+            resolution: Grid points per axis.
+            log_scale: Use log scale for contour levels.
+            show_eigenvectors: Draw eigenvector arrows from the Hessian.
+            hessian: Full n x n Hessian matrix (needed for eigenvectors).
+            save_path: Path to save the figure.
+        """
+        n = getattr(func, "dimensions", None)
+        if center is None:
+            center = np.zeros(n) if n else np.zeros(2)
+
+        x_range = np.linspace(center[dim1] - extent, center[dim1] + extent, resolution)
+        y_range = np.linspace(center[dim2] - extent, center[dim2] + extent, resolution)
+        X, Y = np.meshgrid(x_range, y_range)
+        Z = np.zeros_like(X)
+
+        for i in range(resolution):
+            for j in range(resolution):
+                point = center.copy()
+                point[dim1] = X[i, j]
+                point[dim2] = Y[i, j]
+                Z[i, j] = func(point)
+
+        fig, ax = plt.subplots(figsize=(8, 7))
+
+        if log_scale:
+            Z_plot = np.log10(np.maximum(Z, 1e-30))
+            label = "log10(f)"
+        else:
+            Z_plot = Z
+            label = "f(x)"
+
+        contour = ax.contourf(X, Y, Z_plot, levels=30, cmap="viridis")
+        ax.contour(X, Y, Z_plot, levels=15, colors="white", linewidths=0.3, alpha=0.5)
+        cbar = plt.colorbar(contour, ax=ax)
+        cbar.set_label(label, fontsize=11)
+
+        if show_eigenvectors and hessian is not None:
+            sub_hessian = np.array([
+                [hessian[dim1, dim1], hessian[dim1, dim2]],
+                [hessian[dim2, dim1], hessian[dim2, dim2]],
+            ])
+            eigenvalues, eigenvectors = np.linalg.eigh(sub_hessian)
+
+            arrow_scale = extent * 0.4
+            for k in range(2):
+                ev = eigenvectors[:, k]
+                magnitude = eigenvalues[k]
+                label_text = f"$\\lambda_{k+1}$ = {magnitude:.1e}"
+                color = "#ff6b6b" if k == 0 else "#4ecdc4"
+                ax.annotate(
+                    "", xy=(center[dim1] + arrow_scale * ev[0],
+                            center[dim2] + arrow_scale * ev[1]),
+                    xytext=(center[dim1], center[dim2]),
+                    arrowprops=dict(arrowstyle="->", color=color, lw=2.5),
+                )
+                ax.annotate(
+                    "", xy=(center[dim1] - arrow_scale * ev[0],
+                            center[dim2] - arrow_scale * ev[1]),
+                    xytext=(center[dim1], center[dim2]),
+                    arrowprops=dict(arrowstyle="->", color=color, lw=2.5),
+                )
+                ax.plot([], [], color=color, lw=2.5, label=label_text)
+
+            ax.legend(loc="upper right", fontsize=10)
+
+        ax.set_xlabel(f"$x_{{{dim1+1}}}$", fontsize=13)
+        ax.set_ylabel(f"$x_{{{dim2+1}}}$", fontsize=13)
+        ax.set_title(title, fontsize=14)
+        ax.set_aspect("equal")
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_function_landscape_grid(
+        self,
+        functions: dict[str, Any],
+        hessians: Optional[dict[str, NDArray[np.float64]]] = None,
+        dim1: int = 0,
+        dim2: int = 1,
+        extent: float = 10.0,
+        resolution: int = 200,
+        suptitle: str = "Function Landscapes",
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Grid of contour plots for multiple functions side by side.
+
+        Args:
+            functions: Dict mapping labels to callable benchmark functions.
+            hessians: Optional dict mapping the same labels to Hessian matrices.
+            dim1, dim2: Which two coordinates form the slice.
+            extent: Half-width of the plot region.
+            resolution: Grid points per axis.
+            suptitle: Title above the grid.
+            save_path: Path to save the figure.
+        """
+        num_funcs = len(functions)
+        cols = min(num_funcs, 4)
+        rows = (num_funcs + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 5.5 * rows))
+        if num_funcs == 1:
+            axes = np.array([axes])
+        axes = np.atleast_2d(axes)
+
+        for idx, (label, func) in enumerate(functions.items()):
+            row, col = divmod(idx, cols)
+            ax = axes[row, col]
+
+            n = getattr(func, "dimensions", 2)
+            center = np.zeros(n)
+
+            x_range = np.linspace(-extent, extent, resolution)
+            y_range = np.linspace(-extent, extent, resolution)
+            X, Y = np.meshgrid(x_range, y_range)
+            Z = np.zeros_like(X)
+
+            for i in range(resolution):
+                for j in range(resolution):
+                    point = center.copy()
+                    point[dim1] = X[i, j]
+                    point[dim2] = Y[i, j]
+                    Z[i, j] = func(point)
+
+            Z_plot = np.log10(np.maximum(Z, 1e-30))
+            contour = ax.contourf(X, Y, Z_plot, levels=30, cmap="viridis")
+            ax.contour(X, Y, Z_plot, levels=15, colors="white", linewidths=0.3, alpha=0.5)
+
+            if hessians and label in hessians:
+                hessian = hessians[label]
+                sub_hessian = np.array([
+                    [hessian[dim1, dim1], hessian[dim1, dim2]],
+                    [hessian[dim2, dim1], hessian[dim2, dim2]],
+                ])
+                eigenvalues, eigenvectors = np.linalg.eigh(sub_hessian)
+                arrow_scale = extent * 0.35
+                for k in range(2):
+                    ev = eigenvectors[:, k]
+                    color = "#ff6b6b" if k == 0 else "#4ecdc4"
+                    ax.annotate(
+                        "", xy=(arrow_scale * ev[0], arrow_scale * ev[1]),
+                        xytext=(0, 0),
+                        arrowprops=dict(arrowstyle="->", color=color, lw=2),
+                    )
+                    ax.annotate(
+                        "", xy=(-arrow_scale * ev[0], -arrow_scale * ev[1]),
+                        xytext=(0, 0),
+                        arrowprops=dict(arrowstyle="->", color=color, lw=2),
+                    )
+
+            ax.set_xlabel(f"$x_{{{dim1+1}}}$", fontsize=11)
+            ax.set_ylabel(f"$x_{{{dim2+1}}}$", fontsize=11)
+            ax.set_title(label, fontsize=12)
+            ax.set_aspect("equal")
+
+        # Hide unused subplots
+        for idx in range(num_funcs, rows * cols):
+            row, col = divmod(idx, cols)
+            axes[row, col].set_visible(False)
+
+        fig.suptitle(suptitle, fontsize=16, y=1.02)
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_matrix_diagonal_comparison(
+        self,
+        matrices: dict[str, NDArray[np.float64]],
+        reference: NDArray[np.float64],
+        reference_label: str = "True Hessian",
+        title: str = "Diagonal Profile Comparison",
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Compare sorted diagonal profiles of several matrices against a reference.
+
+        Plots the sorted absolute diagonal of each matrix (normalized to unit max)
+        against the reference diagonal. Shows how well each matrix captures the
+        per-variable curvature structure.
+
+        Args:
+            matrices: Dict mapping labels to n x n matrices.
+            reference: The ground-truth matrix (e.g. the true Hessian).
+            reference_label: Label for the reference curve.
+            title: Plot title.
+            save_path: Path to save the figure.
+        """
+        num_plots = len(matrices)
+        cols = min(num_plots, 3)
+        rows = (num_plots + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4.5 * rows))
+        if num_plots == 1:
+            axes = np.array([axes])
+        axes = np.atleast_1d(axes).flatten()
+
+        ref_diag = np.sort(np.abs(np.diag(reference)))
+        ref_norm = ref_diag / (np.max(ref_diag) + 1e-30)
+        var_indices = np.arange(1, len(ref_diag) + 1)
+
+        for idx, (label, matrix) in enumerate(matrices.items()):
+            ax = axes[idx]
+            mat_diag = np.sort(np.abs(np.diag(matrix)))
+            mat_norm = mat_diag / (np.max(mat_diag) + 1e-30)
+
+            ax.semilogy(var_indices, ref_norm, "k-o", markersize=3,
+                        linewidth=1.5, label=reference_label)
+            ax.semilogy(var_indices, mat_norm, "g--s", markersize=3,
+                        linewidth=1.5, label="Passed matrix")
+            ax.set_xlabel("Variable index (sorted)", fontsize=10)
+            ax.set_ylabel("Normalized diagonal (log)", fontsize=10)
+            ax.set_title(label, fontsize=11)
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+        for idx in range(num_plots, len(axes)):
+            axes[idx].set_visible(False)
+
+        fig.suptitle(title, fontsize=14)
         plt.tight_layout()
 
         if save_path:

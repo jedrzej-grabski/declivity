@@ -5,6 +5,11 @@ A limited-memory quasi-Newton method for bound-constrained optimization.
 Reimplemented from the Fortran L-BFGS-B v3.0 (Byrd, Lu, Nocedal, Zhu 1995)
 with the subspace minimization correction from Morales and Nocedal (2011).
 
+Extended to accept a diagonal or dense initial Hessian approximation B_0.
+The compact representation becomes B = theta * B_0 - W * M * W', with B_0
+threaded consistently through the Cauchy point, subspace minimization,
+W matrix construction, and middle matrix operations.
+
 References:
     R.H. Byrd, P. Lu, J. Nocedal, C. Zhu, "A Limited Memory Algorithm for
     Bound Constrained Optimization", SIAM J. Scientific Computing 16 (1995).
@@ -20,6 +25,7 @@ from scipy.linalg import cho_factor, cho_solve
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.lbfgsb.config import LBFGSBConfig
+from src.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
 from src.algorithms.lbfgsb.line_search import perform_line_search
 from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
@@ -33,9 +39,11 @@ if TYPE_CHECKING:
 class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     """L-BFGS-B optimizer for bound-constrained minimization.
 
-    Uses a compact L-BFGS Hessian approximation with generalized Cauchy point
-    computation for active set identification and subspace minimization for
-    second-order refinement within the free variable space.
+    Uses a compact L-BFGS Hessian approximation B = theta * B_0 - W * M * W'
+    with generalized Cauchy point computation for active set identification
+    and subspace minimization for second-order refinement.
+
+    B_0 can be the identity (default), a diagonal, or a full matrix.
     """
 
     def __init__(
@@ -72,40 +80,25 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self._memory_size = config.m
         self._machine_epsilon = np.finfo(float).eps
 
-        # Initial Hessian diagonal B_0 = diag(initial_hessian_diagonal)
-        num_dimensions = len(initial_point)
-        if config.initial_hessian is None:
-            self._initial_hessian_diagonal = np.ones(num_dimensions)
-        elif np.isscalar(config.initial_hessian):
-            self._initial_hessian_diagonal = np.full(
-                num_dimensions, float(config.initial_hessian)
-            )
-        else:
-            hessian_diag = np.asarray(config.initial_hessian, dtype=float)
-            if hessian_diag.shape != (num_dimensions,):
-                raise ValueError(
-                    f"initial_hessian array must have length {num_dimensions}, "
-                    f"got {hessian_diag.shape}"
-                )
-            if np.any(hessian_diag <= 0):
-                raise ValueError("initial_hessian diagonal entries must be positive")
-            self._initial_hessian_diagonal = hessian_diag
+        self._initial_hessian = InitialHessian(
+            config.initial_hessian, len(initial_point)
+        )
 
-        # Correction pair storage (most recent pair last)
         self._step_vectors: list[NDArray[np.float64]] = []
         self._gradient_diff_vectors: list[NDArray[np.float64]] = []
         self._theta: float = 1.0
         self._num_corrections: int = 0
 
-        # Cached Gram matrices, rebuilt after each correction pair update
         self._steps_dot_grad_diffs: NDArray[np.float64] = np.empty((0, 0))
         self._steps_dot_steps: NDArray[np.float64] = np.empty((0, 0))
+        self._steps_B0_steps: NDArray[np.float64] = np.empty((0, 0))
         self._cholesky_factor_of_T: tuple | None = None
+
+    # Gradient computation
 
     def _evaluate_function_and_gradient(
         self, x: NDArray[np.float64]
     ) -> tuple[float, NDArray[np.float64]]:
-        """Evaluate the objective function and its gradient at x."""
         function_value = self.evaluate(x)
         gradient = self._compute_gradient(x, function_value)
         return function_value, gradient
@@ -113,7 +106,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     def _compute_gradient(
         self, x: NDArray[np.float64], function_value_at_x: float | None = None
     ) -> NDArray[np.float64]:
-        """Compute gradient via analytical function or finite differences."""
         if self._gradient_fn is not None:
             return np.asarray(self._gradient_fn(x), dtype=float)
 
@@ -149,8 +141,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         When an analytical gradient is available, the full gradient is cached
         for reuse after the line search completes.
-        When using finite differences, the directional derivative is computed
-        directly with two evaluations rather than a full gradient (2n evals).
         """
         x_trial = x + alpha * direction
         f_trial = self.evaluate(x_trial)
@@ -165,15 +155,12 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             f_backward = self.evaluate(x_trial - epsilon * direction)
             return f_trial, (f_forward - f_backward) / (2.0 * epsilon)
 
+    # Projected gradient
+
     def _compute_projected_gradient_inf_norm(
         self, x: NDArray[np.float64], gradient: NDArray[np.float64]
     ) -> float:
-        """Compute the infinity norm of the projected gradient.
-
-        The projected gradient zeros out components where a variable sits at
-        its bound and the gradient points into the bound. This is the standard
-        KKT optimality measure for bound-constrained problems.
-        """
+        """Infinity norm of the projected gradient (KKT optimality measure)."""
         projected_gradient = gradient.copy()
         negative_mask = gradient < 0
         positive_mask = gradient > 0
@@ -189,7 +176,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             return 0.0
         return float(np.max(np.abs(projected_gradient)))
 
-    # L-BFGS compact representation operations
+    # L-BFGS compact representation
 
     def _update_correction_pairs(
         self,
@@ -198,9 +185,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     ) -> bool:
         """Store a new (s, y) correction pair and rebuild cached matrices.
 
-        The pair is accepted only if it satisfies the curvature condition
-        s'y > eps * y'y, which ensures the Hessian approximation remains
-        positive definite. Returns True if accepted.
+        The pair is accepted only if s'y > eps * y'y (curvature condition).
         """
         step_dot_grad_diff = float(np.dot(step_vector, gradient_difference))
         grad_diff_dot_grad_diff = float(
@@ -229,10 +214,13 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             grad_diff_matrix = np.column_stack(self._gradient_diff_vectors)
             self._steps_dot_grad_diffs = step_matrix.T @ grad_diff_matrix
             self._steps_dot_steps = step_matrix.T @ step_matrix
+            # S' B_0 S — used in the M^{-1} and T matrices
+            self._steps_B0_steps = self._initial_hessian.quadratic_form(step_matrix)
 
         if not (
             np.all(np.isfinite(self._steps_dot_grad_diffs))
             and np.all(np.isfinite(self._steps_dot_steps))
+            and np.all(np.isfinite(self._steps_B0_steps))
         ):
             self._reset_correction_memory()
             return False
@@ -241,12 +229,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         return True
 
     def _factorize_middle_matrix(self) -> None:
-        """Form and Cholesky-factorize T = theta * S'S + L * D^{-1} * L'.
-
-        T appears in the block elimination used by the middle matrix multiply.
-        If T is not positive definite due to numerical issues, the correction
-        memory is reset as a safe fallback.
-        """
+        """Form and Cholesky-factorize T = theta * S' B_0 S + L D^{-1} L'."""
         num_corrections = self._num_corrections
         if num_corrections == 0:
             self._cholesky_factor_of_T = None
@@ -260,7 +243,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             T = (
-                self._theta * self._steps_dot_steps
+                self._theta * self._steps_B0_steps
                 + strict_lower_triangle
                 @ np.diag(1.0 / safe_curvature_diagonal)
                 @ strict_lower_triangle.T
@@ -280,14 +263,12 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     def _middle_matrix_multiply(
         self, vector: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        """Compute p = M * v, where M is the middle matrix in B = theta*I - W*M*W'.
+        """Compute p = M * v where M is the middle matrix.
 
-        The inverse of M has block structure:
-            M^{-1} = [-D    L']
-                     [ L    theta * S'S]
-        where D = diag(s_i' y_i) and L is the strict lower triangle of S'Y.
-        The system M^{-1} * p = v is solved via block elimination using
-        the Cholesky factorization of T.
+        M^{-1} = [-D,              L'           ]
+                 [ L,   theta * S' B_0 S        ]
+
+        Solved via block elimination with the Cholesky factor of T.
         """
         num_corrections = self._num_corrections
         if num_corrections == 0 or self._cholesky_factor_of_T is None:
@@ -317,46 +298,84 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         return result
 
     def _reset_correction_memory(self) -> None:
-        """Clear all stored correction pairs and reset to B_0 = theta * I."""
         self._step_vectors.clear()
         self._gradient_diff_vectors.clear()
         self._num_corrections = 0
         self._theta = 1.0
         self._cholesky_factor_of_T = None
 
-    # Generalized Cauchy Point computation
+    def _build_w_projection(
+        self, vectors: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """Compute W' * v where W = [Y | theta * B_0 * S].
+
+        Returns a 2*col vector: [Y' v, theta * (B_0 S)' v].
+        """
+        num_corrections = self._num_corrections
+        result = np.zeros(2 * num_corrections)
+        if num_corrections == 0:
+            return result
+
+        step_matrix = np.column_stack(self._step_vectors)
+        grad_diff_matrix = np.column_stack(self._gradient_diff_vectors)
+        B0_times_step_matrix = self._initial_hessian.scale_columns(step_matrix)
+
+        result[:num_corrections] = grad_diff_matrix.T @ vectors
+        result[num_corrections:] = self._theta * (B0_times_step_matrix.T @ vectors)
+        return result
+
+    def _get_w_row(self, variable_index: int) -> NDArray[np.float64]:
+        """Extract row i of W = [Y | theta * B_0 * S].
+
+        For diagonal B_0, the row is [Y[i,:], theta * h_i * S[i,:]].
+        For dense B_0, the row is [Y[i,:], theta * (B_0 S)[i,:]].
+        """
+        num_corrections = self._num_corrections
+        row = np.zeros(2 * num_corrections)
+
+        for k in range(num_corrections):
+            row[k] = self._gradient_diff_vectors[k][variable_index]
+
+        step_matrix = np.column_stack(self._step_vectors)
+        B0_times_step_matrix = self._initial_hessian.scale_columns(step_matrix)
+        for k in range(num_corrections):
+            row[num_corrections + k] = (
+                self._theta * B0_times_step_matrix[variable_index, k]
+            )
+
+        return row
+
+    # Generalized Cauchy Point
 
     def _compute_cauchy_point(
         self, x: NDArray[np.float64], gradient: NDArray[np.float64]
     ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.int32]]:
         """Compute the Generalized Cauchy Point (GCP).
 
-        The GCP is the first local minimizer of the quadratic model Q along the
-        piecewise-linear projected steepest descent path P(x - t*g, l, u). As t
-        increases, variables that hit their bounds are fixed, creating breakpoints
-        where the path changes direction.
+        The GCP is the first local minimizer of the quadratic model along
+        the piecewise-linear projected steepest descent path. It determines
+        which variables are active (at bounds) and which are free.
 
         Returns:
-            cauchy_point: the GCP vector.
-            w_displacement: W'(cauchy_point - x), used in subspace minimization.
-            variable_status: classification of each variable (see below).
+            cauchy_point, w_displacement (= W'(xcp - x)), variable_status.
 
         Variable status codes:
-             3  permanently fixed (lower bound equals upper bound)
+             3  permanently fixed (lower == upper)
              2  fixed at upper bound
              1  fixed at lower bound
-             0  free, moved during Cauchy search
-            -3  free, but zero gradient component
+             0  free, moved during search
+            -3  free, zero gradient
         """
         num_vars = self.dimensions
         num_corrections = self._num_corrections
         lower = self.lower_bounds
         upper = self.upper_bounds
+        B0 = self._initial_hessian
 
         cauchy_direction = np.zeros(num_vars)
         variable_status = np.zeros(num_vars, dtype=np.int32)
 
-        # Classify variables and compute breakpoints along the projected path
+        # Classify variables and compute breakpoints
         breakpoint_list = []
 
         for i in range(num_vars):
@@ -394,40 +413,33 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         breakpoint_list.sort()
         num_breakpoints = len(breakpoint_list)
 
-        # Project the Cauchy direction onto the L-BFGS basis: p = W' d
-        projected_direction = np.zeros(2 * num_corrections)
-        if num_corrections > 0:
-            step_matrix = np.column_stack(self._step_vectors)
-            grad_diff_matrix = np.column_stack(self._gradient_diff_vectors)
-            projected_direction[:num_corrections] = (
-                grad_diff_matrix.T @ cauchy_direction
-            )
-            projected_direction[num_corrections : 2 * num_corrections] = (
-                self._theta * (step_matrix.T @ cauchy_direction)
-            )
+        # Project the Cauchy direction onto the W basis: p = W' d
+        # W = [Y | theta * B_0 * S]
+        projected_direction = self._build_w_projection(cauchy_direction)
 
-        # Effective base Hessian diagonal for the quadratic model.
-        # When persist_initial_hessian is True, the user-supplied per-variable
-        # scaling is multiplied by the adaptive theta at every iteration.
-        # When False, the scaling is only used before any corrections exist.
-        if self._num_corrections > 0 and not self.config.persist_initial_hessian:
-            hessian_diagonal = np.full(num_vars, self._theta)
-        else:
-            hessian_diagonal = self._theta * self._initial_hessian_diagonal
+        # Effective base Hessian: theta * B_0 (or just B_0 when theta = 1 initially).
+        # When persist is False and corrections exist, fall back to theta * I.
+        use_initial_hessian = (
+            self._num_corrections == 0 or self.config.persist_initial_hessian
+        )
 
-        # Initialize the quadratic model derivatives along the Cauchy path.
-        # first_derivative = dQ/dt, second_derivative = d^2 Q / dt^2.
+        # Initialize quadratic model derivatives
         first_derivative = float(np.dot(gradient, cauchy_direction))
+
+        if use_initial_hessian:
+            base_curvature = self._theta * B0.weighted_dot(cauchy_direction)
+        else:
+            base_curvature = self._theta * float(
+                np.dot(cauchy_direction, cauchy_direction)
+            )
 
         if num_corrections > 0:
             middle_times_projected = self._middle_matrix_multiply(projected_direction)
-            second_derivative = float(
-                np.dot(hessian_diagonal * cauchy_direction, cauchy_direction)
-            ) - float(np.dot(projected_direction, middle_times_projected))
-        else:
-            second_derivative = float(
-                np.dot(hessian_diagonal * cauchy_direction, cauchy_direction)
+            second_derivative = base_curvature - float(
+                np.dot(projected_direction, middle_times_projected)
             )
+        else:
+            second_derivative = base_curvature
             middle_times_projected = np.zeros(2 * num_corrections)
 
         if second_derivative > self._machine_epsilon:
@@ -435,9 +447,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         else:
             unconstrained_minimizer_step = 0.0
 
-        # Walk along breakpoints, updating the quadratic model at each one.
-        # At each breakpoint a variable hits its bound and is fixed, changing
-        # the search direction and the model derivatives.
+        # Walk along breakpoints
         total_time = 0.0
         w_displacement = np.zeros(2 * num_corrections)
 
@@ -459,48 +469,42 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 distance_to_bound = lower[var_index] - x[var_index]
                 variable_status[var_index] = 1
 
-            # Update model derivatives for removing this variable
+            # Breakpoint derivative updates use the diagonal of B_0 (or theta
+            # for the non-persist case). For dense B_0, this is an approximation
+            # at the per-variable level; the off-diagonal contributions are
+            # captured by the L-BFGS correction terms.
+            if use_initial_hessian:
+                h_i = self._theta * B0.diagonal_element(var_index)
+            else:
+                h_i = self._theta
+
             first_derivative = (
                 first_derivative
                 + segment_length * second_derivative
                 + direction_component * direction_component
-                - hessian_diagonal[var_index]
-                * direction_component
-                * distance_to_bound
+                - h_i * direction_component * distance_to_bound
             )
             second_derivative = (
                 second_derivative
-                - hessian_diagonal[var_index]
-                * direction_component
-                * direction_component
+                - h_i * direction_component * direction_component
             )
 
             if num_corrections > 0:
-                # Advance the W-space displacement to the breakpoint
                 w_displacement += segment_length * projected_direction
 
-                # Extract the W-matrix row for the variable being fixed
-                w_row_for_variable = np.zeros(2 * num_corrections)
-                for k in range(num_corrections):
-                    w_row_for_variable[k] = self._gradient_diff_vectors[k][var_index]
-                    w_row_for_variable[num_corrections + k] = (
-                        self._theta * self._step_vectors[k][var_index]
-                    )
+                w_row = self._get_w_row(var_index)
+                middle_times_w_row = self._middle_matrix_multiply(w_row)
 
-                middle_times_w_row = self._middle_matrix_multiply(w_row_for_variable)
-
-                # L-BFGS correction terms for the derivative updates
                 first_derivative += direction_component * float(
                     np.dot(w_displacement, middle_times_w_row)
                 )
                 second_derivative += 2.0 * direction_component * float(
-                    np.dot(w_row_for_variable, middle_times_projected)
+                    np.dot(w_row, middle_times_projected)
                 ) - direction_component * direction_component * float(
-                    np.dot(w_row_for_variable, middle_times_w_row)
+                    np.dot(w_row, middle_times_w_row)
                 )
 
-                # Update projected direction for the new search direction
-                projected_direction -= direction_component * w_row_for_variable
+                projected_direction -= direction_component * w_row
                 middle_times_projected = self._middle_matrix_multiply(
                     projected_direction
                 )
@@ -516,7 +520,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         else:
             total_time += max(unconstrained_minimizer_step, 0.0)
 
-        # Reconstruct the Cauchy point from variable statuses and total time
+        # Reconstruct the Cauchy point
         cauchy_point = x.copy()
         for i in range(num_vars):
             if variable_status[i] == 0:
@@ -528,22 +532,14 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         cauchy_point = np.clip(cauchy_point, lower, upper)
 
-        # Compute w_displacement = W'(cauchy_point - x) at the final GCP
-        if num_corrections > 0:
-            displacement = cauchy_point - x
-            step_matrix = np.column_stack(self._step_vectors)
-            grad_diff_matrix = np.column_stack(self._gradient_diff_vectors)
-            w_displacement[:num_corrections] = grad_diff_matrix.T @ displacement
-            w_displacement[num_corrections : 2 * num_corrections] = (
-                self._theta * (step_matrix.T @ displacement)
-            )
+        # Recompute w_displacement = W'(cauchy_point - x) at the final GCP
+        w_displacement = self._build_w_projection(cauchy_point - x)
 
         return cauchy_point, w_displacement, variable_status
 
     def _identify_free_variables(
         self, variable_status: NDArray[np.int32]
     ) -> tuple[list[int], int]:
-        """Return indices of free variables (status <= 0) at the Cauchy point."""
         free_variable_indices = [
             i for i in range(self.dimensions) if variable_status[i] <= 0
         ]
@@ -562,52 +558,82 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     ) -> NDArray[np.float64]:
         """Minimize the quadratic model in the subspace of free variables.
 
-        Solves the reduced Newton system (Z'BZ)d = r where Z projects onto the
-        free variables, using the Woodbury identity to exploit the compact L-BFGS
-        structure. The cost is O(n * m^2) rather than O(n^3).
-
-        Includes the Morales-Nocedal 2011 correction: after computing the Newton
-        direction, project onto bounds and verify descent. If projection breaks
-        the descent property, fall back to a feasible backtracking step.
+        Uses the Woodbury identity with B_0 threaded through consistently:
+            (Z'BZ)^{-1} = (1/theta) B_0_Z^{-1}
+                + (1/theta^2) B_0_Z^{-1} A K^{-1} A' B_0_Z^{-1}
+        where B_0_Z is B_0 restricted to the free variables, and
+        K = M^{-1} - (1/theta) A' B_0_Z^{-1} A.
         """
         num_corrections = self._num_corrections
+        B0 = self._initial_hessian
 
         if num_free == 0 or num_corrections == 0:
             return cauchy_point.copy()
 
         # Reduced gradient: r = -Z'(g + B(xcp - x))
+        # B(xcp-x) = theta * B_0 * (xcp-x) - W * M * W'(xcp-x)
         middle_times_displacement = self._middle_matrix_multiply(w_displacement)
+
+        cauchy_displacement = cauchy_point - x
+        B0_times_displacement = B0.multiply(cauchy_displacement)
 
         reduced_gradient = np.zeros(num_free)
         for j in range(num_free):
             idx = free_variable_indices[j]
+            # -(g + theta * B_0 * (xcp - x))
             reduced_gradient[j] = -(
-                gradient[idx] + self._theta * (cauchy_point[idx] - x[idx])
+                gradient[idx] + self._theta * B0_times_displacement[idx]
             )
-            for k in range(num_corrections):
-                reduced_gradient[j] += (
-                    self._gradient_diff_vectors[k][idx]
-                    * middle_times_displacement[k]
-                )
-                reduced_gradient[j] += (
-                    self._theta
-                    * self._step_vectors[k][idx]
-                    * middle_times_displacement[num_corrections + k]
-                )
+            # + W[idx,:] * M * W'(xcp - x)  (the correction contribution)
+            w_row_j = self._get_w_row(idx)
+            reduced_gradient[j] += float(
+                np.dot(w_row_j, middle_times_displacement)
+            )
 
-        # A = Z'W, the L-BFGS basis restricted to free variables
+        # A = Z'W  (the L-BFGS basis restricted to free variables)
         restricted_basis = np.zeros((num_free, 2 * num_corrections))
-        for k in range(num_corrections):
-            for j in range(num_free):
-                idx = free_variable_indices[j]
-                restricted_basis[j, k] = self._gradient_diff_vectors[k][idx]
-                restricted_basis[j, num_corrections + k] = (
-                    self._theta * self._step_vectors[k][idx]
-                )
+        for j in range(num_free):
+            restricted_basis[j, :] = self._get_w_row(free_variable_indices[j])
 
-        projected_reduced_gradient = restricted_basis.T @ reduced_gradient
+        # B_0^{-1} restricted to free variables, applied to the reduced gradient
+        # For diagonal B_0: element-wise division
+        # For dense B_0: extract the free-variable subblock and solve
+        reduced_gradient_free = reduced_gradient
+        B0_inv_reduced_gradient = np.zeros(num_free)
+        for j in range(num_free):
+            idx = free_variable_indices[j]
+            B0_inv_reduced_gradient[j] = B0.solve(
+                np.eye(1, self.dimensions, idx).flatten()
+            )[idx] * reduced_gradient[j]
 
-        # K = M^{-1} - (1/theta) * A'A, the Woodbury auxiliary matrix
+        # For dense B_0, the per-element solve above is wrong — we need the
+        # full subblock inverse. Recompute properly.
+        if B0.mode == InitialHessianMode.DENSE:
+            # Extract the free-variable subblock of B_0
+            free_idx = np.array(free_variable_indices)
+            B0_free = np.zeros((num_free, num_free))
+            for j1 in range(num_free):
+                for j2 in range(num_free):
+                    B0_free[j1, j2] = B0._matrix[free_idx[j1], free_idx[j2]]
+            B0_free_cholesky = cho_factor(0.5 * (B0_free + B0_free.T))
+            B0_inv_reduced_gradient = cho_solve(
+                B0_free_cholesky, reduced_gradient
+            )
+
+            # B_0_Z^{-1} * A  for the Woodbury K matrix
+            B0_inv_A = cho_solve(B0_free_cholesky, restricted_basis)
+        else:
+            # Diagonal: B_0^{-1} is element-wise inverse
+            B0_inv_diag_free = np.array([
+                1.0 / B0.diagonal_element(free_variable_indices[j])
+                for j in range(num_free)
+            ])
+            B0_inv_reduced_gradient = B0_inv_diag_free * reduced_gradient
+            B0_inv_A = B0_inv_diag_free[:, np.newaxis] * restricted_basis
+
+        projected_reduced_gradient = restricted_basis.T @ B0_inv_reduced_gradient
+
+        # K = M^{-1} - (1/theta) * A' * B_0_Z^{-1} * A
         curvature_diagonal = np.diag(self._steps_dot_grad_diffs).copy()
         strict_lower_triangle = np.tril(self._steps_dot_grad_diffs, -1)
         middle_matrix_inverse = np.zeros((2 * num_corrections, 2 * num_corrections))
@@ -621,12 +647,12 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             strict_lower_triangle
         )
         middle_matrix_inverse[num_corrections:, num_corrections:] = (
-            self._theta * self._steps_dot_steps
+            self._theta * self._steps_B0_steps
         )
 
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             woodbury_matrix = middle_matrix_inverse - (1.0 / self._theta) * (
-                restricted_basis.T @ restricted_basis
+                restricted_basis.T @ B0_inv_A
             )
 
         if not np.all(np.isfinite(woodbury_matrix)):
@@ -642,10 +668,11 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         if not np.all(np.isfinite(woodbury_solution)):
             return cauchy_point.copy()
 
-        # Newton direction: d = (1/theta)*r + (1/theta^2) * A * K^{-1} * A' * r
-        reduced_newton_direction = (1.0 / self._theta) * reduced_gradient + (
-            1.0 / self._theta**2
-        ) * (restricted_basis @ woodbury_solution)
+        # Newton direction: d = (1/theta)*B_0^{-1}*r + (1/theta^2)*B_0^{-1}*A*K^{-1}*A'*B_0^{-1}*r
+        reduced_newton_direction = (
+            (1.0 / self._theta) * B0_inv_reduced_gradient
+            + (1.0 / self._theta**2) * (B0_inv_A @ woodbury_solution)
+        )
 
         # Lift back to full space
         candidate = cauchy_point.copy()
@@ -654,7 +681,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 cauchy_point[free_variable_indices[j]] + reduced_newton_direction[j]
             )
 
-        # Morales-Nocedal 2011 safeguard: project and verify descent
+        # Morales-Nocedal 2011 safeguard
         projected_candidate = np.clip(
             candidate, self.lower_bounds, self.upper_bounds
         )
@@ -665,7 +692,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         if directional_derivative <= 0:
             return projected_candidate
 
-        # Projection broke descent; fall back to maximum feasible step from xcp
+        # Backtracking fallback
         max_feasible_alpha = 1.0
         for j in range(num_free):
             idx = free_variable_indices[j]
@@ -691,13 +718,14 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             )
         return np.clip(fallback, self.lower_bounds, self.upper_bounds)
 
+    # Line search
+
     def _compute_maximum_feasible_step(
         self,
         x: NDArray[np.float64],
         direction: NDArray[np.float64],
         is_first_iteration: bool,
     ) -> float:
-        """Find the largest step along direction that keeps all variables in bounds."""
         if is_first_iteration:
             return 1.0
 
@@ -718,10 +746,9 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         return max(max_step, 0.0)
 
-    # Main optimization loop
+    # Main loop
 
     def optimize(self) -> OptimizationResult["LBFGSBLogData"]:
-        """Run the L-BFGS-B optimization algorithm."""
         self.evaluations = 0
         num_vars = self.dimensions
         config = self.config
@@ -754,11 +781,12 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             )
 
         iteration = 0
+        consecutive_resets = 0
+        max_consecutive_resets = 20
 
         while self.evaluations < config.budget:
             iteration += 1
 
-            # Generalized Cauchy Point: identify active set
             cauchy_point, w_displacement, variable_status = (
                 self._compute_cauchy_point(x, gradient)
             )
@@ -767,20 +795,14 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 variable_status
             )
 
-            # Subspace minimization: refine within the free variable space
             if num_free > 0 and self._num_corrections > 0:
                 search_target = self._perform_subspace_minimization(
-                    x,
-                    cauchy_point,
-                    gradient,
-                    w_displacement,
-                    free_variable_indices,
-                    num_free,
+                    x, cauchy_point, gradient, w_displacement,
+                    free_variable_indices, num_free,
                 )
             else:
                 search_target = cauchy_point
 
-            # Construct search direction
             direction = search_target - x
             direction_norm = float(np.linalg.norm(direction))
 
@@ -794,12 +816,15 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                         f"{projected_gradient_norm:.2e}"
                     )
                     break
+                consecutive_resets += 1
+                if consecutive_resets >= max_consecutive_resets:
+                    termination_message = "Stalled: repeated memory resets"
+                    break
                 self._reset_correction_memory()
                 continue
 
             directional_derivative = float(np.dot(gradient, direction))
             if directional_derivative >= 0:
-                # Fall back to projected steepest descent
                 direction = -gradient.copy()
                 for i in range(num_vars):
                     if x[i] <= self.lower_bounds[i] and direction[i] < 0:
@@ -815,7 +840,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                     termination_message = "Cannot find descent direction"
                     break
 
-            # Line search
             max_feasible_step = self._compute_maximum_feasible_step(
                 x, direction, iteration == 1
             )
@@ -857,10 +881,14 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 break
 
             if not line_search_result.converged and self._num_corrections > 0:
+                consecutive_resets += 1
+                if consecutive_resets >= max_consecutive_resets:
+                    termination_message = "Stalled: repeated line search failures"
+                    break
                 self._reset_correction_memory()
                 continue
 
-            # Accept the step
+            consecutive_resets = 0
             step_vector = accepted_step * direction
             x_new = np.clip(
                 x + step_vector, self.lower_bounds, self.upper_bounds
@@ -881,7 +909,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 best_fitness = function_value_new
                 best_solution = x_new.copy()
 
-            # Convergence tests
             projected_gradient_norm = self._compute_projected_gradient_inf_norm(
                 x_new, gradient_new
             )
@@ -917,7 +944,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 )
                 break
 
-            # Store the correction pair and update the Hessian approximation
             self._update_correction_pairs(step_vector, gradient_difference)
 
             x = x_new

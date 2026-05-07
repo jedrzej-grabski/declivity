@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 @final
-class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
+class CMAESwOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
     """CMA-ES optimizer wrapper around reference implementation with proper logging."""
 
     def __init__(
@@ -169,6 +169,30 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
         )
 
         return result
+
+    def get_learned_covariance(self) -> "CovarianceMatrix":
+        """Return the current covariance matrix as a CovarianceMatrix object.
+
+        Wraps the internal CMA-ES covariance C in the framework's
+        CovarianceMatrix dataclass, providing the eigendecomposition
+        and utility methods (sqrt, inv_sqrt, condition number).
+        """
+        from src.utils.covariance import _decompose
+
+        C = self._cma._C.copy()
+        mean = self._cma._mean.copy()
+        rank = min(C.shape[0], C.shape[1])
+        return _decompose(C, mean, rank)
+
+    @property
+    def sigma(self) -> float:
+        """Current step-size parameter sigma."""
+        return float(self._cma._sigma)
+
+    @property
+    def mean(self) -> NDArray[np.float64]:
+        """Current distribution mean."""
+        return self._cma._mean.copy()
 
     def _get_termination_message(self) -> str:
         """Get the reason for termination from the reference implementation."""

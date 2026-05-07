@@ -94,8 +94,8 @@ def run_lbfgsb_benchmark():
     print()
 
     # Plotting
-    output_dir = Path("plots")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("plots/lbfgsb")
+    output_dir.mkdir(parents=True, exist_ok=True)
     plotter = MultiAlgorithmPlotter()
 
     plotter.plot_convergence_comparison(
