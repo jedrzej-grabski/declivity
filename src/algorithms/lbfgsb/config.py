@@ -37,7 +37,10 @@ class LBFGSBConfig(BaseConfig):
         - None (default): identity matrix (B_0 = I)
         - float: scalar * I  (e.g. 0.1 for a gentler first step)
         - 1D array of length n: diagonal matrix diag(array)
-    A full matrix is not supported (incompatible with the compact representation)."""
+        - 2D array (n, n): full symmetric positive-definite Hessian (DENSE mode,
+          precomputes Cholesky; subspace minimization extracts the free-variable
+          subblock and uses cho_solve). Cost is O(m n^2) per iteration vs O(m n)
+          for the diagonal case, so prefer diagonal for large n."""
 
     persist_initial_hessian: bool = True
     """If True (default), the per-variable relative scaling from initial_hessian is

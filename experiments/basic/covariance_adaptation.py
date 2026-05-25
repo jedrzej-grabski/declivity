@@ -107,8 +107,8 @@ def plot_eigenvalue_evolution(
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    out = Path("plots")
-    out.mkdir(exist_ok=True)
+    out = Path("plots/basic/covariance_adaptation")
+    out.mkdir(parents=True, exist_ok=True)
     fig.savefig(out / f"{label}_eigenvalue_evolution.png", dpi=300, bbox_inches="tight")
     print(f"Saved: {out / f'{label}_eigenvalue_evolution.png'}")
 
@@ -130,7 +130,7 @@ def plot_condition_number(
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    out = Path("plots")
+    out = Path("plots/basic/covariance_adaptation")
     fig.savefig(out / f"{label}_condition_sigma.png", dpi=300, bbox_inches="tight")
     print(f"Saved: {out / f'{label}_condition_sigma.png'}")
 
@@ -176,7 +176,7 @@ def plot_ellipse_snapshots(
     )
     plt.tight_layout()
 
-    out = Path("plots")
+    out = Path("plots/basic/covariance_adaptation")
     fig.savefig(out / f"{label}_ellipse_snapshots.png", dpi=300, bbox_inches="tight")
     print(f"Saved: {out / f'{label}_ellipse_snapshots.png'}")
 

@@ -249,7 +249,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir", type=Path,
-        default=Path("plots/hybrid/multimodal_handoff"),
+        default=Path("plots/handoff/multimodal"),
     )
     args = parser.parse_args()
 

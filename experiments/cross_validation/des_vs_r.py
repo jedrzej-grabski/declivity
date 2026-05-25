@@ -99,6 +99,9 @@ def run_python_des_cec2017():
 
 def save_python_results(results, function_id, dimensions):
 
+    output_dir = Path("reference/outputs")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     max_length = max(len(r["convergence_history"]) for r in results)
     convergence_matrix = np.full((max_length, len(results)), np.nan)
 
@@ -108,8 +111,8 @@ def save_python_results(results, function_id, dimensions):
 
     convergence_df = pd.DataFrame(convergence_matrix)
     convergence_df.columns = [f"run_{i+1}" for i in range(len(results))]
-    convergence_filename = f"python_convergence_f{function_id}_d{dimensions}.csv"
-    convergence_df.to_csv(convergence_filename, index=False)
+    convergence_path = output_dir / f"python_convergence_f{function_id}_d{dimensions}.csv"
+    convergence_df.to_csv(convergence_path, index=False)
 
     summary_data = {
         "run": [r["run"] for r in results],
@@ -118,10 +121,10 @@ def save_python_results(results, function_id, dimensions):
         "runtime": [r["runtime"] for r in results],
     }
     summary_df = pd.DataFrame(summary_data)
-    summary_filename = f"python_summary_f{function_id}_d{dimensions}.csv"
-    summary_df.to_csv(summary_filename, index=False)
+    summary_path = output_dir / f"python_summary_f{function_id}_d{dimensions}.csv"
+    summary_df.to_csv(summary_path, index=False)
 
-    print(f"Saved Python results to: {convergence_filename}, {summary_filename}")
+    print(f"Saved Python results to: {convergence_path}, {summary_path}")
 
 
 if __name__ == "__main__":
