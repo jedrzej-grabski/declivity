@@ -26,7 +26,7 @@ Python-Evo is an object-oriented framework designed for evolutionary optimizatio
 - **Factory Pattern Design**: Easy algorithm selection and instantiation
 - **Comprehensive Configuration**: Flexible parameter control with sensible defaults
 - **Rich Diagnostics**: Built-in logging for algorithm behavior analysis
-- **Boundary Handling**: Multiple constraint handling strategies
+- **Boundary Handling**: Multiple constraint handling strategies * ConstraintHandling
 - **Benchmark Functions**: Collection of standard test functions including CEC2017
 - **Visualization Tools**: Built-in plotting for convergence analysis
 
