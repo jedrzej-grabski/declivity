@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 @final
-class CMAESwOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
+class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
     """CMA-ES optimizer wrapper around reference implementation with proper logging."""
 
     def __init__(
@@ -101,11 +101,10 @@ class CMAESwOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
                     best_fitness = fitness
                     best_solution = x.copy()
 
-                # Check budget
-                if self.evaluations >= self.config.budget:
-                    break
-
-            # Tell the optimizer about the solutions
+            # ``tell`` requires a full population; if the budget elapses mid
+            # population, the inner loop above always completes (a few extra
+            # evaluations vs corrupted internal state). The outer ``while``
+            # will exit on the next iteration.
             self._cma.tell(solutions)
 
             # Calculate statistics for logging
@@ -183,6 +182,20 @@ class CMAESwOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
         mean = self._cma._mean.copy()
         rank = min(C.shape[0], C.shape[1])
         return _decompose(C, mean, rank)
+
+    def get_eigendecomposition(
+        self,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Return the cached eigendecomposition of the covariance matrix.
+
+        Returns ``(B, D)`` where ``B`` are the eigenvectors as columns and
+        ``D`` are the square roots of the eigenvalues, so that
+        ``C = B @ diag(D**2) @ B.T``. The reference implementation already
+        maintains this decomposition; reusing it avoids re-running an
+        ``eigh`` or ``inv`` call from the outside (e.g. for handoff).
+        """
+        B, D = self._cma._eigen_decomposition()
+        return B.copy(), D.copy()
 
     @property
     def sigma(self) -> float:

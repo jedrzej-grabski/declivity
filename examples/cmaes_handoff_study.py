@@ -24,20 +24,33 @@ plt.ioff()
 plt.switch_backend("Agg")
 
 
-def build_transformations(covariance_matrix, sigma, dimensions):
-    """Build different Hessian matrices from the CMA-ES covariance."""
-    regularized = covariance_matrix + 1e-10 * np.eye(dimensions)
+def build_transformations(eigenvectors, eigenvalues_sqrt, sigma, dimensions):
+    """Build different Hessian matrices from the CMA-ES eigendecomposition.
 
-    normalized = covariance_matrix / np.trace(covariance_matrix) * dimensions
-    normalized_regularized = normalized + 1e-10 * np.eye(dimensions)
+    Reuses the eigenvectors B and the sqrt-eigenvalues D that CMA-ES already
+    keeps internally (C = B diag(D^2) B^T). Building C and its inverse from
+    them avoids an extra ``np.linalg.inv`` call on the outside.
+    """
+    eigenvalues = np.maximum(eigenvalues_sqrt**2, 1e-30)
+    inv_eigenvalues = 1.0 / eigenvalues
+
+    covariance_matrix = (eigenvectors * eigenvalues) @ eigenvectors.T
+    covariance_inverse = (eigenvectors * inv_eigenvalues) @ eigenvectors.T
+
+    trace_C = float(np.sum(eigenvalues))
+    normalization_factor = dimensions / trace_C
+    normalized_covariance = covariance_matrix * normalization_factor
+    normalized_inverse = covariance_inverse / normalization_factor
+
+    sigma_sq_inverse = covariance_inverse / (sigma * sigma)
 
     return {
         "Identity (no CMA-ES info)": None,
         "Raw covariance C": covariance_matrix,
-        "Inverse C^{-1}": np.linalg.inv(regularized),
-        "Inverse scaled (s^2 C)^{-1}": np.linalg.inv(sigma**2 * regularized),
-        "Normalized C / tr(C) * n": normalized,
-        "Inv. normalized (C/tr*n)^{-1}": np.linalg.inv(normalized_regularized),
+        "Inverse C^{-1}": covariance_inverse,
+        "Inverse scaled (s^2 C)^{-1}": sigma_sq_inverse,
+        "Normalized C / tr(C) * n": normalized_covariance,
+        "Inv. normalized (C/tr*n)^{-1}": normalized_inverse,
     }
 
 
@@ -112,11 +125,11 @@ def run_handoff_study(
         )
         result_cmaes = optimizer_cmaes.optimize()
 
-        # Extract CMA-ES state from the logs and public API
-        logs = result_cmaes.diagnostic
-        covariance_matrix = logs.covariance_matrix[-1]
-        sigma = logs.sigma[-1]
-        starting_point = logs.mean_vector[-1]
+        # Extract CMA-ES state directly from the cached eigendecomposition.
+        # CMA-ES already maintains B, D; reusing them avoids an outside inv().
+        eigenvectors, eigenvalues_sqrt = optimizer_cmaes.get_eigendecomposition()
+        sigma = optimizer_cmaes.sigma
+        starting_point = optimizer_cmaes.mean
         warmup_evals = result_cmaes.evaluations
 
         print(f"CMA-ES warm-up: {warmup_evals} evals, "
@@ -126,7 +139,7 @@ def run_handoff_study(
         # Phase 2: L-BFGS-B with each transformation
         lbfgsb_budget = 5000
         transformations = build_transformations(
-            covariance_matrix, sigma, dimensions
+            eigenvectors, eigenvalues_sqrt, sigma, dimensions
         )
 
         cmaes_iters = len(result_cmaes.diagnostic.iteration)
