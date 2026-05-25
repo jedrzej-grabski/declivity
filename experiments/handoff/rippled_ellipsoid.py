@@ -1,28 +1,18 @@
-"""Does the CMA-ES covariance actually help when L-BFGS-B takes over?
+"""Anisotropic multimodal handoff study.
 
-In the unrotated Rastrigin/Griewank run, the C^{-1} handoff and the
-identity handoff converged to the same final fitness in the same number
-of evaluations. The reason: at every Rastrigin local minimum the
-Hessian is *exactly isotropic* (eigenvalues all 2 + 40 pi^2), so there
-is no curvature direction for CMA-ES to learn. Griewank does have
-anisotropic curvature (cond ~ d), but in the coordinate-aligned form
-identity + a few BFGS corrections recovers it just as quickly.
+Built on top of RippledEllipsoid:
 
-This script tests the case where the covariance *must* matter:
+    f(x) = sum(scale_i * x_i**2 + amplitude * (1 - cos(2 pi x_i)))
 
-  - Rotate Griewank with a random orthogonal matrix. The eigenvalues of
-    the local Hessian stay the same (cond ~ d) but they're no longer
-    axis-aligned. Identity B_0 starts blind to the rotation.
+When the condition number is large the local Hessian at the global
+optimum spans many orders of magnitude; when the rotation is non-trivial
+that anisotropy is no longer axis-aligned. This is the regime where
+L-BFGS-B with B_0 = I is forced to spend many iterations learning the
+curvature, and where the C^{-1} handoff from CMA-ES should pull
+decisively ahead.
 
-  - Push dimension up so that the L-BFGS-B memory size m is small
-    relative to d: corrections can span at most m directions, so the
-    remaining d - m have to come from B_0.
-
-  - Vary handoff timing to find the point at which CMA-ES has learned
-    enough of the rotation to be useful.
-
-Sweeps are configurable from the CLI. The default sweep produces the
-plot grid for the supervisor report.
+The script sweeps a configurable grid of (dimension, memory size,
+condition number) and produces a combined convergence + boxplot pair.
 """
 
 import argparse
@@ -40,7 +30,7 @@ from src.benchmarking import (
     Problem,
     SingleAlgorithm,
 )
-from src.utils.benchmark_functions import Griewank, Rastrigin, RotatedFunction
+from src.utils.benchmark_functions import RippledEllipsoid, RotatedFunction
 
 
 plt.ioff()
@@ -48,17 +38,25 @@ plt.switch_backend("Agg")
 
 
 COLORS = {
-    "CMA-ES":                          "#e74c3c",
-    "L-BFGS-B":                        "#3498db",
-    "Handoff (C^-1)":                  "#2ecc71",
-    "Handoff (identity)":              "#9b59b6",
+    "CMA-ES":             "#e74c3c",
+    "L-BFGS-B":           "#3498db",
+    "Handoff (C^-1)":     "#2ecc71",
+    "Handoff (identity)": "#9b59b6",
 }
 
 
-def make_rotated(base_name: str, dimensions: int, rotation_seed: int):
-    """Return a RotatedFunction wrapping the named base function."""
-    base_cls = {"Griewank": Griewank, "Rastrigin": Rastrigin}[base_name]
-    base = base_cls(dimensions)
+def build_function(
+    dimensions: int,
+    condition: float,
+    rotated: bool,
+    rotation_seed: int,
+    amplitude: float = 10.0,
+):
+    base = RippledEllipsoid(
+        dimensions, condition=condition, amplitude=amplitude, bound=5.12
+    )
+    if not rotated:
+        return base
     return RotatedFunction(base, rotation="random", seed=rotation_seed)
 
 
@@ -67,9 +65,15 @@ def build_algorithms(
     cmaes_warmup_budget: int,
     initial_sigma: float,
     memory_size: int,
+    pgtol: float = 1e-10,
+    factr: float = 0.0,
 ):
-    """Four algorithms: CMA-ES, L-BFGS-B, two handoffs (C^-1 vs identity)."""
     lbfgsb_handoff_budget = total_budget - cmaes_warmup_budget
+
+    common_lbfgsb_kwargs = dict(
+        m=memory_size, pgtol=pgtol, factr=factr,
+        line_search=LineSearchMethod.ARMIJO,
+    )
 
     cmaes_only = SingleAlgorithm(
         name="CMA-ES",
@@ -85,9 +89,7 @@ def build_algorithms(
         color=COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, budget=total_budget, m=memory_size,
-            pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
+            dimensions=d, budget=total_budget, **common_lbfgsb_kwargs,
         ),
     )
 
@@ -98,9 +100,7 @@ def build_algorithms(
             dimensions=d, budget=cmaes_warmup_budget, sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, budget=lbfgsb_handoff_budget, m=memory_size,
-            pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
+            dimensions=d, budget=lbfgsb_handoff_budget, **common_lbfgsb_kwargs,
         ),
         transform="inverse",
     )
@@ -112,9 +112,7 @@ def build_algorithms(
             dimensions=d, budget=cmaes_warmup_budget, sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, budget=lbfgsb_handoff_budget, m=memory_size,
-            pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
+            dimensions=d, budget=lbfgsb_handoff_budget, **common_lbfgsb_kwargs,
         ),
         transform="identity",
     )
@@ -122,42 +120,41 @@ def build_algorithms(
     return [cmaes_only, lbfgsb_only, handoff_inverse, handoff_identity]
 
 
-def sigma_for(base_name: str) -> float:
-    """Sensible initial sigma per problem (matches multimodal_handoff_benchmark)."""
-    if base_name == "Griewank":
-        return 200.0
-    if base_name == "Rastrigin":
-        return 2.0
-    raise ValueError(base_name)
-
-
 def run_one_panel(
-    base_name: str,
     dimensions: int,
-    rotated: bool,
+    condition: float,
     memory_size: int,
+    rotated: bool,
     total_budget: int,
     cmaes_warmup_budget: int,
     num_seeds: int,
     rotation_seed: int,
     num_workers: int,
     output_dir: Path,
+    amplitude: float = 10.0,
+    pgtol: float = 1e-10,
+    factr: float = 0.0,
+    initial_sigma: float = 2.0,
 ) -> tuple[Problem, list, dict]:
-    """One panel = one (function, d, rotated, m) configuration."""
-    function = (
-        make_rotated(base_name, dimensions, rotation_seed)
-        if rotated
-        else {"Griewank": Griewank, "Rastrigin": Rastrigin}[base_name](dimensions)
+    function = build_function(
+        dimensions, condition, rotated, rotation_seed, amplitude=amplitude
     )
     rotated_tag = "rot" if rotated else "axis"
-    panel_name = f"{base_name}-{rotated_tag}-d{dimensions}-m{memory_size}"
+    amp_tag = f"a{amplitude:g}"
+    panel_name = (
+        f"Rippled-c{int(condition)}-{amp_tag}-{rotated_tag}"
+        f"-d{dimensions}-m{memory_size}"
+    )
     problem = Problem.from_benchmark(panel_name, function)
 
+    # Initial sigma should scale with the bound. RippledEllipsoid has bound 5.12.
     algorithms = build_algorithms(
         total_budget=total_budget,
         cmaes_warmup_budget=cmaes_warmup_budget,
-        initial_sigma=sigma_for(base_name),
+        initial_sigma=initial_sigma,
         memory_size=memory_size,
+        pgtol=pgtol,
+        factr=factr,
     )
 
     bench = Benchmark(
@@ -172,13 +169,7 @@ def run_one_panel(
     return problem, algorithms, bench.traces
 
 
-def render_combined(
-    panels: list[tuple[Problem, list, dict]],
-    output_dir: Path,
-    title: str,
-    cmaes_warmup_budget: int,
-) -> None:
-    """Render all panels into one combined plot grid."""
+def render_combined(panels, output_dir: Path, title: str) -> None:
     problems = [p for p, _, _ in panels]
     representative_algorithms = panels[0][1]
     combined_traces: dict = {}
@@ -192,7 +183,6 @@ def render_combined(
         traces=combined_traces,
         output_dir=output_dir,
     )
-
     plotter.plot_convergence_grid(
         save_path=output_dir / "convergence.png",
         title=title,
@@ -206,12 +196,13 @@ def render_combined(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--bases", nargs="+", default=["Griewank"],
-        help="Base function name(s): Griewank or Rastrigin (or both).",
-    )
     parser.add_argument("--dimensions", type=int, nargs="+", default=[10, 30])
-    parser.add_argument("--memory", type=int, nargs="+", default=[10])
+    parser.add_argument("--conditions", type=float, nargs="+", default=[1000.0])
+    parser.add_argument("--memory", type=int, nargs="+", default=[5])
+    parser.add_argument(
+        "--amplitude", type=float, default=10.0,
+        help="Ripple amplitude. Lower = less multimodal but better conditioned for L-BFGS-B; default 10 (Rastrigin-like).",
+    )
     parser.add_argument(
         "--rotated", action="store_true", default=True,
         help="Use rotated functions (default true; pass --no-rotated to disable).",
@@ -223,37 +214,54 @@ def main() -> None:
     parser.add_argument("--rotation-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument(
+        "--pgtol", type=float, default=1e-10,
+        help="L-BFGS-B projected gradient tolerance (looser = earlier stop).",
+    )
+    parser.add_argument(
+        "--factr", type=float, default=0.0,
+        help="L-BFGS-B f-value relative tolerance factor (0 disables).",
+    )
+    parser.add_argument(
+        "--initial-sigma", type=float, default=2.0,
+        help="Initial sigma for CMA-ES.",
+    )
+    parser.add_argument(
         "--output-dir", type=Path,
-        default=Path("plots/hybrid/rotated_multimodal_handoff"),
+        default=Path("plots/handoff/rippled_ellipsoid"),
     )
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    panels: list[tuple[Problem, list, dict]] = []
-    for base_name in args.bases:
-        for d in args.dimensions:
+    panels: list = []
+    for d in args.dimensions:
+        for cond in args.conditions:
             for m in args.memory:
                 panels.append(
                     run_one_panel(
-                        base_name=base_name,
                         dimensions=d,
-                        rotated=args.rotated,
+                        condition=cond,
                         memory_size=m,
+                        rotated=args.rotated,
                         total_budget=args.total_budget,
                         cmaes_warmup_budget=args.cmaes_warmup_budget,
                         num_seeds=args.num_seeds,
                         rotation_seed=args.rotation_seed,
                         num_workers=args.num_workers,
                         output_dir=args.output_dir,
+                        amplitude=args.amplitude,
+                        pgtol=args.pgtol,
+                        factr=args.factr,
+                        initial_sigma=args.initial_sigma,
                     )
                 )
 
+    rot_str = "rotated" if args.rotated else "axis-aligned"
     title = (
-        f"Rotated multimodal handoff: C^-1 vs identity "
+        f"Rippled Ellipsoid ({rot_str}): C^-1 vs identity handoff "
         f"({args.num_seeds} seeds, budget {args.total_budget}, warmup {args.cmaes_warmup_budget})"
     )
-    render_combined(panels, args.output_dir, title, args.cmaes_warmup_budget)
+    render_combined(panels, args.output_dir, title)
 
 
 if __name__ == "__main__":

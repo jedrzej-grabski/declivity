@@ -55,7 +55,7 @@ def run_hessian_benchmark():
     print(f"Hessian diagonal ranges from {exact_diag[0]:.0f} to {exact_diag[-1]:.0e}")
     print()
 
-    output_dir = Path("plots/lbfgsb/hessian_study")
+    output_dir = Path("plots/lbfgsb/initial_hessian")
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = MultiAlgorithmPlotter()
 

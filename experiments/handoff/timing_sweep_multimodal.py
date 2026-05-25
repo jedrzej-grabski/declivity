@@ -245,7 +245,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir", type=Path,
-        default=Path("plots/hybrid/handoff_timing_sweep"),
+        default=Path("plots/handoff/timing_sweep_multimodal"),
     )
     args = parser.parse_args()
 

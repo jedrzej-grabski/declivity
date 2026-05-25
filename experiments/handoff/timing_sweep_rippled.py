@@ -126,7 +126,7 @@ def main() -> None:
     parser.add_argument("--rotation-seed", type=int, default=42)
     parser.add_argument(
         "--output-dir", type=Path,
-        default=Path("plots/hybrid/rippled_handoff_timing_sweep"),
+        default=Path("plots/handoff/timing_sweep_rippled"),
     )
     args = parser.parse_args()
 

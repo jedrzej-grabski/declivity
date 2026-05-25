@@ -1,7 +1,7 @@
 [project]
 name = "declivity"
 version = "0.1.0"
-description = "Default template for PDM package"
+description = "Unified benchmarking framework for evolutionary and quasi-Newton optimization algorithms (DES, CMA-ES, MF-CMA-ES, L-BFGS-B)"
 authors = [
     {name = "Jedrzej Grabski", email = "grabski.dev@gmail.com"},
 ]
@@ -11,8 +11,8 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [tool.pdm.scripts]
-run-example = "python -m examples.simple_optimization"
-run-r = "python -m examples.run_for_r_comparison"
+run-example = "python -m experiments.basic.simple_optimization"
+run-r = "python -m experiments.cross_validation.des_vs_r"
 
 [tool.pdm]
 distribution = false

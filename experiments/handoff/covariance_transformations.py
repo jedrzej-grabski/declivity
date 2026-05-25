@@ -69,7 +69,7 @@ def run_handoff_study(
     memory_size: int = 5,
     cmaes_generations: int = 300,
 ):
-    output_dir = Path("plots/hybrid/handoff_study")
+    output_dir = Path("plots/handoff/covariance_transformations")
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = MultiAlgorithmPlotter()
 

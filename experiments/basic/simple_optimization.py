@@ -78,8 +78,8 @@ def run_optimization_example(algorithm: AlgorithmChoice):
     print(f"Message: {result.message}")
     print(f"Algorithm: {result.algorithm}")
 
-    output_dir = Path("plots")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("plots/basic/simple_optimization")
+    output_dir.mkdir(parents=True, exist_ok=True)
     print(f"\nSaving plots to: {output_dir.absolute()}")
 
     plotter = MultiAlgorithmPlotter()

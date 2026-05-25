@@ -195,7 +195,7 @@ def run_benchmark(dimensions: int = 10, cmaes_generations: int = 200):
     print()
 
     # Plotting
-    output_dir = Path("plots/hybrid")
+    output_dir = Path("plots/handoff/_legacy")
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = MultiAlgorithmPlotter()
 

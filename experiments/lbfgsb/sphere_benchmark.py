@@ -94,7 +94,7 @@ def run_lbfgsb_benchmark():
     print()
 
     # Plotting
-    output_dir = Path("plots/lbfgsb")
+    output_dir = Path("plots/lbfgsb/sphere_benchmark")
     output_dir.mkdir(parents=True, exist_ok=True)
     plotter = MultiAlgorithmPlotter()
 
