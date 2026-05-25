@@ -119,8 +119,10 @@ class DESConfig(BaseConfig):
 
     def __post_init__(self) -> None:
         """Calculate derived parameters that depend on other params"""
-        self.budget = default_budget(self)
-        self.population_size = default_population_size(self)
+        if self.budget <= 0:
+            self.budget = default_budget(self)
+        if self.population_size <= 0:
+            self.population_size = default_population_size(self)
         self.cp = default_cp(self)
         self.history = default_history(self)
 

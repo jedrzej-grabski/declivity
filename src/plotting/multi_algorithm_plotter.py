@@ -13,6 +13,7 @@ from src.core.base_optimizer import OptimizationResult
 from src.logging.des_logger import DESLogData
 from src.logging.mfcmaes_logger import MFCMAESLogData
 from src.logging.cmaes_logger import CMAESLogData
+from src.logging.lbfgsb_logger import LBFGSBLogData
 
 
 class MultiAlgorithmPlotter:
@@ -115,6 +116,8 @@ class MultiAlgorithmPlotter:
             return self._plot_mfcmaes_metrics(log_data, save_path)
         if algorithm == AlgorithmChoice.CMAES:
             return self._plot_cmaes_metrics(log_data, save_path)
+        if algorithm == AlgorithmChoice.LBFGSB:
+            return self._plot_lbfgsb_metrics(log_data, save_path)
         return self._plot_generic_metrics(log_data, algorithm, save_path)
 
     def _plot_cmaes_metrics(
@@ -445,6 +448,139 @@ class MultiAlgorithmPlotter:
 
         return fig
 
+    def _plot_lbfgsb_metrics(
+        self, log_data: LBFGSBLogData, save_path: Optional[Union[str, Path]] = None
+    ) -> Figure:
+        """Plot L-BFGS-B-specific metrics."""
+        fig = plt.figure(figsize=(20, 16))
+        gs = fig.add_gridspec(4, 2, hspace=0.3, wspace=0.3)
+
+        evals = (
+            log_data.evaluations
+            if log_data.evaluations
+            else range(len(log_data.best_fitness) if log_data.best_fitness else 0)
+        )
+
+        # Panel 1: Convergence
+        ax1 = fig.add_subplot(gs[0, 0])
+        if log_data.best_fitness:
+            ax1.semilogy(evals, log_data.best_fitness, "b-", linewidth=2, label="Best")
+            if log_data.function_value:
+                ax1.semilogy(
+                    evals, log_data.function_value, "g--", linewidth=1.5, label="f(x)"
+                )
+            ax1.set_xlabel("Function Evaluations")
+            ax1.set_ylabel("Fitness (log scale)")
+            ax1.set_title("Convergence")
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+
+        ax2 = fig.add_subplot(gs[0, 1])
+        if log_data.projected_gradient_norm:
+            ax2.semilogy(
+                evals[: len(log_data.projected_gradient_norm)],
+                log_data.projected_gradient_norm,
+                "r-",
+                linewidth=2,
+                label="||proj g||_inf",
+            )
+            if log_data.gradient_norm:
+                ax2.semilogy(
+                    evals[: len(log_data.gradient_norm)],
+                    log_data.gradient_norm,
+                    "b--",
+                    linewidth=1.5,
+                    label="||g||_2",
+                )
+            ax2.set_xlabel("Function Evaluations")
+            ax2.set_ylabel("Norm (log scale)")
+            ax2.set_title("Gradient Norms")
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+
+        # Panel 2: Step size and theta
+        ax3 = fig.add_subplot(gs[1, 0])
+        if log_data.step_length:
+            ax3.semilogy(
+                evals[: len(log_data.step_length)],
+                log_data.step_length,
+                "orange",
+                linewidth=2,
+            )
+            ax3.set_xlabel("Function Evaluations")
+            ax3.set_ylabel("Step Length (log scale)")
+            ax3.set_title("Line Search Step Length")
+            ax3.grid(True, alpha=0.3)
+
+        ax4 = fig.add_subplot(gs[1, 1])
+        if log_data.theta:
+            ax4.semilogy(
+                evals[: len(log_data.theta)],
+                log_data.theta,
+                "purple",
+                linewidth=2,
+            )
+            ax4.set_xlabel("Function Evaluations")
+            ax4.set_ylabel("theta (log scale)")
+            ax4.set_title("L-BFGS Scaling Factor (theta = y'y / y's)")
+            ax4.grid(True, alpha=0.3)
+
+        # Panel 3: Free variables and corrections
+        ax5 = fig.add_subplot(gs[2, 0])
+        if log_data.num_free_vars:
+            ax5.plot(
+                evals[: len(log_data.num_free_vars)],
+                log_data.num_free_vars,
+                "teal",
+                linewidth=2,
+            )
+            ax5.set_xlabel("Function Evaluations")
+            ax5.set_ylabel("Count")
+            ax5.set_title("Number of Free Variables")
+            ax5.grid(True, alpha=0.3)
+
+        ax6 = fig.add_subplot(gs[2, 1])
+        if log_data.num_corrections:
+            ax6.plot(
+                evals[: len(log_data.num_corrections)],
+                log_data.num_corrections,
+                "brown",
+                linewidth=2,
+            )
+            ax6.set_xlabel("Function Evaluations")
+            ax6.set_ylabel("Count")
+            ax6.set_title("Number of L-BFGS Corrections Stored")
+            ax6.grid(True, alpha=0.3)
+
+        # Panel 4: Line search iterations and function value
+        ax7 = fig.add_subplot(gs[3, 0])
+        if log_data.line_search_iters:
+            ax7.plot(
+                evals[: len(log_data.line_search_iters)],
+                log_data.line_search_iters,
+                "m-",
+                linewidth=2,
+            )
+            ax7.set_xlabel("Function Evaluations")
+            ax7.set_ylabel("Iterations")
+            ax7.set_title("Line Search Function Evaluations per Iteration")
+            ax7.grid(True, alpha=0.3)
+
+        ax8 = fig.add_subplot(gs[3, 1])
+        if log_data.function_value:
+            ax8.semilogy(evals, log_data.function_value, "darkgreen", linewidth=2)
+            ax8.set_xlabel("Function Evaluations")
+            ax8.set_ylabel("f(x) (log scale)")
+            ax8.set_title("Function Value per Iteration")
+            ax8.grid(True, alpha=0.3)
+
+        plt.suptitle("L-BFGS-B Diagnostics", fontsize=18, y=0.995)
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
     def _plot_generic_metrics(
         self,
         log_data: BaseLogData,
@@ -584,6 +720,409 @@ class MultiAlgorithmPlotter:
         ax.legend()
         ax.grid(True, alpha=0.3)
 
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_labeled_convergence_comparison(
+        self,
+        results: dict[str, OptimizationResult],
+        colors: dict[str, str],
+        title: str = "Convergence Comparison",
+        save_path: Optional[Union[str, Path]] = None,
+        handoff_eval: Optional[int] = None,
+        handoff_iter: Optional[int] = None,
+    ) -> Figure:
+        """Four-panel comparison of labeled optimization runs.
+
+        Panels: convergence by evaluations, convergence by iteration,
+        projected gradient norm, and line search step length.
+
+        Args:
+            results: Dictionary mapping descriptive labels to results.
+            colors: Dictionary mapping the same labels to hex color strings.
+            title: Suptitle for the figure.
+            save_path: Path to save the figure.
+            handoff_eval: If set, draws a vertical line at this evaluation
+                count on evaluation-based panels to mark an algorithm handoff.
+            handoff_iter: If set, draws a vertical line at this iteration
+                count on iteration-based panels to mark an algorithm handoff.
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+        ax = axes[0, 0]
+        for label, result in results.items():
+            log_data = result.diagnostic
+            ax.semilogy(
+                log_data.evaluations, log_data.best_fitness,
+                color=colors.get(label), linewidth=2,
+                label=f"{label} ({result.evaluations} evals)",
+            )
+        ax.set_xlabel("Function Evaluations", fontsize=12)
+        ax.set_ylabel("Best Fitness (log scale)", fontsize=12)
+        ax.set_title("Convergence by Evaluations", fontsize=14)
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+        if handoff_eval is not None:
+            ax.axvline(x=handoff_eval, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7, label="Handoff")
+            ax.legend(fontsize=9)
+
+        ax = axes[0, 1]
+        for label, result in results.items():
+            log_data = result.diagnostic
+            ax.semilogy(
+                log_data.iteration, log_data.best_fitness,
+                color=colors.get(label), linewidth=2, label=label,
+            )
+        ax.set_xlabel("Iteration", fontsize=12)
+        ax.set_ylabel("Best Fitness (log scale)", fontsize=12)
+        ax.set_title("Convergence by Iteration", fontsize=14)
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+        if handoff_iter is not None:
+            ax.axvline(x=handoff_iter, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7, label="Handoff")
+            ax.legend(fontsize=9)
+
+        ax = axes[1, 0]
+        for label, result in results.items():
+            log_data = result.diagnostic
+            if hasattr(log_data, "projected_gradient_norm") and log_data.projected_gradient_norm:
+                ax.semilogy(
+                    log_data.evaluations[: len(log_data.projected_gradient_norm)],
+                    log_data.projected_gradient_norm,
+                    color=colors.get(label), linewidth=2, label=label,
+                )
+        ax.set_xlabel("Function Evaluations", fontsize=12)
+        ax.set_ylabel("||proj g||_inf (log scale)", fontsize=12)
+        ax.set_title("Projected Gradient Norm", fontsize=14)
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+        if handoff_eval is not None:
+            ax.axvline(x=handoff_eval, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7)
+
+        ax = axes[1, 1]
+        for label, result in results.items():
+            log_data = result.diagnostic
+            if hasattr(log_data, "step_length") and log_data.step_length:
+                iterations = log_data.iteration[: len(log_data.step_length)]
+                ax.semilogy(
+                    iterations, log_data.step_length,
+                    color=colors.get(label), linewidth=1.5, alpha=0.8,
+                    label=label,
+                )
+        ax.set_xlabel("Iteration", fontsize=12)
+        ax.set_ylabel("Step Length (log scale)", fontsize=12)
+        ax.set_title("Line Search Step Length", fontsize=14)
+        if handoff_iter is not None:
+            ax.axvline(x=handoff_iter, color="black", linestyle="--",
+                       linewidth=1.5, alpha=0.7)
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+
+        fig.suptitle(title, fontsize=16, y=1.01)
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_evaluation_bar_chart(
+        self,
+        results: dict[str, OptimizationResult],
+        colors: dict[str, str],
+        title: str = "Function Evaluations to Converge",
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Horizontal bar chart comparing total evaluations across labeled runs.
+
+        Args:
+            results: Dictionary mapping descriptive labels to results.
+            colors: Dictionary mapping the same labels to hex color strings.
+            title: Title for the chart.
+            save_path: Path to save the figure.
+        """
+        fig, ax = plt.subplots(figsize=(10, max(3, len(results) * 1.5)))
+        labels = list(results.keys())
+        evaluations = [results[label].evaluations for label in labels]
+        bars = ax.barh(
+            labels, evaluations,
+            color=[colors.get(label, "#888888") for label in labels],
+            edgecolor="white",
+        )
+
+        for bar, num_evals in zip(bars, evaluations):
+            ax.text(
+                bar.get_width() + max(evaluations) * 0.02,
+                bar.get_y() + bar.get_height() / 2,
+                f"{num_evals:,}",
+                va="center", fontsize=12, fontweight="bold",
+            )
+
+        ax.set_xlabel("Function Evaluations to Converge", fontsize=13)
+        ax.set_title(title, fontsize=14)
+        ax.invert_yaxis()
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_function_landscape(
+        self,
+        func: Any,
+        title: str = "Function Landscape",
+        dim1: int = 0,
+        dim2: int = 1,
+        center: Optional[NDArray[np.float64]] = None,
+        extent: float = 10.0,
+        resolution: int = 200,
+        log_scale: bool = True,
+        show_eigenvectors: bool = False,
+        hessian: Optional[NDArray[np.float64]] = None,
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Contour plot of a 2D slice through a benchmark function.
+
+        Fixes all variables except dim1 and dim2 at the center point,
+        then evaluates the function on a grid. Optionally overlays the
+        Hessian eigenvectors at the center to show principal curvature
+        directions.
+
+        Args:
+            func: Callable taking an n-dimensional vector.
+            title: Plot title.
+            dim1, dim2: Which two coordinates form the slice.
+            center: Point where non-plotted dimensions are fixed (default: origin).
+            extent: Half-width of the plot region in each direction.
+            resolution: Grid points per axis.
+            log_scale: Use log scale for contour levels.
+            show_eigenvectors: Draw eigenvector arrows from the Hessian.
+            hessian: Full n x n Hessian matrix (needed for eigenvectors).
+            save_path: Path to save the figure.
+        """
+        n = getattr(func, "dimensions", None)
+        if center is None:
+            center = np.zeros(n) if n else np.zeros(2)
+
+        x_range = np.linspace(center[dim1] - extent, center[dim1] + extent, resolution)
+        y_range = np.linspace(center[dim2] - extent, center[dim2] + extent, resolution)
+        X, Y = np.meshgrid(x_range, y_range)
+        Z = np.zeros_like(X)
+
+        for i in range(resolution):
+            for j in range(resolution):
+                point = center.copy()
+                point[dim1] = X[i, j]
+                point[dim2] = Y[i, j]
+                Z[i, j] = func(point)
+
+        fig, ax = plt.subplots(figsize=(8, 7))
+
+        if log_scale:
+            Z_plot = np.log10(np.maximum(Z, 1e-30))
+            label = "log10(f)"
+        else:
+            Z_plot = Z
+            label = "f(x)"
+
+        contour = ax.contourf(X, Y, Z_plot, levels=30, cmap="viridis")
+        ax.contour(X, Y, Z_plot, levels=15, colors="white", linewidths=0.3, alpha=0.5)
+        cbar = plt.colorbar(contour, ax=ax)
+        cbar.set_label(label, fontsize=11)
+
+        if show_eigenvectors and hessian is not None:
+            sub_hessian = np.array([
+                [hessian[dim1, dim1], hessian[dim1, dim2]],
+                [hessian[dim2, dim1], hessian[dim2, dim2]],
+            ])
+            eigenvalues, eigenvectors = np.linalg.eigh(sub_hessian)
+
+            arrow_scale = extent * 0.4
+            for k in range(2):
+                ev = eigenvectors[:, k]
+                magnitude = eigenvalues[k]
+                label_text = f"$\\lambda_{k+1}$ = {magnitude:.1e}"
+                color = "#ff6b6b" if k == 0 else "#4ecdc4"
+                ax.annotate(
+                    "", xy=(center[dim1] + arrow_scale * ev[0],
+                            center[dim2] + arrow_scale * ev[1]),
+                    xytext=(center[dim1], center[dim2]),
+                    arrowprops=dict(arrowstyle="->", color=color, lw=2.5),
+                )
+                ax.annotate(
+                    "", xy=(center[dim1] - arrow_scale * ev[0],
+                            center[dim2] - arrow_scale * ev[1]),
+                    xytext=(center[dim1], center[dim2]),
+                    arrowprops=dict(arrowstyle="->", color=color, lw=2.5),
+                )
+                ax.plot([], [], color=color, lw=2.5, label=label_text)
+
+            ax.legend(loc="upper right", fontsize=10)
+
+        ax.set_xlabel(f"$x_{{{dim1+1}}}$", fontsize=13)
+        ax.set_ylabel(f"$x_{{{dim2+1}}}$", fontsize=13)
+        ax.set_title(title, fontsize=14)
+        ax.set_aspect("equal")
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_function_landscape_grid(
+        self,
+        functions: dict[str, Any],
+        hessians: Optional[dict[str, NDArray[np.float64]]] = None,
+        dim1: int = 0,
+        dim2: int = 1,
+        extent: float = 10.0,
+        resolution: int = 200,
+        suptitle: str = "Function Landscapes",
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Grid of contour plots for multiple functions side by side.
+
+        Args:
+            functions: Dict mapping labels to callable benchmark functions.
+            hessians: Optional dict mapping the same labels to Hessian matrices.
+            dim1, dim2: Which two coordinates form the slice.
+            extent: Half-width of the plot region.
+            resolution: Grid points per axis.
+            suptitle: Title above the grid.
+            save_path: Path to save the figure.
+        """
+        num_funcs = len(functions)
+        cols = min(num_funcs, 4)
+        rows = (num_funcs + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 5.5 * rows))
+        if num_funcs == 1:
+            axes = np.array([axes])
+        axes = np.atleast_2d(axes)
+
+        for idx, (label, func) in enumerate(functions.items()):
+            row, col = divmod(idx, cols)
+            ax = axes[row, col]
+
+            n = getattr(func, "dimensions", 2)
+            center = np.zeros(n)
+
+            x_range = np.linspace(-extent, extent, resolution)
+            y_range = np.linspace(-extent, extent, resolution)
+            X, Y = np.meshgrid(x_range, y_range)
+            Z = np.zeros_like(X)
+
+            for i in range(resolution):
+                for j in range(resolution):
+                    point = center.copy()
+                    point[dim1] = X[i, j]
+                    point[dim2] = Y[i, j]
+                    Z[i, j] = func(point)
+
+            Z_plot = np.log10(np.maximum(Z, 1e-30))
+            contour = ax.contourf(X, Y, Z_plot, levels=30, cmap="viridis")
+            ax.contour(X, Y, Z_plot, levels=15, colors="white", linewidths=0.3, alpha=0.5)
+
+            if hessians and label in hessians:
+                hessian = hessians[label]
+                sub_hessian = np.array([
+                    [hessian[dim1, dim1], hessian[dim1, dim2]],
+                    [hessian[dim2, dim1], hessian[dim2, dim2]],
+                ])
+                eigenvalues, eigenvectors = np.linalg.eigh(sub_hessian)
+                arrow_scale = extent * 0.35
+                for k in range(2):
+                    ev = eigenvectors[:, k]
+                    color = "#ff6b6b" if k == 0 else "#4ecdc4"
+                    ax.annotate(
+                        "", xy=(arrow_scale * ev[0], arrow_scale * ev[1]),
+                        xytext=(0, 0),
+                        arrowprops=dict(arrowstyle="->", color=color, lw=2),
+                    )
+                    ax.annotate(
+                        "", xy=(-arrow_scale * ev[0], -arrow_scale * ev[1]),
+                        xytext=(0, 0),
+                        arrowprops=dict(arrowstyle="->", color=color, lw=2),
+                    )
+
+            ax.set_xlabel(f"$x_{{{dim1+1}}}$", fontsize=11)
+            ax.set_ylabel(f"$x_{{{dim2+1}}}$", fontsize=11)
+            ax.set_title(label, fontsize=12)
+            ax.set_aspect("equal")
+
+        # Hide unused subplots
+        for idx in range(num_funcs, rows * cols):
+            row, col = divmod(idx, cols)
+            axes[row, col].set_visible(False)
+
+        fig.suptitle(suptitle, fontsize=16, y=1.02)
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        return fig
+
+    def plot_matrix_diagonal_comparison(
+        self,
+        matrices: dict[str, NDArray[np.float64]],
+        reference: NDArray[np.float64],
+        reference_label: str = "True Hessian",
+        title: str = "Diagonal Profile Comparison",
+        save_path: Optional[Union[str, Path]] = None,
+    ) -> Figure:
+        """Compare sorted diagonal profiles of several matrices against a reference.
+
+        Plots the sorted absolute diagonal of each matrix (normalized to unit max)
+        against the reference diagonal. Shows how well each matrix captures the
+        per-variable curvature structure.
+
+        Args:
+            matrices: Dict mapping labels to n x n matrices.
+            reference: The ground-truth matrix (e.g. the true Hessian).
+            reference_label: Label for the reference curve.
+            title: Plot title.
+            save_path: Path to save the figure.
+        """
+        num_plots = len(matrices)
+        cols = min(num_plots, 3)
+        rows = (num_plots + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4.5 * rows))
+        if num_plots == 1:
+            axes = np.array([axes])
+        axes = np.atleast_1d(axes).flatten()
+
+        ref_diag = np.sort(np.abs(np.diag(reference)))
+        ref_norm = ref_diag / (np.max(ref_diag) + 1e-30)
+        var_indices = np.arange(1, len(ref_diag) + 1)
+
+        for idx, (label, matrix) in enumerate(matrices.items()):
+            ax = axes[idx]
+            mat_diag = np.sort(np.abs(np.diag(matrix)))
+            mat_norm = mat_diag / (np.max(mat_diag) + 1e-30)
+
+            ax.semilogy(var_indices, ref_norm, "k-o", markersize=3,
+                        linewidth=1.5, label=reference_label)
+            ax.semilogy(var_indices, mat_norm, "g--s", markersize=3,
+                        linewidth=1.5, label="Passed matrix")
+            ax.set_xlabel("Variable index (sorted)", fontsize=10)
+            ax.set_ylabel("Normalized diagonal (log)", fontsize=10)
+            ax.set_title(label, fontsize=11)
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+        for idx in range(num_plots, len(axes)):
+            axes[idx].set_visible(False)
+
+        fig.suptitle(title, fontsize=14)
         plt.tight_layout()
 
         if save_path:

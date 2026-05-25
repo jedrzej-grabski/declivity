@@ -26,6 +26,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize the DES optimizer."""
 
@@ -41,6 +42,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             boundary_strategy=boundary_strategy,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
+            seed=seed,
         )
 
     def optimize(self) -> OptimizationResult[DESLogData]:
@@ -75,7 +77,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
 
         # Create first population
         sigma = (self.upper_bounds - self.lower_bounds) / 6
-        population = np.random.normal(
+        population = self.rng.normal(
             loc=self.initial_point, scale=sigma, size=(lambda_, N)
         )
 
@@ -199,16 +201,16 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
 
             # Sample from history
             limit = min(iter_count, histSize)
-            history_sample = np.random.choice(range(limit), lambda_, replace=True)
-            history_sample2 = np.random.choice(range(limit), lambda_, replace=True)
+            history_sample = self.rng.choice(limit, lambda_, replace=True)
+            history_sample2 = self.rng.choice(limit, lambda_, replace=True)
 
             x1_sample = np.zeros(lambda_, dtype=int)
             x2_sample = np.zeros(lambda_, dtype=int)
 
             for i in range(lambda_):
                 hist_idx = history_sample[i]
-                x1_sample[i] = np.random.randint(0, history[hist_idx].shape[1])
-                x2_sample[i] = np.random.randint(0, history[hist_idx].shape[1])
+                x1_sample[i] = self.rng.integers(0, history[hist_idx].shape[1])
+                x2_sample[i] = self.rng.integers(0, history[hist_idx].shape[1])
 
             # Make diffs
             for i in range(lambda_):
@@ -217,8 +219,8 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
                 x2 = history[hist_idx][:, x2_sample[i]]
 
                 diffs[:, i] = (
-                    np.sqrt(ccum) * (x1 - x2 + np.random.normal() * d_mean[:, hist_idx])
-                    + np.sqrt(1 - ccum) * np.random.normal() * pc[:, history_sample2[i]]
+                    np.sqrt(ccum) * (x1 - x2 + self.rng.standard_normal() * d_mean[:, hist_idx])
+                    + np.sqrt(1 - ccum) * self.rng.standard_normal() * pc[:, history_sample2[i]]
                 )
 
             # Generate new population
@@ -226,7 +228,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
                 new_mean.reshape(1, -1)
                 + Ft * diffs.T
                 + (1 - 2 / N**2) ** (iter_count / 2)
-                * np.random.normal(size=(lambda_, N))
+                * self.rng.standard_normal(size=(lambda_, N))
                 / chi_N
             )
 

@@ -86,6 +86,11 @@ class CMAESConfig(BaseConfig):
     diag_cond: bool = False
     """Log condition number of covariance matrix"""
 
+    diag_covariance_matrix: bool = False
+    """Store the full covariance matrix at every generation. Useful for
+    tracking how the covariance evolves, but expensive in memory for
+    long runs (n^2 floats per generation)."""
+
     # Termination criteria
     tolfun: float = 1e-12
     """Tolerance for function value differences"""
@@ -194,6 +199,7 @@ class CMAESConfig(BaseConfig):
         super().enable_all_diagnostics()
         self.diag_sigma = True
         self.diag_cond = True
+        self.diag_covariance_matrix = True
 
     def __str__(self) -> str:
         return (

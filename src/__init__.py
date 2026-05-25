@@ -19,9 +19,8 @@ def _register_algorithms():
             AlgorithmChoice.DES, DESOptimizer, DESConfig
         )
     except ImportError:
-        pass  # Algorithm not available
+        pass
 
-    # Register Matrix-Free CMA-ES
     try:
         from src.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
         from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
@@ -30,9 +29,8 @@ def _register_algorithms():
             AlgorithmChoice.MFCMAES, MFCMAESOptimizer, MFCMAESConfig
         )
     except ImportError:
-        pass  # Algorithm not available
+        pass
 
-    # Register Classic CMA-ES
     try:
         from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
         from src.algorithms.cmaes.config import CMAESConfig
@@ -41,7 +39,17 @@ def _register_algorithms():
             AlgorithmChoice.CMAES, CMAESOptimizer, CMAESConfig
         )
     except ImportError:
-        pass  # Algorithm not available
+        pass
+
+    try:
+        from src.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+        from src.algorithms.lbfgsb.config import LBFGSBConfig
+
+        AlgorithmFactory.register_algorithm(
+            AlgorithmChoice.LBFGSB, LBFGSBOptimizer, LBFGSBConfig
+        )
+    except ImportError:
+        pass
 
 
 _register_algorithms()

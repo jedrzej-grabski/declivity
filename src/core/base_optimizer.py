@@ -44,6 +44,7 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize the base optimizer."""
         self.func = func
@@ -52,6 +53,11 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         self.config: ConfigType = config
         self.algorithm = algorithm
         self.evaluations = 0
+
+        if isinstance(seed, np.random.Generator):
+            self.rng = seed
+        else:
+            self.rng = np.random.default_rng(seed)
 
         self.lower_bounds = self._process_bounds(lower_bounds, self.dimensions)
         self.upper_bounds = self._process_bounds(upper_bounds, self.dimensions)
@@ -87,12 +93,9 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
             raise ValueError("Lower bounds must be less than or equal to upper bounds.")
 
     def evaluate(self, x: NDArray[np.float64]) -> float:
-        """Evaluate a single solution."""
-        if self.boundary_handler.is_feasible(x):
-            self.evaluations += 1
-            return self.func(x)
-        else:
-            return float("inf")
+        """Evaluate a single solution and increment the evaluation counter."""
+        self.evaluations += 1
+        return self.func(x)
 
     def evaluate_population(
         self, population: NDArray[np.float64]

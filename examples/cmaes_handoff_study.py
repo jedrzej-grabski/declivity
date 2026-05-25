@@ -1,0 +1,232 @@
+"""
+Benchmark: CMA-ES to L-BFGS-B handoff with different covariance transformations.
+
+After running CMA-ES, the learned covariance matrix C and step-size sigma are
+extracted from the diagnostic logs and transformed into an initial Hessian for
+L-BFGS-B. Compares five transformations across all four rotation levels.
+
+All CMA-ES state is obtained through the diagnostic logger and public API,
+not through private attribute access.
+"""
+
+import matplotlib.pyplot as plt
+import numpy as np
+from pathlib import Path
+
+from src import AlgorithmFactory
+from src.algorithms.choices import AlgorithmChoice
+from src.algorithms.cmaes.config import CMAESConfig
+from src.algorithms.lbfgsb.config import LBFGSBConfig
+from src.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
+from src.plotting.multi_algorithm_plotter import MultiAlgorithmPlotter
+
+plt.ioff()
+plt.switch_backend("Agg")
+
+
+def build_transformations(covariance_matrix, sigma, dimensions):
+    """Build different Hessian matrices from the CMA-ES covariance."""
+    regularized = covariance_matrix + 1e-10 * np.eye(dimensions)
+
+    normalized = covariance_matrix / np.trace(covariance_matrix) * dimensions
+    normalized_regularized = normalized + 1e-10 * np.eye(dimensions)
+
+    return {
+        "Identity (no CMA-ES info)": None,
+        "Raw covariance C": covariance_matrix,
+        "Inverse C^{-1}": np.linalg.inv(regularized),
+        "Inverse scaled (s^2 C)^{-1}": np.linalg.inv(sigma**2 * regularized),
+        "Normalized C / tr(C) * n": normalized,
+        "Inv. normalized (C/tr*n)^{-1}": np.linalg.inv(normalized_regularized),
+    }
+
+
+TRANSFORMATION_COLORS = {
+    "Identity (no CMA-ES info)":    "#95a5a6",
+    "Raw covariance C":             "#e74c3c",
+    "Inverse C^{-1}":               "#3498db",
+    "Inverse scaled (s^2 C)^{-1}":  "#2ecc71",
+    "Normalized C / tr(C) * n":     "#9b59b6",
+    "Inv. normalized (C/tr*n)^{-1}": "#e67e22",
+}
+
+
+def run_handoff_study(
+    dimensions: int = 50,
+    memory_size: int = 5,
+    cmaes_generations: int = 300,
+):
+    output_dir = Path("plots/hybrid/handoff_study")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plotter = MultiAlgorithmPlotter()
+
+    rotations = [
+        ("none",       "No rotation"),
+        ("uniform_45", "Uniform 45-degree chain"),
+        ("golden",     "Golden angle chain"),
+        ("random",     "Random orthogonal"),
+    ]
+
+    for rotation_mode, rotation_desc in rotations:
+        # Build the test function
+        if rotation_mode == "none":
+            func = Ellipsoid(dimensions)
+            scales = 10.0 ** (6.0 * np.arange(dimensions) / max(dimensions - 1, 1))
+            gradient_fn = lambda x, s=scales: 2.0 * s * x
+            true_hessian = np.diag(2.0 * scales)
+        else:
+            func = RotatedEllipsoid(dimensions, rotation=rotation_mode, seed=42)
+            gradient_fn = func.gradient
+            true_hessian = func.hessian
+
+        lower_bounds = -100.0
+        upper_bounds = 100.0
+        seed = 42
+        rng = np.random.default_rng(seed)
+        initial_point = rng.uniform(lower_bounds, upper_bounds, size=dimensions)
+
+        print(f"{'='*60}")
+        print(f"{rotation_desc} ({dimensions}D, m={memory_size})")
+        print(f"Initial f(x) = {func(initial_point):.2e}")
+
+        # Phase 1: CMA-ES warm-up
+        cmaes_pop_config = CMAESConfig(dimensions=dimensions)
+        evals_per_generation = cmaes_pop_config.population_size + 1
+        cmaes_budget = cmaes_generations * evals_per_generation
+
+        cmaes_config = CMAESConfig(
+            dimensions=dimensions, budget=cmaes_budget, sigma=10.0,
+        )
+        cmaes_config.diag_bestVal = True
+        cmaes_config.diag_sigma = True
+        cmaes_config.diag_eigen = True
+
+        optimizer_cmaes = AlgorithmFactory.create_optimizer(
+            algorithm=AlgorithmChoice.CMAES,
+            func=func,
+            initial_point=initial_point,
+            config=cmaes_config,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            seed=seed,
+        )
+        result_cmaes = optimizer_cmaes.optimize()
+
+        # Extract CMA-ES state from the logs and public API
+        logs = result_cmaes.diagnostic
+        covariance_matrix = logs.covariance_matrix[-1]
+        sigma = logs.sigma[-1]
+        starting_point = logs.mean_vector[-1]
+        warmup_evals = result_cmaes.evaluations
+
+        print(f"CMA-ES warm-up: {warmup_evals} evals, "
+              f"best={result_cmaes.best_fitness:.4e}, sigma={sigma:.4f}")
+        print()
+
+        # Phase 2: L-BFGS-B with each transformation
+        lbfgsb_budget = 5000
+        transformations = build_transformations(
+            covariance_matrix, sigma, dimensions
+        )
+
+        cmaes_iters = len(result_cmaes.diagnostic.iteration)
+
+        results = {}
+        for label, hessian_matrix in transformations.items():
+            config = LBFGSBConfig(
+                dimensions=dimensions,
+                initial_hessian=hessian_matrix,
+                m=memory_size,
+                pgtol=1e-8,
+                factr=1e7,
+                budget=lbfgsb_budget,
+            )
+            config.diag_bestVal = True
+            config.diag_gradient_norm = True
+            config.diag_step_length = True
+
+            optimizer = AlgorithmFactory.create_optimizer(
+                AlgorithmChoice.LBFGSB,
+                func,
+                starting_point,
+                config,
+                lower_bounds=lower_bounds,
+                upper_bounds=upper_bounds,
+                gradient_fn=gradient_fn,
+            )
+            result = optimizer.optimize()
+
+            # Prepend full CMA-ES convergence history for continuous plot
+            cmaes_log = result_cmaes.diagnostic
+            for i in range(len(result.diagnostic.evaluations)):
+                result.diagnostic.evaluations[i] += warmup_evals
+            for i in range(len(result.diagnostic.iteration)):
+                result.diagnostic.iteration[i] += cmaes_iters
+            result.diagnostic.evaluations = (
+                list(cmaes_log.evaluations) + result.diagnostic.evaluations
+            )
+            result.diagnostic.best_fitness = (
+                list(cmaes_log.best_fitness) + result.diagnostic.best_fitness
+            )
+            result.diagnostic.iteration = (
+                list(cmaes_log.iteration) + result.diagnostic.iteration
+            )
+
+            results[label] = result
+            total_evals = warmup_evals + result.evaluations
+
+            print(f"  {label:35s}: f={result.best_fitness:.4e}  "
+                  f"lbfgsb={result.evaluations:>5d}  total={total_evals:>6d}")
+
+        print()
+
+        # Plotting
+        safe_mode = rotation_mode.replace(" ", "_")
+
+        plotter.plot_labeled_convergence_comparison(
+            results, TRANSFORMATION_COLORS,
+            title=(
+                f"CMA-ES -> L-BFGS-B: Covariance Transformations\n"
+                f"{rotation_desc} ({dimensions}D, m={memory_size}, "
+                f"{cmaes_generations} CMA-ES gen)"
+            ),
+            save_path=output_dir / f"{safe_mode}_{dimensions}d_convergence.png",
+            handoff_eval=warmup_evals,
+            handoff_iter=cmaes_iters,
+        )
+        plotter.plot_evaluation_bar_chart(
+            results, TRANSFORMATION_COLORS,
+            title=(
+                f"Total Evaluations: {rotation_desc} ({dimensions}D)"
+            ),
+            save_path=output_dir / f"{safe_mode}_{dimensions}d_bar.png",
+        )
+
+        # Diagonal profile comparison against true Hessian
+        non_identity = {
+            label: matrix
+            for label, matrix in transformations.items()
+            if matrix is not None
+        }
+        plotter.plot_matrix_diagonal_comparison(
+            non_identity,
+            reference=true_hessian,
+            reference_label="True Hessian",
+            title=(
+                f"Diagonal Profile: True Hessian vs Passed Matrix\n"
+                f"{rotation_desc} ({dimensions}D)"
+            ),
+            save_path=output_dir / f"{safe_mode}_{dimensions}d_diag_compare.png",
+        )
+
+        plt.close("all")
+
+    print(f"All plots saved to: {output_dir.absolute()}")
+
+
+if __name__ == "__main__":
+    import sys
+    dims = int(sys.argv[1]) if len(sys.argv) > 1 else 50
+    mem = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+    gens = int(sys.argv[3]) if len(sys.argv) > 3 else 300
+    run_handoff_study(dimensions=dims, memory_size=mem, cmaes_generations=gens)

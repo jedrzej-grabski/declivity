@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 @final
-class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
+class CMAESwOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
     """CMA-ES optimizer wrapper around reference implementation with proper logging."""
 
     def __init__(
@@ -28,6 +28,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
         boundary_strategy: BoundaryHandlerType | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize the CMA-ES optimizer."""
 
@@ -43,6 +44,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
             boundary_strategy=boundary_strategy,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
+            seed=seed,
         )
 
         # Auto-calculate sigma if not set
@@ -58,13 +60,13 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
             (self.boundary_handler.lower_bounds, self.boundary_handler.upper_bounds)
         )
 
-        # Initialize the reference CMA-ES implementation
+        # Initialize the reference CMA-ES implementation, sharing the rng
         self._cma = CMA(
             mean=self.initial_point.copy(),
             sigma=self.config.sigma,
             bounds=bounds_array,
             population_size=self.config.population_size,
-            seed=None,  # Can be made configurable if needed
+            seed=self.rng,
         )
 
     def optimize(self) -> OptimizationResult["CMAESLogData"]:
@@ -88,9 +90,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
             for _ in range(self._cma.population_size):
                 x = self._cma.ask()
 
-                # Evaluate
-                fitness = self.func(x)
-                self.evaluations += 1
+                fitness = self.evaluate(x)
 
                 solutions.append((x, fitness))
                 population.append(x)
@@ -119,8 +119,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
 
             # Evaluate mean
             mean_repaired = self.boundary_handler.repair(self._cma.mean)
-            mean_fitness_value = self.func(mean_repaired)
-            self.evaluations += 1
+            mean_fitness_value = self.evaluate(mean_repaired)
 
             # Get internal state for logging
             # Perform eigendecomposition to get B and D
@@ -170,6 +169,30 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
         )
 
         return result
+
+    def get_learned_covariance(self) -> "CovarianceMatrix":
+        """Return the current covariance matrix as a CovarianceMatrix object.
+
+        Wraps the internal CMA-ES covariance C in the framework's
+        CovarianceMatrix dataclass, providing the eigendecomposition
+        and utility methods (sqrt, inv_sqrt, condition number).
+        """
+        from src.utils.covariance import _decompose
+
+        C = self._cma._C.copy()
+        mean = self._cma._mean.copy()
+        rank = min(C.shape[0], C.shape[1])
+        return _decompose(C, mean, rank)
+
+    @property
+    def sigma(self) -> float:
+        """Current step-size parameter sigma."""
+        return float(self._cma._sigma)
+
+    @property
+    def mean(self) -> NDArray[np.float64]:
+        """Current distribution mean."""
+        return self._cma._mean.copy()
 
     def _get_termination_message(self) -> str:
         """Get the reason for termination from the reference implementation."""
