@@ -2,7 +2,7 @@
 
 *A complete walkthrough of the Limited-memory Broyden-Fletcher-Goldfarb-Shanno
 algorithm for Bound-constrained optimization, and its pure Python implementation
-in the python-evo framework.*
+in the declivity framework.*
 
 ---
 

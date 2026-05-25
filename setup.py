@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="python-evo",
+    name="declivity",
     version="0.1.0",
     description="Differential Evolution Strategy",
     author="Your Name",

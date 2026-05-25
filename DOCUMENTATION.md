@@ -35,7 +35,7 @@ Python-Evo is an object-oriented framework designed for evolutionary optimizatio
 The framework follows a modular architecture with clear separation of concerns:
 
 ```
-python-evo/
+declivity/
 ├── src/
 │   ├── core/              # Base classes and factory
 │   ├── algorithms/        # Algorithm implementations
