@@ -124,9 +124,65 @@ class Rastrigin(BenchmarkFunction):
     def __call__(self, x: NDArray[np.float64]) -> float:
         return 10 * self.dimensions + np.sum(x**2 - 10 * np.cos(2 * np.pi * x))
 
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Analytical gradient: 2*x_i + 20*pi*sin(2*pi*x_i)."""
+        return 2.0 * x + 20.0 * np.pi * np.sin(2.0 * np.pi * x)
+
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         return -5.12 * np.ones(self.dimensions), 5.12 * np.ones(self.dimensions)
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        return np.zeros(self.dimensions), 0.0
+
+
+class Griewank(BenchmarkFunction):
+    """
+    Griewank function.
+    f(x) = 1 + sum(x_i^2 / 4000) - prod(cos(x_i / sqrt(i)))
+    Global minimum: f(0, 0, ..., 0) = 0
+
+    Multimodal with many local minima but a soft global trend that points
+    towards the origin — well suited for testing whether a hybrid
+    CMA-ES -> L-BFGS-B handoff can locate a basin and then descend it.
+    """
+
+    def __call__(self, x: NDArray[np.float64]) -> float:
+        indices = np.arange(1, len(x) + 1)
+        sum_term = np.sum(x**2) / 4000.0
+        prod_term = np.prod(np.cos(x / np.sqrt(indices)))
+        return float(1.0 + sum_term - prod_term)
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Analytical gradient.
+
+        df/dx_i = x_i / 2000 + sin(x_i/sqrt(i)) / sqrt(i) * prod_{j != i} cos(x_j/sqrt(j))
+        """
+        indices = np.arange(1, len(x) + 1)
+        sqrt_indices = np.sqrt(indices)
+        cosines = np.cos(x / sqrt_indices)
+        sines = np.sin(x / sqrt_indices)
+
+        # prod_{j != i} cos(...) = total_product / cos(...) when cos is non-zero;
+        # when a cosine is exactly zero the leave-one-out product collapses,
+        # so handle it directly.
+        zeros = cosines == 0.0
+        if np.any(zeros):
+            leave_one_out = np.empty_like(cosines)
+            for i in range(len(cosines)):
+                mask = np.ones_like(cosines, dtype=bool)
+                mask[i] = False
+                leave_one_out[i] = np.prod(cosines[mask])
+        else:
+            total_product = np.prod(cosines)
+            leave_one_out = total_product / cosines
+
+        return x / 2000.0 + sines / sqrt_indices * leave_one_out
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return -600.0 * np.ones(self.dimensions), 600.0 * np.ones(self.dimensions)
 
     @property
     def global_minimum(self) -> tuple[NDArray[np.float64], float]:
@@ -144,6 +200,17 @@ class Ackley(BenchmarkFunction):
         term1 = -20.0 * np.exp(-0.2 * np.sqrt(np.mean(x**2)))
         term2 = -np.exp(np.mean(np.cos(2 * np.pi * x)))
         return term1 + term2 + 20.0 + np.e
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Analytical gradient. Returns zero at the (degenerate) origin."""
+        n = len(x)
+        rms = np.sqrt(np.mean(x**2))
+        if rms == 0.0:
+            return np.zeros_like(x)
+        term1 = (4.0 / n) * np.exp(-0.2 * rms) * x / rms
+        cos_mean = np.mean(np.cos(2 * np.pi * x))
+        term2 = (2.0 * np.pi / n) * np.exp(cos_mean) * np.sin(2 * np.pi * x)
+        return term1 + term2
 
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -286,6 +353,166 @@ class RotatedEllipsoid(BenchmarkFunction):
     @property
     def global_minimum(self) -> tuple[NDArray[np.float64], float]:
         return np.zeros(self.dimensions), 0.0
+
+
+class RippledEllipsoid(BenchmarkFunction):
+    """Anisotropic multimodal benchmark: ill-conditioned ellipsoid + Rastrigin-style ripples.
+
+    ``f(x) = sum(scale_i * x_i**2 + amplitude * (1 - cos(2 pi x_i)))``
+
+    The quadratic term gives an anisotropic basin with prescribed condition
+    number; the cosine ripples add many local minima centred at integer
+    coordinates. At the global optimum x = 0 the Hessian is
+    ``diag(2 scale_i + 4 pi**2 amplitude)`` — the ratio of largest to
+    smallest eigenvalue is
+
+        (2 * condition + 4 pi**2 amplitude) / (2 + 4 pi**2 amplitude)
+
+    so for ``condition >> 2 pi**2 amplitude`` the eigenvalues span the
+    full conditioning, while a tighter amplitude/condition ratio keeps
+    multimodality alive across more dimensions.
+
+    Wrap with ``RotatedFunction(...)`` to also couple the curvature
+    off-axis — that is the regime where L-BFGS-B with B_0 = I has the
+    hardest time and where the CMA-ES C^{-1} handoff should win.
+    """
+
+    def __init__(
+        self,
+        dimensions: int,
+        condition: float = 100.0,
+        amplitude: float = 10.0,
+        bound: float = 5.12,
+    ):
+        super().__init__(dimensions)
+        self.condition = condition
+        self.amplitude = amplitude
+        self.bound = bound
+        n = dimensions
+        if n == 1:
+            self._scales = np.array([1.0])
+        else:
+            self._scales = condition ** (np.arange(n) / (n - 1))
+
+    def __call__(self, x: NDArray[np.float64]) -> float:
+        quad = float(np.sum(self._scales * x**2))
+        ripples = float(self.amplitude * np.sum(1.0 - np.cos(2.0 * np.pi * x)))
+        return quad + ripples
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        quad_grad = 2.0 * self._scales * x
+        ripple_grad = 2.0 * np.pi * self.amplitude * np.sin(2.0 * np.pi * x)
+        return quad_grad + ripple_grad
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return -self.bound * np.ones(self.dimensions), self.bound * np.ones(self.dimensions)
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        return np.zeros(self.dimensions), 0.0
+
+
+class RotatedFunction(BenchmarkFunction):
+    """Generic rotation wrapper for any BenchmarkFunction with a gradient.
+
+    ``f_rotated(x) = f_base(R @ x)``
+
+    so the global optimum at z=0 in the base function (when present) maps
+    back to x=0 in the rotated function — origin-centred problems stay
+    origin-centred. Bounds are inherited from the base function and
+    interpreted in *x-space*; the rotated z = R @ x may go outside the
+    base's typical range, which is fine for analytic functions defined
+    everywhere.
+
+    The local Hessian of the rotated function at x is
+    ``R^T H_base(R x) R``, so any anisotropy in the base function's
+    curvature becomes coupled (off-diagonal) in coordinates. This is what
+    makes the rotation useful for demonstrating that L-BFGS-B with
+    B_0 = I cannot recover the coupling without enough corrections.
+
+    Rotation modes: same as ``RotatedEllipsoid``
+    ("uniform_45" / "golden" / "random" / supplied matrix).
+    """
+
+    def __init__(
+        self,
+        base: BenchmarkFunction,
+        rotation: str | NDArray[np.float64] = "random",
+        seed: int = 0,
+        name_suffix: str | None = None,
+    ):
+        super().__init__(base.dimensions)
+        if not hasattr(base, "gradient"):
+            raise ValueError(
+                f"Base function {type(base).__name__} has no gradient method; "
+                f"RotatedFunction needs it to compute the rotated gradient."
+            )
+        self.base = base
+        self.rotation_matrix = self._build_rotation(rotation, seed)
+        self.rotation_name = (
+            name_suffix or (rotation if isinstance(rotation, str) else "custom")
+        )
+
+    def _build_rotation(
+        self, rotation: str | NDArray[np.float64], seed: int
+    ) -> NDArray[np.float64]:
+        if isinstance(rotation, np.ndarray):
+            matrix = np.asarray(rotation, dtype=float)
+            if matrix.shape != (self.dimensions, self.dimensions):
+                raise ValueError(
+                    f"Rotation matrix shape {matrix.shape} doesn't match "
+                    f"dimension {self.dimensions}."
+                )
+            return matrix
+        n = self.dimensions
+        if rotation == "uniform_45":
+            angles = [np.radians(45)] * (n - 1)
+            return self._givens_chain(angles)
+        if rotation == "golden":
+            golden = np.radians(137.5)
+            angles = [(k + 1) * golden for k in range(n - 1)]
+            return self._givens_chain(angles)
+        if rotation == "random":
+            rng = np.random.default_rng(seed)
+            q, r = np.linalg.qr(rng.standard_normal((n, n)))
+            q *= np.sign(np.diag(r))  # det = +1
+            return q
+        raise ValueError(
+            f"Unknown rotation mode {rotation!r}; use 'uniform_45', 'golden', "
+            f"'random', or pass an explicit matrix."
+        )
+
+    def _givens_chain(self, angles: list[float]) -> NDArray[np.float64]:
+        n = self.dimensions
+        rotation = np.eye(n)
+        for k, angle in enumerate(angles):
+            givens = np.eye(n)
+            c, s = np.cos(angle), np.sin(angle)
+            givens[k, k] = c
+            givens[k, k + 1] = -s
+            givens[k + 1, k] = s
+            givens[k + 1, k + 1] = c
+            rotation = givens @ rotation
+        return rotation
+
+    def __call__(self, x: NDArray[np.float64]) -> float:
+        z = self.rotation_matrix @ x
+        return float(self.base(z))
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        z = self.rotation_matrix @ x
+        return self.rotation_matrix.T @ self.base.gradient(z)
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return self.base.bounds
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        opt_z, opt_v = self.base.global_minimum
+        # R is orthogonal, so x* = R^T @ z*. For z* = 0 this stays at 0.
+        return self.rotation_matrix.T @ opt_z, opt_v
 
 
 class CEC17Function(BenchmarkFunction):
