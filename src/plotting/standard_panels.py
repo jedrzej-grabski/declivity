@@ -73,7 +73,7 @@ PanelRegistry.register(
         key=PanelKey.STEP_SIZE,
         title="Step Size",
         ylabel="Ft",
-        field="Ft",
+        field="ft",
         yscale=YScale.LOG,
     ),
     Panel(
