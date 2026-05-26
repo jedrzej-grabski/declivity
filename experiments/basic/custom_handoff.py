@@ -8,11 +8,12 @@ that:
 1. Runs DES for ``warmup_budget`` evaluations to find a basin.
 2. Hands the best-so-far point to L-BFGS-B for local refinement.
 
-The whole thing is ~50 lines of glue and slots into ``Benchmark`` next to
-``SingleAlgorithm`` and ``CMAESLBFGSBHandoff`` exactly as if it were
-pre-built. The plotter doesn't know or care that it's custom — it asks
-the trace for ``evaluations`` / ``best_fitness`` / ``handoff_eval`` and
-that's all the framework needs.
+The whole thing is **one method** (``run_phases``) on a dataclass that
+subclasses :class:`HandoffAlgorithm`. The base class handles the
+trace-stitching boilerplate that every handoff would otherwise have to
+re-write: eval-count offsets, fitness clamping, and the
+``handoff_eval`` / ``handoff_iter`` metadata the plotter uses to draw
+vertical markers.
 
 The benchmark at the bottom compares DES alone, L-BFGS-B alone, the
 custom DES -> L-BFGS-B, and the pre-built CMA-ES -> L-BFGS-B on a 10D
@@ -35,12 +36,13 @@ from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
+    HandoffAlgorithm,
     HandoffTransform,
     Problem,
-    RunTrace,
     SingleAlgorithm,
 )
 from src.core.algorithm_factory import AlgorithmFactory
+from src.core.base_optimizer import OptimizationResult
 from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from src.utils.benchmark_functions import Rosenbrock
 
@@ -55,22 +57,17 @@ OUTPUT_DIR = Path("plots/basic/custom_handoff")
 # ---------------------------------------------------------------------------
 # The custom algorithm.
 #
-# ``AlgorithmRun`` is a runtime-checkable Protocol with just three slots:
-#   - ``name``: shows up in legends and traces
-#   - ``color``: hex string the plotter uses for this algo's line
-#   - ``run(problem, x0, seed) -> RunTrace``
-#
-# Anything matching that shape works. A frozen-ish ``@dataclass`` keeps
-# us honest about state — the per-run state lives on the ``RunTrace``
-# we return.
+# Inherit from HandoffAlgorithm, declare your config fields with
+# @dataclass, and implement ``run_phases``. The base class handles
+# everything else.
 # ---------------------------------------------------------------------------
 
 @dataclass
-class DESLBFGSBHandoff:
+class DESLBFGSBHandoff(HandoffAlgorithm):
     """DES warm-up followed by L-BFGS-B refinement.
 
     No covariance is passed — DES doesn't carry one externally — so
-    L-BFGS-B starts with its default B_0 = I and rebuilds curvature
+    L-BFGS-B starts with its default ``B_0 = I`` and rebuilds curvature
     from line-search information. The interesting variable is whether
     the DES warm-up has found a basin worth refining.
     """
@@ -80,67 +77,34 @@ class DESLBFGSBHandoff:
     des_config_factory: Callable[[int], DESConfig]
     lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
 
-    def run(
+    def run_phases(
         self,
         problem: Problem,
         x0: NDArray[np.float64],
         seed: int,
-    ) -> RunTrace:
+    ) -> tuple[OptimizationResult, OptimizationResult]:
         # Phase 1: DES warm-up
-        des_config = self.des_config_factory(problem.dimensions)
-        des = AlgorithmFactory.create_optimizer(
+        des_result = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.DES,
             problem.function,
             x0,
-            des_config,
+            self.des_config_factory(problem.dimensions),
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             seed=seed,
-        )
-        des_result = des.optimize()
-
-        warmup_evals = des_result.evaluations
-        warmup_iters = len(des_result.diagnostic.iteration)
-        des_best = float(des_result.best_fitness)
-        starting_point = des_result.best_solution.copy()
+        ).optimize()
 
         # Phase 2: L-BFGS-B refinement from DES's best point
-        lbfgsb_config = self.lbfgsb_config_factory(problem.dimensions)
-        lbfgsb_kwargs: dict = {}
-        if problem.gradient is not None:
-            lbfgsb_kwargs["gradient_fn"] = problem.gradient
-        lbfgsb = AlgorithmFactory.create_optimizer(
+        lbfgsb_result = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.LBFGSB,
             problem.function,
-            starting_point,
-            lbfgsb_config,
+            des_result.best_solution,
+            self.lbfgsb_config_factory(problem.dimensions),
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
-            **lbfgsb_kwargs,
-        )
-        lbfgsb_result = lbfgsb.optimize()
+        ).optimize()
 
-        # Stitch the two convergence traces together. L-BFGS-B's eval
-        # counts are local to itself, so offset them by the DES warm-up
-        # count. Clamp the L-BFGS-B segment so it never reports a fitness
-        # *worse* than the handoff value — its first reported point is
-        # f(x0_lbfgsb), which might be slightly worse than the DES best.
-        des_evals = list(des_result.diagnostic.evaluations)
-        des_fits = list(des_result.diagnostic.best_fitness)
-        lbfgsb_evals = [e + warmup_evals for e in lbfgsb_result.diagnostic.evaluations]
-        lbfgsb_fits = [min(v, des_best) for v in lbfgsb_result.diagnostic.best_fitness]
-
-        return RunTrace(
-            algorithm=self.name,
-            problem=problem.name,
-            seed=seed,
-            evaluations=des_evals + lbfgsb_evals,
-            best_fitness=des_fits + lbfgsb_fits,
-            final_evaluations=warmup_evals + lbfgsb_result.evaluations,
-            final_fitness=min(des_best, float(lbfgsb_result.best_fitness)),
-            handoff_eval=warmup_evals,
-            handoff_iter=warmup_iters,
-        )
+        return des_result, lbfgsb_result
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +136,7 @@ def main() -> None:
             algorithm=AlgorithmChoice.LBFGSB,
             config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=total_budget),
         ),
-        # The custom one.
+        # The custom handoff.
         DESLBFGSBHandoff(
             name="DES -> L-BFGS-B",
             color="#9b59b6",

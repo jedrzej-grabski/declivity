@@ -18,6 +18,7 @@ Quick example:
 from src.benchmarking.algorithm_run import (
     AlgorithmRun,
     CMAESLBFGSBHandoff,
+    HandoffAlgorithm,
     HandoffTransform,
     SingleAlgorithm,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "Benchmark",
     "BenchmarkPlotter",
     "CMAESLBFGSBHandoff",
+    "HandoffAlgorithm",
     "HandoffTransform",
     "Problem",
     "RunTrace",

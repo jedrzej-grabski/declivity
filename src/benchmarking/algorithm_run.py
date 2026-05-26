@@ -1,14 +1,31 @@
 """Algorithm specifications for benchmarking.
 
-Each AlgorithmRun knows how to run itself on a Problem given an x0 and a
-seed, and reports a RunTrace. Concrete classes:
+Each :class:`AlgorithmRun` knows how to run itself on a :class:`Problem`
+given an ``x0`` and a seed, and reports a :class:`RunTrace`. The
+:class:`AlgorithmRun` protocol is the only contract the framework needs;
+the rest is convenience.
 
-- SingleAlgorithm: any registered AlgorithmFactory algorithm.
-- CMAESLBFGSBHandoff: warm-up CMA-ES, transform its covariance into B_0
-  for L-BFGS-B, then continue from the CMA-ES mean.
+Pre-built runners:
+
+- :class:`SingleAlgorithm`     — any one optimizer registered with
+                                 :class:`~src.core.algorithm_factory.AlgorithmFactory`.
+- :class:`CMAESLBFGSBHandoff`  — CMA-ES warm-up + L-BFGS-B refinement
+                                 with a covariance-derived initial Hessian.
+
+Base class for custom two-phase handoffs:
+
+- :class:`HandoffAlgorithm`    — implement :py:meth:`HandoffAlgorithm.run_phases`
+                                 and the base class handles trace
+                                 stitching, fitness clamping, and
+                                 handoff metadata.
+
+For anything more elaborate (N-phase pipelines, restarts, conditional
+branches), implement :class:`AlgorithmRun` directly — it's just three
+attributes.
 """
 
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Callable, Protocol, runtime_checkable
 
@@ -21,6 +38,7 @@ from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking.problem import Problem
 from src.benchmarking.run_trace import RunTrace
 from src.core.algorithm_factory import AlgorithmFactory
+from src.core.base_optimizer import OptimizationResult
 from src.core.config_base import BaseConfig
 
 
@@ -49,7 +67,13 @@ class HandoffTransform(StrEnum):
 
 @runtime_checkable
 class AlgorithmRun(Protocol):
-    """An algorithm spec: name, color, and a runner."""
+    """An algorithm spec: name, color, and a runner.
+
+    Anything matching this shape — a frozen dataclass, a plain class, even
+    a SimpleNamespace — slots into :class:`~src.benchmarking.Benchmark`
+    and the plotter. The framework never looks for more than these three
+    attributes.
+    """
 
     name: str
     color: str
@@ -70,7 +94,7 @@ def _enable_diagnostics(config: BaseConfig) -> None:
 
 @dataclass
 class SingleAlgorithm:
-    """A single optimizer registered in the AlgorithmFactory."""
+    """A single optimizer registered in the :class:`AlgorithmFactory`."""
 
     name: str
     color: str
@@ -120,29 +144,128 @@ class SingleAlgorithm:
         )
 
 
+class HandoffAlgorithm(ABC):
+    """Base class for two-phase (warm-up -> refinement) handoff algorithms.
+
+    Saves the trace-stitching boilerplate that every handoff would
+    otherwise re-implement. Subclasses provide ``name`` + ``color``
+    (typically via :py:func:`dataclasses.dataclass`) and override
+    :py:meth:`run_phases` to return the two phase results. The base class
+    fills in a :class:`RunTrace` with:
+
+    - eval counts in the refinement segment offset by the warm-up's
+      total evaluations, so the convergence trace is continuous;
+    - the refinement segment's fitness clamped to never exceed the
+      warm-up's best (the refinement logger reports its own best, which
+      starts at ``f(x0_refinement)`` — that may be slightly worse than
+      the warm-up's running best);
+    - ``handoff_eval`` and ``handoff_iter`` set from the warm-up totals,
+      which the plotter uses to draw vertical handoff markers.
+
+    Minimal usage::
+
+        @dataclass
+        class MyHandoff(HandoffAlgorithm):
+            name: str
+            color: str
+            # ... whatever config fields you need ...
+
+            def run_phases(self, problem, x0, seed):
+                warmup_result   = ...  # run phase 1
+                refinement_result = ...  # run phase 2, using warmup state
+                return warmup_result, refinement_result
+
+    Pass state from warm-up to refinement through ordinary local
+    variables in :py:meth:`run_phases` — both phases live in the same
+    method so any state from one is in scope for the other.
+
+    For more elaborate runners (3+ phases, restarts, conditional
+    branches), implement :class:`AlgorithmRun` directly instead.
+    """
+
+    name: str
+    color: str
+
+    @abstractmethod
+    def run_phases(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> tuple[OptimizationResult, OptimizationResult]:
+        """Run the two phases. Return ``(warmup_result, refinement_result)``.
+
+        The framework only sees a :class:`RunTrace` — this is the only
+        method most custom handoffs need to write.
+        """
+        ...
+
+    def run(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> RunTrace:
+        warmup, refinement = self.run_phases(problem, x0, seed)
+        return self._stitch_traces(problem, seed, warmup, refinement)
+
+    def _stitch_traces(
+        self,
+        problem: Problem,
+        seed: int,
+        warmup: OptimizationResult,
+        refinement: OptimizationResult,
+    ) -> RunTrace:
+        """Concatenate the two phases into a single continuous trace."""
+        warmup_evals = warmup.evaluations
+        warmup_iters = len(warmup.diagnostic.iteration)
+        warmup_best = float(warmup.best_fitness)
+
+        warmup_eval_list = list(warmup.diagnostic.evaluations)
+        warmup_fitness_list = list(warmup.diagnostic.best_fitness)
+        # Offset refinement eval counts so the trace is continuous.
+        refinement_eval_list = [
+            evaluation + warmup_evals
+            for evaluation in refinement.diagnostic.evaluations
+        ]
+        # Clamp refinement fitness so it never reports worse than the
+        # warm-up's best — its first point is f(x0_refinement) which can
+        # be slightly worse than the warm-up's running minimum.
+        refinement_fitness_list = [
+            min(value, warmup_best) for value in refinement.diagnostic.best_fitness
+        ]
+
+        return RunTrace(
+            algorithm=self.name,
+            problem=problem.name,
+            seed=seed,
+            evaluations=warmup_eval_list + refinement_eval_list,
+            best_fitness=warmup_fitness_list + refinement_fitness_list,
+            final_evaluations=warmup_evals + refinement.evaluations,
+            final_fitness=min(warmup_best, float(refinement.best_fitness)),
+            handoff_eval=warmup_evals,
+            handoff_iter=warmup_iters,
+        )
+
+
 @dataclass
-class CMAESLBFGSBHandoff:
-    """CMA-ES warm-up followed by L-BFGS-B with a covariance-derived B_0.
+class CMAESLBFGSBHandoff(HandoffAlgorithm):
+    """CMA-ES warm-up followed by L-BFGS-B with a covariance-derived ``B_0``.
 
     Steps:
 
     1. Run CMA-ES on the problem until ``cmaes_config.budget`` evaluations
-       are consumed. Same seed and same x0 as a standalone CMA-ES run will
-       produce an identical CMA-ES prefix in the convergence trace.
-    2. Read the cached eigendecomposition (B, D) from CMA-ES.
-    3. Compose the initial Hessian for L-BFGS-B according to ``transform``:
-       - "inverse" (default) -> C^{-1}
-       - "sigma_inverse"      -> (sigma^2 C)^{-1}
-       - "identity"           -> no Hessian info (L-BFGS-B default B_0 = I);
-                                 isolates the value of just sharing the
-                                 starting point with CMA-ES.
-    4. Run L-BFGS-B from the CMA-ES mean with that B_0 and a separate
+       are consumed. Same seed and same ``x0`` as a standalone CMA-ES run
+       will produce an identical CMA-ES prefix in the convergence trace.
+    2. Read the cached eigendecomposition ``(B, D)`` from CMA-ES.
+    3. Compose the initial Hessian for L-BFGS-B according to
+       :attr:`transform` (see :class:`HandoffTransform`).
+    4. Run L-BFGS-B from the CMA-ES mean with that ``B_0`` and a separate
        budget.
 
-    The convergence trace is the concatenation of the two phases. The
-    L-BFGS-B segment is clamped so it never reports a fitness worse than
-    the CMA-ES handoff value (handles cases where L-BFGS-B's first step
-    happens to land slightly worse than the warm-up's best).
+    Trace stitching, fitness clamping, and handoff metadata are inherited
+    from :class:`HandoffAlgorithm`; this class only owns the
+    CMA-ES-specific covariance transformation.
     """
 
     name: str
@@ -181,12 +304,12 @@ class CMAESLBFGSBHandoff:
             f"Unknown handoff transform: {self.transform!r}. Use one of {valid}."
         )
 
-    def run(
+    def run_phases(
         self,
         problem: Problem,
         x0: NDArray[np.float64],
         seed: int,
-    ) -> RunTrace:
+    ) -> tuple[OptimizationResult, OptimizationResult]:
         # Phase 1: CMA-ES warm-up.
         cmaes_config = self.cmaes_config_factory(problem.dimensions)
         _enable_diagnostics(cmaes_config)
@@ -204,19 +327,16 @@ class CMAESLBFGSBHandoff:
             seed=seed,
         )
         cmaes_result = cmaes_optimizer.optimize()
-        warmup_evals = cmaes_result.evaluations
-        warmup_iters = len(cmaes_result.diagnostic.iteration)
 
+        # Pull CMA-ES internal state for the handoff: the eigendecomposition
+        # of the covariance and the current mean become L-BFGS-B's B_0
+        # and starting point respectively.
         eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
-        sigma = cmaes_optimizer.sigma
-        starting_point = cmaes_optimizer.mean
-        cmaes_best = float(cmaes_result.best_fitness)
-
-        # Phase 2: L-BFGS-B with a covariance-derived B_0.
         initial_hessian = self._initial_hessian_from_cmaes(
-            eigenvectors, eigenvalues_sqrt, sigma
+            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma,
         )
 
+        # Phase 2: L-BFGS-B from the CMA-ES mean with the derived B_0.
         lbfgsb_config = self.lbfgsb_config_factory(problem.dimensions)
         lbfgsb_config.initial_hessian = initial_hessian
         _enable_diagnostics(lbfgsb_config)
@@ -224,42 +344,18 @@ class CMAESLBFGSBHandoff:
             if hasattr(lbfgsb_config, flag):
                 setattr(lbfgsb_config, flag, True)
 
-        kwargs: dict = {}
+        lbfgsb_kwargs: dict = {}
         if problem.gradient is not None:
-            kwargs["gradient_fn"] = problem.gradient
+            lbfgsb_kwargs["gradient_fn"] = problem.gradient
 
-        lbfgsb_optimizer = AlgorithmFactory.create_optimizer(
+        lbfgsb_result = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.LBFGSB,
             problem.function,
-            starting_point,
+            cmaes_optimizer.mean,
             lbfgsb_config,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
-            **kwargs,
-        )
-        lbfgsb_result = lbfgsb_optimizer.optimize()
+            **lbfgsb_kwargs,
+        ).optimize()
 
-        # Concatenate traces. Offset L-BFGS-B evals so the trace is continuous,
-        # and clamp its fitness to never exceed the handoff value (the L-BFGS-B
-        # logger reports its own best, which starts at f(x0_lbfgsb), not f_best).
-        cmaes_evals = list(cmaes_result.diagnostic.evaluations)
-        cmaes_fits = list(cmaes_result.diagnostic.best_fitness)
-        lbfgsb_evals = [
-            evaluation + warmup_evals
-            for evaluation in lbfgsb_result.diagnostic.evaluations
-        ]
-        lbfgsb_fits = [min(value, cmaes_best) for value in lbfgsb_result.diagnostic.best_fitness]
-
-        final_fitness = min(cmaes_best, float(lbfgsb_result.best_fitness))
-
-        return RunTrace(
-            algorithm=self.name,
-            problem=problem.name,
-            seed=seed,
-            evaluations=cmaes_evals + lbfgsb_evals,
-            best_fitness=cmaes_fits + lbfgsb_fits,
-            final_evaluations=warmup_evals + lbfgsb_result.evaluations,
-            final_fitness=final_fitness,
-            handoff_eval=warmup_evals,
-            handoff_iter=warmup_iters,
-        )
+        return cmaes_result, lbfgsb_result
