@@ -36,7 +36,7 @@ class LBFGSBLogData(BaseLogData):
     """Number of function evaluations in the line search."""
 
     def clear(self) -> None:
-        self.clear_common()
+        super().clear()
         self.function_value.clear()
         self.gradient_norm.clear()
         self.projected_gradient_norm.clear()
@@ -47,20 +47,16 @@ class LBFGSBLogData(BaseLogData):
         self.line_search_iters.clear()
 
     def to_dict(self) -> dict[str, list[Any]]:
-        result = self.to_dict_common()
-        result.update(
-            {
-                "function_value": self.function_value,
-                "gradient_norm": self.gradient_norm,
-                "projected_gradient_norm": self.projected_gradient_norm,
-                "step_length": self.step_length,
-                "theta": self.theta,
-                "num_free_vars": self.num_free_vars,
-                "num_corrections": self.num_corrections,
-                "line_search_iters": self.line_search_iters,
-            }
-        )
-        return result
+        return super().to_dict() | {
+            "function_value": self.function_value,
+            "gradient_norm": self.gradient_norm,
+            "projected_gradient_norm": self.projected_gradient_norm,
+            "step_length": self.step_length,
+            "theta": self.theta,
+            "num_free_vars": self.num_free_vars,
+            "num_corrections": self.num_corrections,
+            "line_search_iters": self.line_search_iters,
+        }
 
 
 class LBFGSBLogger(BaseLogger[LBFGSBLogData]):

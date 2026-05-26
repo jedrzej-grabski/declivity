@@ -81,10 +81,7 @@ class CMAESConfig(BaseConfig):
 
     # CMA-ES-specific diagnostic logging
     diag_sigma: bool = False
-    """Log sigma values"""
-
-    diag_cond: bool = False
-    """Log condition number of covariance matrix"""
+    """Log sigma values each generation."""
 
     diag_covariance_matrix: bool = False
     """Store the full covariance matrix at every generation. Useful for
@@ -198,7 +195,6 @@ class CMAESConfig(BaseConfig):
     def enable_all_diagnostics(self) -> None:
         super().enable_all_diagnostics()
         self.diag_sigma = True
-        self.diag_cond = True
         self.diag_covariance_matrix = True
 
     def __str__(self) -> str:

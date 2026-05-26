@@ -74,9 +74,6 @@ class MFCMAESConfig(BaseConfig):
     damps_ppmf: float = 2.0
     """Damping parameter for PPMF step-size adaptation"""
 
-    diag_archive: bool = False
-    """Log archive statistics"""
-
     # Termination criteria
     tolfun: float = 1e-12
     """Tolerance for function value differences"""
@@ -161,10 +158,10 @@ class MFCMAESConfig(BaseConfig):
         if name in ("population_size", "budget", "window") and hasattr(self, "mu"):
             self._recalculate_derived_params()
 
-    def enable_all_diagnostics(self) -> None:
-        super().enable_all_diagnostics()
-        self.diag_sigma = True
-        self.diag_archive = True
+    # MF-CMA-ES has no algorithm-specific diag flags — sigma, p_succ,
+    # midpoint_fitness, constraint_violations, evolution path, and mean
+    # vector are all logged unconditionally by MFCMAESLogger. The base
+    # ``enable_all_diagnostics`` (diag_pop, diag_eigen) is sufficient.
 
     def __str__(self) -> str:
         return (

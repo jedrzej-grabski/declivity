@@ -4,12 +4,12 @@ from numpy.typing import NDArray
 from dataclasses import dataclass, field
 
 from src.algorithms.choices import AlgorithmChoice
-from src.logging.base_logger import BaseLogger, BaseLogData
+from src.logging.base_logger import BaseLogger, PopulationLogData
 from src.algorithms.des.config import DESConfig
 
 
 @dataclass
-class DESLogData(BaseLogData):
+class DESLogData(PopulationLogData):
     """DES-specific log data container."""
 
     Ft: list[float] = field(default_factory=list)
@@ -17,23 +17,17 @@ class DESLogData(BaseLogData):
     step_size: list[float] = field(default_factory=list)
 
     def clear(self) -> None:
-        """Reset all log data including DES-specific."""
-        self.clear_common()
+        super().clear()
         self.Ft.clear()
         self.evolution_path.clear()
         self.step_size.clear()
 
     def to_dict(self) -> dict[str, list[Any]]:
-        """Convert all log data to dictionary format."""
-        result = self.to_dict_common()
-        result.update(
-            {
-                "Ft": self.Ft,
-                "evolution_path": self.evolution_path,
-                "step_size": self.step_size,
-            }
-        )
-        return result
+        return super().to_dict() | {
+            "Ft": self.Ft,
+            "evolution_path": self.evolution_path,
+            "step_size": self.step_size,
+        }
 
 
 class DESLogger(BaseLogger[DESLogData]):

@@ -92,12 +92,6 @@ class AlgorithmRun(Protocol):
     ) -> RunTrace: ...
 
 
-def _enable_diagnostics(config: BaseConfig) -> None:
-    """Make sure best-fitness logging is on (it usually is by default)."""
-    if hasattr(config, "diag_bestVal"):
-        config.diag_bestVal = True
-
-
 class BenchmarkAlgorithm(ABC):
     """Base class for anything you can plug into a :class:`Benchmark`.
 
@@ -193,7 +187,6 @@ class SingleAlgorithm(BenchmarkAlgorithm):
         seed: int,
     ) -> RunTrace:
         config = self.config_factory(problem.dimensions)
-        _enable_diagnostics(config)
         for flag in self.extra_diagnostics:
             if hasattr(config, flag):
                 setattr(config, flag, True)
@@ -377,7 +370,6 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
     ) -> tuple[OptimizationResult, OptimizationResult]:
         # Phase 1: CMA-ES warm-up.
         cmaes_config = self.cmaes_config_factory(problem.dimensions)
-        _enable_diagnostics(cmaes_config)
         for flag in self.cmaes_extra_diagnostics:
             if hasattr(cmaes_config, flag):
                 setattr(cmaes_config, flag, True)
@@ -404,7 +396,6 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         # Phase 2: L-BFGS-B from the CMA-ES mean with the derived B_0.
         lbfgsb_config = self.lbfgsb_config_factory(problem.dimensions)
         lbfgsb_config.initial_hessian = initial_hessian
-        _enable_diagnostics(lbfgsb_config)
         for flag in self.lbfgsb_extra_diagnostics:
             if hasattr(lbfgsb_config, flag):
                 setattr(lbfgsb_config, flag, True)
