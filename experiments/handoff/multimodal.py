@@ -29,11 +29,11 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.benchmarking import (
     Benchmark,
-    BenchmarkPlotter,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
 )
+from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from src.utils.benchmark_functions import Griewank, Rastrigin
 
 
@@ -189,25 +189,22 @@ def run_multimodal_handoff(
         for key, traces in bench.traces.items():
             combined_traces[key] = traces
 
-    plotter = BenchmarkPlotter(
+    plot_benchmark_convergence(
+        combined_traces,
         problems=all_problems,
         algorithms=all_algorithms,
-        traces=combined_traces,
-        output_dir=output_dir,
-    )
-
-    plotter.plot_convergence_grid(
-        save_path=output_dir / "convergence.png",
         title=(
             f"Multimodal handoff: CMA-ES vs L-BFGS-B vs combined "
             f"({dimensions}D, {num_seeds} seeds, total budget {total_budget})"
         ),
+        save_path=output_dir / "convergence.png",
     )
-    plotter.plot_final_fitness_boxplot(
+    plot_benchmark_boxplot(
+        combined_traces,
+        problems=all_problems,
+        algorithms=all_algorithms,
+        title=f"Final fitness distribution ({dimensions}D, {num_seeds} seeds)",
         save_path=output_dir / "final_fitness.png",
-        title=(
-            f"Final fitness distribution ({dimensions}D, {num_seeds} seeds)"
-        ),
     )
 
     print(f"\nPlots saved to: {output_dir.absolute()}")

@@ -1,9 +1,12 @@
+"""Base configuration dataclass for every optimizer.
+
+Diagnostic flags are kept lean: only flags that an optimizer or logger
+actually gates on appear here or on subclasses. Flags that toggle
+nothing have been removed (they were legacy from an earlier design).
+"""
+
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-import numpy as np
-from numpy.typing import NDArray
-
-from src.algorithms.choices import AlgorithmChoice
 
 
 class ConfigProtocol(Protocol):
@@ -19,9 +22,23 @@ class ConfigProtocol(Protocol):
 
 @dataclass
 class BaseConfig:
-    """
-    Base configuration class for optimization algorithms.
-    Contains common parameters shared across different algorithms.
+    """Base configuration class for optimization algorithms.
+
+    Shared parameters every optimizer reads (``dimensions``, ``budget``,
+    ``population_size``) plus two diagnostic flags that the
+    population-based optimizers gate on:
+
+    - ``diag_pop`` — store the full population at every iteration. Off by
+      default because the memory cost is ``pop_size * dim * sizeof(float)``
+      per iteration; only enable when you need to inspect or replot
+      population clouds.
+    - ``diag_eigen`` — compute and log eigenvalues / condition number of
+      the population covariance (DES, CMA-ES, MF-CMA-ES). Off by default
+      because the eigendecomposition adds per-iteration cost; enable when
+      tracking covariance geometry.
+
+    Best-fitness logging is always on — the convergence trace is the
+    minimum any benchmark consumer needs and the logging is cheap.
     """
 
     dimensions: int
@@ -31,35 +48,15 @@ class BaseConfig:
     """Maximum number of function evaluations"""
 
     population_size: int = field(default=0)
-    """Size of the population"""
-
-    # Diagnostic logging options (common across algorithms)
-    diag_enabled: bool = False
-    """Enable all diagnostics"""
-
-    diag_value: bool = False
-    """Log population fitness values"""
-
-    diag_mean: bool = False
-    """Log mean fitness"""
-
-    diag_meanCords: bool = False
-    """Log mean coordinates"""
+    """Size of the population (1 for single-point methods)"""
 
     diag_pop: bool = False
-    """Log populations"""
-
-    diag_bestVal: bool = True
-    """Log best fitness"""
-
-    diag_worstVal: bool = False
-    """Log worst fitness"""
+    """Log full populations each iteration (memory-expensive)."""
 
     diag_eigen: bool = False
-    """Log eigenvalues"""
+    """Log eigenvalues / condition number of the population covariance."""
 
     def validate(self) -> None:
-        """Validate the configuration parameters."""
         if self.dimensions <= 0:
             raise ValueError("Dimensions must be a positive integer.")
         if self.budget <= 0:
@@ -68,44 +65,20 @@ class BaseConfig:
             raise ValueError("Population size must be a positive integer.")
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert configuration parameters to a dictionary."""
         return {
             "dimensions": self.dimensions,
             "budget": self.budget,
             "population_size": self.population_size,
-            "diag_enabled": self.diag_enabled,
-            "diag_value": self.diag_value,
-            "diag_mean": self.diag_mean,
-            "diag_meanCords": self.diag_meanCords,
             "diag_pop": self.diag_pop,
-            "diag_bestVal": self.diag_bestVal,
-            "diag_worstVal": self.diag_worstVal,
             "diag_eigen": self.diag_eigen,
         }
 
     def enable_all_diagnostics(self) -> None:
-        """Enable all diagnostic logging options."""
-        self.diag_enabled = True
-        self.diag_value = True
-        self.diag_mean = True
-        self.diag_meanCords = True
+        """Enable all diagnostic logging options. Subclasses extend via ``super()``."""
         self.diag_pop = True
-        self.diag_bestVal = True
-        self.diag_worstVal = True
         self.diag_eigen = True
 
     def disable_all_diagnostics(self) -> None:
-        """Disable all diagnostic logging options."""
-        self.diag_enabled = False
-        self.diag_value = False
-        self.diag_mean = False
-        self.diag_meanCords = False
+        """Disable all diagnostic logging options. Subclasses extend via ``super()``."""
         self.diag_pop = False
-        self.diag_bestVal = False
-        self.diag_worstVal = False
         self.diag_eigen = False
-
-    def with_convergence_diagnostics(self) -> None:
-        """Enable only diagnostics needed for convergence plots."""
-        self.disable_all_diagnostics()
-        self.diag_bestVal = True

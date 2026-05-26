@@ -25,11 +25,11 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.benchmarking import (
     Benchmark,
-    BenchmarkPlotter,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
 )
+from src.plotting import plot_benchmark_convergence
 from src.utils.benchmark_functions import (
     Griewank,
     Rastrigin,
@@ -234,27 +234,22 @@ def run(
         if not representative_algorithms:
             representative_algorithms = algorithms
 
-    plotter = BenchmarkPlotter(
-        problems=problems,
-        algorithms=representative_algorithms,
-        traces=combined_traces,
-        output_dir=output_dir,
-        floor=1e-22 if family == "low_amp" else 1e-12,
-    )
-
-    # Per-family title and per-panel aspect
     titles = {
         "baseline":      "Handoff timing — baseline (Rastrigin, Griewank d=10, m=10)",
         "reproduce_old": "Handoff timing — pure rotated Ellipsoid d=50, m=5",
         "low_amp":       "Handoff timing — rotated RippledEllipsoid amp=0.1 d=30 m=5",
         "multimodal":    "Handoff timing — rotated RippledEllipsoid amp=1 d=50 m=5",
     }
-    plotter.plot_convergence_grid(
+    plot_benchmark_convergence(
+        combined_traces,
+        problems=problems,
+        algorithms=representative_algorithms,
         save_path=output_dir / "convergence.png",
         title=titles[family],
         show_iqr=False,
         figsize_per_panel=(9.5, 6.5),
         legend_fontsize=8,
+        floor=1e-22 if family == "low_amp" else 1e-12,
     )
 
     print(f"\nWrote {output_dir}/convergence.png")

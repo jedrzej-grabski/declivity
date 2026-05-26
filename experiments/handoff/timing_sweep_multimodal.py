@@ -26,11 +26,11 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.benchmarking import (
     Benchmark,
-    BenchmarkPlotter,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
 )
+from src.plotting import plot_benchmark_convergence
 from src.utils.benchmark_functions import Griewank, Rastrigin
 
 
@@ -194,16 +194,12 @@ def run_handoff_timing_sweep(
         for key, traces in bench.traces.items():
             combined_traces[key] = traces
 
-    plotter = BenchmarkPlotter(
-        problems=all_problems,
-        algorithms=representative_algorithms,
-        traces=combined_traces,
-        output_dir=output_dir,
-    )
-
     # IQR bands turned off — with 7 algorithms in one panel they would
     # smother the median lines.
-    plotter.plot_convergence_grid(
+    plot_benchmark_convergence(
+        combined_traces,
+        problems=all_problems,
+        algorithms=representative_algorithms,
         save_path=output_dir / "handoff_timing_convergence.png",
         title=(
             f"Handoff timing sweep: when to switch from CMA-ES to L-BFGS-B "

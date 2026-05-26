@@ -13,10 +13,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from src.benchmarking.persistence import load_traces_json
-from src.benchmarking.plotter import BenchmarkPlotter
 from src.benchmarking.problem import Problem
-from src.benchmarking.algorithm_run import AlgorithmRun, SingleAlgorithm
-from src.algorithms.choices import AlgorithmChoice
+from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 
 # Algorithm-name -> display color (keep stable across all report plots)
 COLOR_MAP = {
@@ -111,25 +109,25 @@ def regen_panel(
         for p_name in sorted(set(p for p, _ in traces.keys()))
     ]
 
-    plotter = BenchmarkPlotter(
+    plot_benchmark_convergence(
+        traces,
         problems=problems,
         algorithms=algorithms,
-        traces=traces,
-        output_dir=save_dir,
-        floor=floor,
-    )
-
-    plotter.plot_convergence_grid(
         save_path=save_dir / "convergence.png",
         title=title,
         figsize_per_panel=panel_aspect,
         legend_fontsize=legend_fontsize,
+        floor=floor,
     )
 
     if boxplot_title is not None:
-        plotter.plot_final_fitness_boxplot(
+        plot_benchmark_boxplot(
+            traces,
+            problems=problems,
+            algorithms=algorithms,
             save_path=save_dir / "final_fitness.png",
             title=boxplot_title,
+            floor=floor,
         )
 
     plt.close("all")
@@ -216,19 +214,19 @@ def regen_combined_baseline(base: Path) -> None:
     problem_names = sorted(set(p for p, _ in combined.keys()))
     problems = [stub_problem(p, problem_dims.get(p, 10)) for p in problem_names]
 
-    plotter = BenchmarkPlotter(
+    plot_benchmark_convergence(
+        combined,
         problems=problems,
         algorithms=algorithms,
-        traces=combined,
-        output_dir=base / "00_baseline_unrotated",
-    )
-    plotter.plot_convergence_grid(
         save_path=base / "00_baseline_unrotated" / "convergence.png",
         title="Baseline: unrotated Rastrigin and Griewank, d=10  —  identity matches C⁻¹",
         figsize_per_panel=(9.0, 6.5),
         legend_fontsize=10,
     )
-    plotter.plot_final_fitness_boxplot(
+    plot_benchmark_boxplot(
+        combined,
+        problems=problems,
+        algorithms=algorithms,
         save_path=base / "00_baseline_unrotated" / "final_fitness.png",
         title="Final fitness (baseline, unrotated)",
     )
@@ -273,18 +271,15 @@ def regen_combined_low_amp(base: Path) -> None:
                           key=lambda n: problem_dims.get(n, 0))
     problems = [stub_problem(p, problem_dims.get(p, 0)) for p in problem_names]
 
-    plotter = BenchmarkPlotter(
+    plot_benchmark_convergence(
+        combined,
         problems=problems,
         algorithms=algorithms,
-        traces=combined,
-        output_dir=base / "01_rippled_low_amp",
-        floor=1e-22,  # values reach 1e-20 here; the default 1e-12 would clip C^-1
-    )
-    plotter.plot_convergence_grid(
         save_path=base / "01_rippled_low_amp" / "convergence.png",
         title="Rotated RippledEllipsoid, cond=10⁶, amp=0.1, m=5  —  C⁻¹ wins by orders of magnitude",
         figsize_per_panel=(8.0, 6.0),
         legend_fontsize=9,
+        floor=1e-22,  # values reach 1e-20 here; default 1e-12 would clip C^-1
     )
     plt.close("all")
     print(f"  Wrote {base/'01_rippled_low_amp'}/convergence.png")
