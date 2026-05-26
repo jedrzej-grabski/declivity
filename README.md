@@ -37,16 +37,19 @@ pdm run run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
 Or directly:
 
 ```bash
-PYTHONPATH=. pdm run python -m experiments.basic.simple_optimization
+PYTHONPATH=. pdm run python experiments/basic/declarative_plotting.py
 PYTHONPATH=. pdm run python experiments/handoff/multimodal.py --num-seeds 25
 ```
 
 ## Minimal example
 
+Run one optimizer:
+
 ```python
 import numpy as np
 from src import AlgorithmFactory
 from src.algorithms.choices import AlgorithmChoice
+from src.plotting import plot_metrics
 from src.utils.benchmark_functions import Sphere
 
 func = Sphere(dimensions=10)
@@ -59,9 +62,36 @@ optimizer = AlgorithmFactory.create_optimizer(
     lower_bounds=-100,
     upper_bounds=100,
 )
-
 result = optimizer.optimize()
 print(f"f* = {result.best_fitness:.4e} after {result.evaluations} evals")
+
+plot_metrics(result, save_path="cmaes.png")  # every default panel for CMA-ES
+```
+
+Compare two algorithms:
+
+```python
+from src.plotting import plot_comparison
+
+plot_comparison(
+    {"CMA-ES": cmaes_result, "L-BFGS-B": lbfgsb_result},
+    save_path="comparison.png",
+)
+# Auto-picks the panels both algorithms expose (convergence + step_size by
+# default). CMA-ES sigma and L-BFGS-B step_length end up on the same axes
+# under one "Step Size" panel — semantic comparability is the point.
+```
+
+Multi-seed benchmark:
+
+```python
+from src.benchmarking import Benchmark, Problem, SingleAlgorithm, CMAESLBFGSBHandoff
+from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
+
+bench = Benchmark(problems=[...], algorithms=[...], seeds=range(25), output_dir=...)
+bench.run()
+plot_benchmark_convergence(bench.traces, problems, algorithms, save_path="conv.png")
+plot_benchmark_boxplot   (bench.traces, problems, algorithms, save_path="box.png")
 ```
 
 See [`DOCUMENTATION.md`](DOCUMENTATION.md) for the full API.
@@ -73,13 +103,14 @@ declivity/
 ├── src/                          Library code (algorithms, framework)
 │   ├── core/                     BaseOptimizer, AlgorithmFactory, BaseConfig
 │   ├── algorithms/               DES, CMA-ES, MF-CMA-ES, L-BFGS-B
-│   ├── benchmarking/             Problem, AlgorithmRun, Benchmark, BenchmarkPlotter
+│   ├── benchmarking/             Problem, Benchmark, RunTrace
+│   │                             + BenchmarkAlgorithm / HandoffAlgorithm ABCs
 │   ├── utils/                    Benchmark functions, boundary handlers, helpers
-│   ├── logging/                  Per-algorithm diagnostic loggers
-│   └── plotting/                 Single-run multi-panel plots
+│   ├── logging/                  BaseLogData / PopulationLogData + per-algo loggers
+│   └── plotting/                 Declarative panel system (Panel + 8 entry points)
 │
 ├── experiments/                  Runnable studies (one script per study)
-│   ├── basic/                    Tutorial demos and sanity checks
+│   ├── basic/                    Tutorial demos, sanity checks, declarative API demos
 │   ├── cross_validation/         Cross-checks against R reference impls
 │   ├── lbfgsb/                   L-BFGS-B feature studies
 │   ├── handoff/                  CMA-ES → L-BFGS-B handoff studies
@@ -94,6 +125,7 @@ declivity/
 ## Where to look next
 
 - **API reference**: [`DOCUMENTATION.md`](DOCUMENTATION.md)
+- **Framework design principles**: [`docs/framework_design.md`](docs/framework_design.md)
 - **Experiment index**: [`experiments/README.md`](experiments/README.md)
 - **L-BFGS-B internals**: [`docs/lbfgsb_lecture.md`](docs/lbfgsb_lecture.md)
 - **Initial-Hessian design**: [`docs/lbfgsb_initial_hessian_design.md`](docs/lbfgsb_initial_hessian_design.md)

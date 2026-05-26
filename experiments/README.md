@@ -23,8 +23,12 @@ pdm run run-r            # experiments/cross_validation/des_vs_r.py
 
 | Script                       | What it does                                                    | Output                                  |
 |------------------------------|-----------------------------------------------------------------|-----------------------------------------|
-| `simple_optimization.py`     | DES on a 10D Sphere; smallest end-to-end demo                  | `plots/basic/simple_optimization/`      |
+| `simple_optimization.py`     | Runs every algorithm on a 10D Sphere and dumps each one's default diagnostic-panel view | `plots/basic/simple_optimization/`      |
 | `covariance_adaptation.py`   | CMA-ES on Sphere / Ellipsoid; visualizes empirical covariance evolution (eigenvalues, condition, 2D ellipse snapshots) | `plots/basic/covariance_adaptation/`    |
+| `declarative_plotting.py`    | End-to-end demo of `plot_metrics` and `plot_comparison` — including `PanelRegistry.common([algos])` introspection | `plots/basic/declarative_plotting/`     |
+| `declarative_benchmark.py`   | End-to-end demo of `plot_benchmark_convergence` and `plot_benchmark_boxplot` with a real CMA-ES → L-BFGS-B handoff | `plots/basic/declarative_benchmark/`    |
+| `custom_handoff.py`          | Builds a DES → L-BFGS-B handoff from scratch by subclassing `HandoffAlgorithm` (one `run_phases()` method) | `plots/basic/custom_handoff/`           |
+| `custom_algorithm.py`        | Multi-start CMA-ES via `BenchmarkAlgorithm` directly; shows the generic extension point | `plots/basic/custom_algorithm/`         |
 
 ## `cross_validation/` — checks against external references
 
@@ -38,7 +42,7 @@ pdm run run-r            # experiments/cross_validation/des_vs_r.py
 |----------------------|-------------------------------------------------------------------------------------------|-------------------------------------|
 | `sphere_benchmark.py`| L-BFGS-B (More-Thuente and Armijo) vs CMA-ES on 10D Sphere                                | `plots/lbfgsb/sphere_benchmark/`    |
 | `initial_hessian.py` | Effect of `initial_hessian` and `persist_initial_hessian` on 10D Ellipsoid (cond 10⁶)     | `plots/lbfgsb/initial_hessian/`     |
-| `rotation_study.py`  | Full-Hessian vs diagonal vs identity B₀ across 4 rotations × {n=10,m=10}, {n=50,m=5}     | `plots/lbfgsb/rotation_study/`      |
+| `rotation_study.py`  | Full-Hessian vs diagonal vs identity B₀ across 4 rotations × {n=10,m=10}, {n=50,m=5}; also produces landscape grids | `plots/lbfgsb/rotation_study/`      |
 
 ## `handoff/` — CMA-ES → L-BFGS-B handoff studies
 
@@ -54,7 +58,6 @@ covariance to L-BFGS-B as the initial Hessian B₀.
 | `timing_sweep_multimodal.py`    | Multimodal warmup sweep: 5 handoff timings × CMA-ES + L-BFGS-B baselines                                     | `plots/handoff/timing_sweep_multimodal/`          |
 | `timing_sweep_rippled.py`       | Rippled-ellipsoid warmup sweep; demonstrates the non-monotone sweet spot                                     | `plots/handoff/timing_sweep_rippled/`             |
 | `timing_sweep_families.py`      | Parameterized timing sweep across 4 named experimental families (`baseline`, `reproduce_old`, `low_amp`, `multimodal`) | `plots/report/timing_{family}/`                   |
-| `_legacy_cmaes_to_lbfgsb.py`    | Earlier handoff prototype; reaches into private CMA-ES attributes. Kept for archival; use the others instead | `plots/handoff/_legacy/`                          |
 
 Common flags (most scripts): `--num-seeds`, `--num-workers`,
 `--total-budget`, `--cmaes-warmup-budget`, `--dimensions`,
@@ -75,4 +78,13 @@ Common flags (most scripts): `--num-seeds`, `--num-workers`,
 3. If the experiment uses the multi-seed framework, prefer
    `src.benchmarking.Benchmark` — you get persisted `traces.json` for
    free, which makes the result re-plottable without re-running.
-4. Document it in this README.
+4. For plotting, use the declarative API in `src.plotting`:
+   - `plot_metrics(result)` for single-run diagnostics.
+   - `plot_comparison(results)` for cross-algorithm comparison.
+   - `plot_benchmark_convergence(...)` / `plot_benchmark_boxplot(...)`
+     for multi-seed benchmark plots.
+5. If you need a custom benchmark runner (something `SingleAlgorithm`
+   doesn't cover), inherit from `BenchmarkAlgorithm` (or
+   `HandoffAlgorithm` for two-phase runners). See `basic/custom_handoff.py`
+   and `basic/custom_algorithm.py` for examples.
+6. Document it in this README.
