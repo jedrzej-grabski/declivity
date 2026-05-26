@@ -1,27 +1,32 @@
 """Algorithm specifications for benchmarking.
 
-Each :class:`AlgorithmRun` knows how to run itself on a :class:`Problem`
-given an ``x0`` and a seed, and reports a :class:`RunTrace`. The
-:class:`AlgorithmRun` protocol is the only contract the framework needs;
-the rest is convenience.
+The framework only needs three things from anything you put inside a
+:class:`~src.benchmarking.Benchmark`:
 
-Pre-built runners:
+- ``name``  — appears in legends, summary tables, and persisted traces
+- ``color`` — hex string the plotter uses for this algorithm's line
+- ``run(problem, x0, seed)`` — returns a :class:`RunTrace`
 
-- :class:`SingleAlgorithm`     — any one optimizer registered with
-                                 :class:`~src.core.algorithm_factory.AlgorithmFactory`.
-- :class:`CMAESLBFGSBHandoff`  — CMA-ES warm-up + L-BFGS-B refinement
-                                 with a covariance-derived initial Hessian.
+How you provide them determines which base class to pick:
 
-Base class for custom two-phase handoffs:
-
-- :class:`HandoffAlgorithm`    — implement :py:meth:`HandoffAlgorithm.run_phases`
-                                 and the base class handles trace
-                                 stitching, fitness clamping, and
-                                 handoff metadata.
-
-For anything more elaborate (N-phase pipelines, restarts, conditional
-branches), implement :class:`AlgorithmRun` directly — it's just three
-attributes.
+==============================  ===========================================
+Your runner is...               Inherit from
+==============================  ===========================================
+one optimizer from the          :class:`SingleAlgorithm` (concrete, just
+factory, no special wrapping    instantiate it).
+warmup -> refinement, two       :class:`HandoffAlgorithm`. Implement
+phases that share state via     ``run_phases()``; the base class stitches
+local variables                 traces, clamps fitness, and fills in
+                                handoff metadata for you.
+anything else (3+ phases,       :class:`BenchmarkAlgorithm`. Implement
+restarts, wrappers, custom      ``run()``; use ``trace_from_result()`` to
+schedules)                      package an :class:`OptimizationResult`
+                                into a :class:`RunTrace`.
+already a class, can't          conform to the :class:`AlgorithmRun`
+inherit                         :class:`Protocol` — just expose ``name``,
+                                ``color``, and ``run()``. No inheritance
+                                required.
+==============================  ===========================================
 """
 
 from abc import ABC, abstractmethod
@@ -67,12 +72,13 @@ class HandoffTransform(StrEnum):
 
 @runtime_checkable
 class AlgorithmRun(Protocol):
-    """An algorithm spec: name, color, and a runner.
+    """Duck-typed interface for anything :class:`~src.benchmarking.Benchmark` consumes.
 
-    Anything matching this shape — a frozen dataclass, a plain class, even
-    a SimpleNamespace — slots into :class:`~src.benchmarking.Benchmark`
-    and the plotter. The framework never looks for more than these three
-    attributes.
+    For most use cases prefer subclassing :class:`BenchmarkAlgorithm` —
+    same three-attribute contract, plus you get the
+    :py:meth:`BenchmarkAlgorithm.trace_from_result` helper. The Protocol
+    is here for the case where you can't inherit (e.g. you're adapting
+    an existing class) and just want to conform structurally.
     """
 
     name: str
@@ -92,9 +98,84 @@ def _enable_diagnostics(config: BaseConfig) -> None:
         config.diag_bestVal = True
 
 
+class BenchmarkAlgorithm(ABC):
+    """Base class for anything you can plug into a :class:`Benchmark`.
+
+    Subclasses provide:
+
+    - ``name`` and ``color`` (typically as :py:func:`dataclasses.dataclass` fields).
+    - :py:meth:`run`, which executes the algorithm on one
+      ``(problem, x0, seed)`` triple and returns a :class:`RunTrace`.
+
+    The :py:meth:`trace_from_result` helper packages a single
+    :class:`OptimizationResult` into a :class:`RunTrace` for the common
+    one-optimizer case. Multi-phase runners with their own stitching
+    rules (handoffs, restarts) skip the helper and assemble the trace
+    by hand, or use :class:`HandoffAlgorithm` for the standard two-phase
+    pattern.
+
+    Minimal subclass::
+
+        @dataclass
+        class MyAlgorithm(BenchmarkAlgorithm):
+            name: str
+            color: str
+            # ... whatever config fields you need ...
+
+            def run(self, problem, x0, seed) -> RunTrace:
+                result = ...  # run an optimizer
+                return self.trace_from_result(problem, seed, result)
+    """
+
+    name: str
+    color: str
+
+    @abstractmethod
+    def run(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> RunTrace:
+        """Run the algorithm on one (problem, x0, seed) triple."""
+        ...
+
+    def trace_from_result(
+        self,
+        problem: Problem,
+        seed: int,
+        result: OptimizationResult,
+    ) -> RunTrace:
+        """Package a single :class:`OptimizationResult` into a :class:`RunTrace`.
+
+        Handles the common case where one optimizer call produces the
+        whole convergence trace. ``result.diagnostic`` is expected to
+        carry ``evaluations`` and ``best_fitness`` (every built-in
+        LogData does).
+
+        For multi-phase runners with custom stitching rules, build the
+        :class:`RunTrace` by hand instead — or use
+        :class:`HandoffAlgorithm`, which handles the two-phase case.
+        """
+        return RunTrace(
+            algorithm=self.name,
+            problem=problem.name,
+            seed=seed,
+            evaluations=list(result.diagnostic.evaluations),
+            best_fitness=list(result.diagnostic.best_fitness),
+            final_evaluations=result.evaluations,
+            final_fitness=float(result.best_fitness),
+        )
+
+
 @dataclass
-class SingleAlgorithm:
-    """A single optimizer registered in the :class:`AlgorithmFactory`."""
+class SingleAlgorithm(BenchmarkAlgorithm):
+    """A single optimizer registered in the :class:`AlgorithmFactory`.
+
+    Concrete — instantiate directly with the optimizer choice and a
+    config factory; no subclass needed unless you want to override
+    :py:meth:`run`.
+    """
 
     name: str
     color: str
@@ -121,7 +202,7 @@ class SingleAlgorithm:
         if problem.gradient is not None and self.algorithm == AlgorithmChoice.LBFGSB:
             kwargs["gradient_fn"] = problem.gradient
 
-        optimizer = AlgorithmFactory.create_optimizer(
+        result = AlgorithmFactory.create_optimizer(
             self.algorithm,
             problem.function,
             x0,
@@ -130,28 +211,19 @@ class SingleAlgorithm:
             upper_bounds=problem.upper_bound,
             seed=seed,
             **kwargs,
-        )
-        result = optimizer.optimize()
+        ).optimize()
 
-        return RunTrace(
-            algorithm=self.name,
-            problem=problem.name,
-            seed=seed,
-            evaluations=list(result.diagnostic.evaluations),
-            best_fitness=list(result.diagnostic.best_fitness),
-            final_evaluations=result.evaluations,
-            final_fitness=float(result.best_fitness),
-        )
+        return self.trace_from_result(problem, seed, result)
 
 
-class HandoffAlgorithm(ABC):
-    """Base class for two-phase (warm-up -> refinement) handoff algorithms.
+class HandoffAlgorithm(BenchmarkAlgorithm):
+    """Two-phase (warm-up -> refinement) handoff base class.
 
-    Saves the trace-stitching boilerplate that every handoff would
-    otherwise re-implement. Subclasses provide ``name`` + ``color``
-    (typically via :py:func:`dataclasses.dataclass`) and override
-    :py:meth:`run_phases` to return the two phase results. The base class
-    fills in a :class:`RunTrace` with:
+    Saves the trace-stitching boilerplate every handoff would otherwise
+    re-implement. Subclasses provide ``name`` + ``color`` (typically via
+    :py:func:`dataclasses.dataclass`) and override :py:meth:`run_phases`
+    to return the two phase results. The base class fills in a
+    :class:`RunTrace` with:
 
     - eval counts in the refinement segment offset by the warm-up's
       total evaluations, so the convergence trace is continuous;
@@ -180,11 +252,8 @@ class HandoffAlgorithm(ABC):
     method so any state from one is in scope for the other.
 
     For more elaborate runners (3+ phases, restarts, conditional
-    branches), implement :class:`AlgorithmRun` directly instead.
+    branches), subclass :class:`BenchmarkAlgorithm` directly instead.
     """
-
-    name: str
-    color: str
 
     @abstractmethod
     def run_phases(
@@ -193,11 +262,7 @@ class HandoffAlgorithm(ABC):
         x0: NDArray[np.float64],
         seed: int,
     ) -> tuple[OptimizationResult, OptimizationResult]:
-        """Run the two phases. Return ``(warmup_result, refinement_result)``.
-
-        The framework only sees a :class:`RunTrace` — this is the only
-        method most custom handoffs need to write.
-        """
+        """Run the two phases. Return ``(warmup_result, refinement_result)``."""
         ...
 
     def run(
