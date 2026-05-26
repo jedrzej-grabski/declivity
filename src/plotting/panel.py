@@ -7,18 +7,32 @@ under semantic keys (e.g. ``"step_size"``), so the same key resolves to
 makes cross-algorithm comparison declarative: ask the registry which
 keys are common to a set of algorithms, then plot them overlaid.
 
+A panel can be **single-series** (one ``field``) or **multi-series**
+(several :class:`Series` overlaid on the same axes — useful for
+convergence-style views with best/mean/median together). Multi-series
+is honoured by :py:func:`plot_metrics`; :py:func:`plot_comparison` only
+uses the first series of each panel because its overlay axis is the
+algorithm, not the field.
+
 Example:
 
     from src.algorithms.choices import AlgorithmChoice
-    from src.plotting.panel import Panel, PanelRegistry
+    from src.plotting.panel import Panel, Series, PanelRegistry
 
     PanelRegistry.register(
         AlgorithmChoice.CMAES,
         Panel("step_size", "Step Size", "sigma", field="sigma"),
+        Panel(
+            "convergence_overlay",
+            "Convergence",
+            "Fitness",
+            series=(
+                Series("best_fitness",   "Best"),
+                Series("mean_fitness",   "Mean f(m)", linestyle="--"),
+                Series("median_fitness", "Median",    linestyle=":"),
+            ),
+        ),
     )
-
-    PanelRegistry.common([AlgorithmChoice.CMAES, AlgorithmChoice.DES])
-    # -> ["convergence", "step_size", ...] (intersection)
 """
 
 from dataclasses import dataclass
@@ -28,33 +42,93 @@ from src.algorithms.choices import AlgorithmChoice
 
 
 @dataclass(frozen=True)
+class Series:
+    """One line within a :class:`Panel`.
+
+    Multi-series panels exist so that "convergence" can show
+    best/mean/median together (one panel, three lines) instead of
+    splitting them into three separate panels.
+
+    Attributes:
+        field: Attribute name on the LogData object for the y-values.
+        label: Legend label. Empty string defaults to a humanized
+            version of ``field``.
+        linestyle: Matplotlib linestyle (``"-"``, ``"--"``, ``":"``, ...).
+        color: Matplotlib color string. ``None`` falls back to the
+            default color cycle. Per-series colors are mainly useful in
+            single-algorithm views; in :py:func:`plot_comparison` the
+            color is taken from the per-algorithm palette instead.
+    """
+
+    field: str
+    label: str = ""
+    linestyle: str = "-"
+    color: str | None = None
+
+    @property
+    def display_label(self) -> str:
+        return self.label or self.field.replace("_", " ").title()
+
+
+@dataclass(frozen=True)
 class Panel:
     """Declarative specification for a single diagnostic plot.
 
+    Construct with either ``field=...`` (single-series convenience) or
+    ``series=(...)`` (one or more :class:`Series`). Specifying both is
+    an error; specifying neither is an error.
+
     Attributes:
         key: Semantic identifier used for registration and cross-algorithm
-            matching. Two algorithms can register different ``field``s under
-            the same ``key`` — that's how ``PanelRegistry.common`` finds
-            comparable metrics.
+            matching. Two algorithms can register different ``field``s
+            under the same ``key`` — that is what makes
+            :py:meth:`PanelRegistry.common` produce comparable metrics.
         title: Plot title.
         ylabel: Y-axis label.
-        field: Attribute name on the LogData object to read as the y-series.
-        x_field: Attribute name on the LogData object to read as the x-series.
-            Defaults to ``"evaluations"`` since that's the budget unit shared
-            across algorithms.
+        field: Single-series convenience. Internally normalized to
+            ``series=(Series(field),)``.
+        series: Tuple of :class:`Series` for multi-line panels.
+        x_field: Attribute name on the LogData object for the x-series.
+            Defaults to ``"evaluations"`` (the budget unit shared across
+            algorithms).
         yscale: ``"log"`` or ``"linear"``.
-        floor: If set, clip y-values below this threshold (useful with
-            ``yscale="log"`` to avoid ``log(0)`` blowups on runs that
-            converge essentially to zero).
+        floor: If set, clip y-values below this threshold. Useful with
+            ``yscale="log"`` to keep runs that converge to zero finite.
+        default: If ``True``, included when :py:func:`plot_metrics` is
+            called without an explicit ``panels=`` list. Set ``False``
+            for noisy or rarely-useful panels (still available via
+            ``panels=[key]`` or ``panels="all"``).
     """
 
     key: str
     title: str
     ylabel: str
-    field: str
+    field: str | None = None
+    series: tuple[Series, ...] | None = None
     x_field: str = "evaluations"
     yscale: Literal["linear", "log"] = "log"
     floor: float | None = None
+    default: bool = True
+
+    def __post_init__(self) -> None:
+        field_set = self.field is not None
+        series_set = self.series is not None and len(self.series) > 0
+        if field_set and series_set:
+            raise ValueError(
+                f"Panel {self.key!r} has both 'field' and 'series' set — pick one."
+            )
+        if not field_set and not series_set:
+            raise ValueError(
+                f"Panel {self.key!r} needs either 'field=' or 'series=(Series(...), ...)'."
+            )
+
+    @property
+    def series_list(self) -> tuple[Series, ...]:
+        """Normalized tuple of :class:`Series` — always at least one entry."""
+        if self.series is not None and len(self.series) > 0:
+            return self.series
+        assert self.field is not None  # enforced by __post_init__
+        return (Series(self.field),)
 
 
 class PanelRegistry:
@@ -62,8 +136,8 @@ class PanelRegistry:
 
     Algorithms register panels by calling :py:meth:`register`. The plotter
     looks them up by ``(algorithm, key)``. :py:meth:`common` returns the
-    semantic keys available for every algorithm in a list, which is what
-    powers the "5 panels comparable across both" workflow.
+    semantic keys available for every algorithm in a list, which powers
+    the "panels comparable across N algorithms" workflow.
     """
 
     _panels: dict[AlgorithmChoice, dict[str, Panel]] = {}
@@ -102,6 +176,18 @@ class PanelRegistry:
     def available(cls, algorithm: AlgorithmChoice) -> list[str]:
         """All semantic keys registered for one algorithm, sorted."""
         return sorted(cls._panels.get(algorithm, {}).keys())
+
+    @classmethod
+    def default(cls, algorithm: AlgorithmChoice) -> list[str]:
+        """Semantic keys flagged ``default=True`` for one algorithm, sorted.
+
+        ``plot_metrics(result)`` with no explicit ``panels=`` uses this
+        subset, keeping the headline plot focused on the panels that
+        actually carry signal for that algorithm. Pass ``panels="all"``
+        to bypass.
+        """
+        bucket = cls._panels.get(algorithm, {})
+        return sorted(key for key, panel in bucket.items() if panel.default)
 
     @classmethod
     def common(cls, algorithms: Sequence[AlgorithmChoice]) -> list[str]:

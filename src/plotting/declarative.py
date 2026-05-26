@@ -11,6 +11,11 @@ Adding a new panel is one line in :py:mod:`src.plotting.standard_panels`
 it up automatically. ``plot_comparison(results)`` with no explicit panel
 list defaults to the intersection across the algorithms in ``results``,
 so the common-metric workflow is the path of least resistance.
+
+Panels may be single-series or multi-series (best/mean/median together).
+:py:func:`plot_metrics` honours all series; :py:func:`plot_comparison`
+only uses each panel's first series, since its overlay axis is the
+algorithm.
 """
 
 from pathlib import Path
@@ -23,18 +28,32 @@ from matplotlib.figure import Figure
 from src.algorithms.choices import AlgorithmChoice
 from src.core.base_optimizer import OptimizationResult
 from src.logging.base_logger import BaseLogData
-from src.plotting.panel import Panel, PanelRegistry
+from src.plotting.panel import Panel, PanelRegistry, Series
+
+
+_ALL_SENTINEL = "all"
 
 
 def _resolve_panels(
     algorithm: AlgorithmChoice,
-    panels: Sequence[str | Panel] | None,
+    panels: Sequence[str | Panel] | str | None,
 ) -> list[Panel]:
-    """Coerce a mixed list of strings/Panels to concrete Panel objects.
+    """Coerce a panel selection into concrete :class:`Panel` objects.
 
-    None means "every panel registered for this algorithm".
+    Selection rules:
+    - ``None``           -> panels marked ``default=True`` for this algorithm.
+    - ``"all"``          -> every panel registered for this algorithm.
+    - ``Sequence[...]``  -> exact list; strings are looked up in the registry,
+                            :class:`Panel` instances pass through verbatim.
     """
     if panels is None:
+        keys = PanelRegistry.default(algorithm)
+        return [PanelRegistry.get(algorithm, key) for key in keys]
+    if isinstance(panels, str):
+        if panels != _ALL_SENTINEL:
+            raise ValueError(
+                f"panels={panels!r} not understood. Pass a list, None, or 'all'."
+            )
         keys = PanelRegistry.available(algorithm)
         return [PanelRegistry.get(algorithm, key) for key in keys]
     return [
@@ -62,31 +81,70 @@ def _apply_floor(values: list[float], floor: float | None) -> list[float]:
     return [value if value > floor else floor for value in values]
 
 
-def _draw_series(
+def _draw_one_series(
     ax: Axes,
     x_values: list,
     y_values: list,
     *,
     label: str | None = None,
     color: str | None = None,
+    linestyle: str = "-",
     linewidth: float = 2.0,
 ) -> bool:
     """Draw one line. Returns ``False`` if the series was empty."""
     if not x_values or not y_values:
         return False
 
-    # Length mismatches happen when a metric is only logged when a diag flag
-    # is set (e.g. condition_number only when diag_eigen=True). Truncate to
-    # the common prefix so the plot still draws something honest.
+    # Length mismatches happen when a metric is only logged when a diag
+    # flag is set (e.g. condition_number only when diag_eigen=True).
+    # Truncate to the common prefix so the plot still draws something
+    # honest.
     length = min(len(x_values), len(y_values))
     ax.plot(
         x_values[:length],
         y_values[:length],
         label=label,
         color=color,
+        linestyle=linestyle,
         linewidth=linewidth,
     )
     return True
+
+
+def _draw_panel(
+    ax: Axes,
+    log_data: BaseLogData,
+    panel: Panel,
+    *,
+    legend_for_series: bool,
+) -> None:
+    """Render every :class:`Series` of one :class:`Panel` onto ``ax``.
+
+    ``legend_for_series`` controls whether the in-panel legend is drawn
+    (only useful for multi-series single-run plots, not comparison overlays
+    where the legend is per-algorithm at the panel level).
+    """
+    x_values = _extract_series(log_data, panel.x_field)
+    drew_anything = False
+    for series in panel.series_list:
+        y_values = _apply_floor(
+            _extract_series(log_data, series.field),
+            panel.floor,
+        )
+        label = series.display_label if legend_for_series else None
+        if _draw_one_series(
+            ax,
+            x_values,
+            y_values,
+            label=label,
+            color=series.color,
+            linestyle=series.linestyle,
+        ):
+            drew_anything = True
+
+    _decorate(ax, panel)
+    if drew_anything and legend_for_series and len(panel.series_list) > 1:
+        ax.legend(fontsize=9, framealpha=0.9)
 
 
 def _decorate(ax: Axes, panel: Panel) -> None:
@@ -107,7 +165,7 @@ def _save_if_path(fig: Figure, save_path: Path | str | None) -> None:
 
 def plot_metrics(
     result: OptimizationResult,
-    panels: Sequence[str | Panel] | None = None,
+    panels: Sequence[str | Panel] | str | None = None,
     *,
     ncols: int = 2,
     figsize_per_panel: tuple[float, float] = (6.0, 4.0),
@@ -119,9 +177,9 @@ def plot_metrics(
     Args:
         result: An optimization result. ``result.algorithm`` selects the
             registry bucket.
-        panels: A list of panel keys (strings looked up against the registry)
-            or :class:`Panel` objects directly. ``None`` means "every panel
-            registered for this algorithm".
+        panels: ``None`` (default) -> the algorithm's default panel set;
+            ``"all"`` -> every registered panel; a list of panel keys
+            (strings) or :class:`Panel` objects -> exact selection.
         ncols: Number of columns in the grid. Rows are inferred.
         figsize_per_panel: ``(width, height)`` in inches for each panel.
         title: Optional figure-level suptitle.
@@ -134,7 +192,8 @@ def plot_metrics(
     if not resolved:
         raise ValueError(
             f"No panels to plot for {result.algorithm}. "
-            f"Register some via PanelRegistry.register or pass panels=..."
+            f"Register some via PanelRegistry.register, mark some as default=True, "
+            f"or pass panels=... explicitly."
         )
 
     rows, cols = _grid_dims(len(resolved), ncols)
@@ -148,11 +207,7 @@ def plot_metrics(
 
     log_data = result.diagnostic
     for idx, panel in enumerate(resolved):
-        ax = flat_axes[idx]
-        x_values = _extract_series(log_data, panel.x_field)
-        y_values = _apply_floor(_extract_series(log_data, panel.field), panel.floor)
-        _draw_series(ax, x_values, y_values)
-        _decorate(ax, panel)
+        _draw_panel(flat_axes[idx], log_data, panel, legend_for_series=True)
 
     for idx in range(len(resolved), len(flat_axes)):
         flat_axes[idx].set_visible(False)
@@ -180,6 +235,9 @@ def plot_comparison(
     Each panel key resolves separately for each algorithm — that's the
     whole point. CMA-ES "step_size" plots ``sigma``, DES "step_size" plots
     ``Ft``, both end up on the same axes labeled by the panel's title.
+
+    For multi-series panels, only the **first** series is used in each
+    algorithm's curve (the overlay axis is the algorithm, not the field).
 
     Args:
         results: ``{label: OptimizationResult}``. The label appears in the
@@ -222,26 +280,34 @@ def plot_comparison(
     for idx, key in enumerate(panel_keys):
         ax = flat_axes[idx]
 
-        # The reference panel's title/ylabel/scale is shared across the
-        # overlay. We take it from the first algorithm — they're semantic
-        # matches by design, so any of them would do.
+        # Reference panel: title / ylabel / scale come from the first
+        # algorithm. They're semantic matches by registration, so any of
+        # them would do.
         reference_panel = PanelRegistry.get(algorithms[0], key)
 
         for label, result in results.items():
             try:
                 panel = PanelRegistry.get(result.algorithm, key)
             except KeyError:
-                # Algorithm doesn't register this key. Should only happen
-                # if panels=... was passed explicitly with a key not
-                # available across all algorithms; skip and continue.
+                # Algorithm didn't register this key. Only possible when
+                # the caller passed panels=... with a key that isn't
+                # registered everywhere; skip silently and move on.
                 continue
+            # Only the panel's primary series participates in the overlay.
+            primary_series = panel.series_list[0]
             x_values = _extract_series(result.diagnostic, panel.x_field)
             y_values = _apply_floor(
-                _extract_series(result.diagnostic, panel.field),
+                _extract_series(result.diagnostic, primary_series.field),
                 panel.floor,
             )
             color = colors.get(label) if colors else None
-            _draw_series(ax, x_values, y_values, label=label, color=color)
+            _draw_one_series(
+                ax,
+                x_values,
+                y_values,
+                label=label,
+                color=color,
+            )
 
         _decorate(ax, reference_panel)
         ax.legend(fontsize=9, framealpha=0.9)
