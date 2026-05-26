@@ -124,7 +124,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
         # Main optimization loop
         while self.evaluations < budget:
             iter_count += 1
-            hist_head = (hist_head % histSize) + 1
+            hist_head = (hist_head + 1) % histSize
 
             mu = math.floor(lambda_ / 2)
             weights = np.log(mu + 1) - np.log(np.arange(1, mu + 1))
@@ -157,7 +157,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             if len(history) < histSize:
                 history.append(selected_points.T * hist_norm / Ft)
             else:
-                history[hist_head - 1] = selected_points.T * hist_norm / Ft
+                history[hist_head] = selected_points.T * hist_norm / Ft
 
             # Calculate weighted mean of selected points
             old_mean = new_mean.copy()
@@ -165,7 +165,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
 
             # Write to buffers
             mu_mean = new_mean
-            d_mean[:, hist_head - 1] = (mu_mean - pop_mean) / Ft
+            d_mean[:, hist_head] = (mu_mean - pop_mean) / Ft
 
             step = (new_mean - old_mean) / Ft
 
@@ -173,7 +173,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             steps.push_all(step)
 
             # Update Ft
-            ft_history[hist_head - 1] = Ft
+            ft_history[hist_head] = Ft
             if (
                 iter_count > pathLength - 1
                 and not np.any(step == 0)
@@ -192,10 +192,10 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
                 )
 
             # Update parameters
-            if hist_head == 1:
-                pc[:, hist_head - 1] = np.sqrt(mu) * step
+            if hist_head == 0:
+                pc[:, hist_head] = np.sqrt(mu) * step
             else:
-                pc[:, hist_head - 1] = (1 - cp) * pc[:, hist_head - 2] + np.sqrt(
+                pc[:, hist_head] = (1 - cp) * pc[:, hist_head - 1] + np.sqrt(
                     mu * cp * (2 - cp)
                 ) * step
 
@@ -240,10 +240,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             )
 
             # Count repaired individuals
-            counter_repaired = 0
-            for i in range(population.shape[0]):
-                if not np.array_equal(population[i], population_repaired[i]):
-                    counter_repaired += 1
+            counter_repaired = int(np.any(population != population_repaired, axis=1).sum())
 
             if lamarckism:
                 population = population_repaired

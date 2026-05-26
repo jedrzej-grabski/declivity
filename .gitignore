@@ -79,3 +79,23 @@ celerybeat.pid
 .idea/
 .vscode/
 *.swp
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.mcp.json
+.bg-shell/
+Thumbs.db
+*.swo
+*~
+*.code-workspace
+!.env.example
+node_modules/
+.next/
+*.pyc
+.venv/
+target/
+vendor/
+coverage/
+.cache/
+tmp/
