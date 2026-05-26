@@ -4,33 +4,39 @@ Adding a new panel is one line. To attach ``"my_metric"`` to CMA-ES::
 
     PanelRegistry.register(
         AlgorithmChoice.CMAES,
-        Panel("my_metric", "My Metric", "units", field="my_metric_on_logdata"),
+        Panel(
+            key=PanelKey.MY_METRIC,           # or just "my_metric"
+            title="My Metric",
+            ylabel="units",
+            field="my_metric_on_logdata",
+        ),
     )
 
 Multi-series panels overlay several fields on one axes — useful for the
 classic "best + mean + median" convergence view::
 
     Panel(
-        "convergence",
-        "Convergence",
-        "Fitness",
+        key=PanelKey.CONVERGENCE,
+        title="Convergence",
+        ylabel="Fitness",
         series=(
             Series("best_fitness",   "Best"),
-            Series("mean_fitness",   "Mean", linestyle="--"),
-            Series("median_fitness", "Median", linestyle=":"),
+            Series("mean_fitness",   "Mean",   linestyle=LineStyle.DASHED),
+            Series("median_fitness", "Median", linestyle=LineStyle.DOTTED),
         ),
     )
 
 Each panel has a ``default`` flag (True by default). ``plot_metrics(result)``
 with no explicit ``panels=`` only renders the default subset, which is
-how we keep the headline figure focused. Pass ``panels="all"`` for every
-registered panel.
+how we keep the headline figure focused. Pass ``panels=PanelSet.ALL``
+for every registered panel.
 
-If the same semantic key (e.g. ``"step_size"``) is registered for multiple
-algorithms, ``plot_comparison`` will overlay them automatically — the
-``field`` may differ per algorithm (CMA-ES ``sigma``, DES ``Ft``,
-L-BFGS-B ``step_length``), but the panel speaks one language. For
-multi-series panels, only the first series participates in the overlay.
+If the same semantic key (e.g. :attr:`PanelKey.STEP_SIZE`) is registered
+for multiple algorithms, ``plot_comparison`` will overlay them
+automatically — the ``field`` may differ per algorithm (CMA-ES ``sigma``,
+DES ``Ft``, L-BFGS-B ``step_length``), but the panel speaks one
+language. For multi-series panels, only the first series participates
+in the overlay.
 
 Importing this module triggers all registrations as a side effect.
 ``src/plotting/__init__.py`` imports it for that reason.
@@ -38,6 +44,7 @@ Importing this module triggers all registrations as a side effect.
 
 from src.algorithms.choices import AlgorithmChoice
 from src.plotting.panel import Panel, PanelRegistry, Series
+from src.plotting.types import LineStyle, PanelKey, YScale
 
 
 # Floor used for log-scale fitness plots — runs that converge to (effectively)
@@ -52,46 +59,46 @@ _FITNESS_FLOOR = 1e-30
 PanelRegistry.register(
     AlgorithmChoice.DES,
     Panel(
-        key="convergence",
+        key=PanelKey.CONVERGENCE,
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
             Series("best_fitness", "Best", color="tab:blue"),
-            Series("mean_fitness", "Mean", linestyle="--", color="tab:green"),
+            Series("mean_fitness", "Mean", linestyle=LineStyle.DASHED, color="tab:green"),
         ),
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
     ),
     Panel(
-        key="step_size",
+        key=PanelKey.STEP_SIZE,
         title="Step Size",
         ylabel="Ft",
         field="Ft",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="condition_number",
+        key=PanelKey.CONDITION_NUMBER,
         title="Condition Number",
         ylabel="kappa",
         field="condition_number",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
-    # Non-default panels — available, but excluded from the headline view.
+    # Non-default — available, but excluded from the headline view.
     Panel(
-        key="worst_fitness",
+        key=PanelKey.WORST_FITNESS,
         title="Worst Fitness",
         ylabel="Worst Fitness",
         field="worst_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
     Panel(
-        key="std_fitness",
+        key=PanelKey.STD_FITNESS,
         title="Fitness Std Dev",
         ylabel="Std Dev",
         field="std_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         default=False,
     ),
 )
@@ -109,103 +116,103 @@ PanelRegistry.register(
 PanelRegistry.register(
     AlgorithmChoice.CMAES,
     Panel(
-        key="convergence",
+        key=PanelKey.CONVERGENCE,
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
             Series("best_fitness",   "Best",      color="tab:blue"),
-            Series("mean_fitness",   "Mean f(m)", linestyle="--", color="tab:green"),
-            Series("median_fitness", "Median",    linestyle=":",  color="tab:red"),
+            Series("mean_fitness",   "Mean f(m)", linestyle=LineStyle.DASHED, color="tab:green"),
+            Series("median_fitness", "Median",    linestyle=LineStyle.DOTTED, color="tab:red"),
         ),
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
     ),
     Panel(
-        key="std_fitness",
+        key=PanelKey.STD_FITNESS,
         title="Fitness Std Dev",
         ylabel="Std Dev",
         field="std_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="step_size",
+        key=PanelKey.STEP_SIZE,
         title="Step Size",
         ylabel="sigma",
         field="sigma",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="condition_number",
+        key=PanelKey.CONDITION_NUMBER,
         title="Condition Number",
         ylabel="kappa(C)",
         field="condition_number",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="det_covariance",
+        key=PanelKey.DET_COVARIANCE,
         title="Search Volume det(C)",
         ylabel="det(C)",
         field="covariance_determinant",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="evolution_paths",
+        key=PanelKey.EVOLUTION_PATHS,
         title="Evolution Paths",
         ylabel="Path Norm",
         series=(
             Series("pc_norm", "||p_c||",     color="tab:blue"),
-            Series("ps_norm", "||p_sigma||", linestyle="--", color="tab:red"),
+            Series("ps_norm", "||p_sigma||", linestyle=LineStyle.DASHED, color="tab:red"),
         ),
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     Panel(
-        key="mean_norm",
+        key=PanelKey.MEAN_NORM,
         title="Mean Vector Norm",
         ylabel="||m||",
         field="mean_vector_norm",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
-    # Non-default — available via plot_metrics(panels=["..."]) or "all".
+    # Non-default — available via plot_metrics(panels=[...]) or PanelSet.ALL.
     Panel(
-        key="worst_fitness",
+        key=PanelKey.WORST_FITNESS,
         title="Worst Fitness",
         ylabel="Worst Fitness",
         field="worst_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
     Panel(
-        key="eigenvalue_max",
+        key=PanelKey.EIGENVALUE_MAX,
         title="Max Eigenvalue",
         ylabel="lambda_max",
         field="max_eigenvalue",
-        yscale="log",
+        yscale=YScale.LOG,
         default=False,
     ),
     Panel(
-        key="eigenvalue_min",
+        key=PanelKey.EIGENVALUE_MIN,
         title="Min Eigenvalue",
         ylabel="lambda_min",
         field="min_eigenvalue",
-        yscale="log",
+        yscale=YScale.LOG,
         default=False,
     ),
     Panel(
-        key="midpoint_fitness",
+        key=PanelKey.MIDPOINT_FITNESS,
         title="Midpoint Fitness f(m)",
         ylabel="f(m)",
         field="mean_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
     Panel(
-        key="median_fitness",
+        key=PanelKey.MEDIAN_FITNESS,
         title="Median Fitness",
         ylabel="Median",
         field="median_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
@@ -219,75 +226,75 @@ PanelRegistry.register(
 PanelRegistry.register(
     AlgorithmChoice.MFCMAES,
     Panel(
-        key="convergence",
+        key=PanelKey.CONVERGENCE,
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
             Series("best_fitness",     "Best",          color="tab:blue"),
-            Series("midpoint_fitness", "Midpoint f(m)", linestyle="--", color="tab:green"),
-            Series("mean_fitness",     "Mean",          linestyle=":",  color="tab:red"),
+            Series("midpoint_fitness", "Midpoint f(m)", linestyle=LineStyle.DASHED, color="tab:green"),
+            Series("mean_fitness",     "Mean",          linestyle=LineStyle.DOTTED, color="tab:red"),
         ),
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
     ),
     Panel(
-        key="std_fitness",
+        key=PanelKey.STD_FITNESS,
         title="Fitness Std Dev",
         ylabel="Std Dev",
         field="std_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="step_size",
+        key=PanelKey.STEP_SIZE,
         title="Step Size (PPMF)",
         ylabel="sigma",
         field="sigma",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="success_probability",
+        key=PanelKey.SUCCESS_PROBABILITY,
         title="PPMF Success Probability",
         ylabel="p_succ",
         field="p_succ",
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     Panel(
-        key="constraint_violations",
+        key=PanelKey.CONSTRAINT_VIOLATIONS,
         title="Constraint Violations",
         ylabel="count",
         field="constraint_violations",
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     Panel(
-        key="evolution_path_c",
+        key=PanelKey.EVOLUTION_PATH_C,
         title="Evolution Path (covariance)",
         ylabel="||p_c||",
         field="pc_norm",
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     Panel(
-        key="mean_norm",
+        key=PanelKey.MEAN_NORM,
         title="Mean Vector Norm",
         ylabel="||m||",
         field="mean_vector_norm",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     # Non-default — subsumed by the overlay or rarely useful headline data.
     Panel(
-        key="worst_fitness",
+        key=PanelKey.WORST_FITNESS,
         title="Worst Fitness",
         ylabel="Worst Fitness",
         field="worst_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
     Panel(
-        key="midpoint_fitness",
+        key=PanelKey.MIDPOINT_FITNESS,
         title="Midpoint Fitness f(m)",
         ylabel="f(m)",
         field="midpoint_fitness",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
@@ -307,86 +314,86 @@ PanelRegistry.register(
 PanelRegistry.register(
     AlgorithmChoice.LBFGSB,
     Panel(
-        key="convergence",
+        key=PanelKey.CONVERGENCE,
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
             Series("best_fitness",   "Best", color="tab:blue"),
-            Series("function_value", "f(x)", linestyle="--", color="tab:green"),
+            Series("function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"),
         ),
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
     ),
     Panel(
-        key="gradient_norms",
+        key=PanelKey.GRADIENT_NORMS,
         title="Gradient Norms",
         ylabel="Norm (log)",
         series=(
             Series("projected_gradient_norm", "||proj g||_inf", color="tab:red"),
-            Series("gradient_norm",           "||g||_2",        linestyle="--", color="tab:blue"),
+            Series("gradient_norm",           "||g||_2",        linestyle=LineStyle.DASHED, color="tab:blue"),
         ),
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="step_size",
+        key=PanelKey.STEP_SIZE,
         title="Line Search Step",
         ylabel="alpha",
         field="step_length",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="theta",
+        key=PanelKey.THETA,
         title="L-BFGS Scaling theta",
         ylabel="theta",
         field="theta",
-        yscale="log",
+        yscale=YScale.LOG,
     ),
     Panel(
-        key="num_free",
+        key=PanelKey.NUM_FREE,
         title="Free Variables",
         ylabel="count",
         field="num_free_vars",
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     Panel(
-        key="num_corrections",
+        key=PanelKey.NUM_CORRECTIONS,
         title="L-BFGS Corrections Stored",
         ylabel="count",
         field="num_corrections",
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     Panel(
-        key="line_search_iters",
+        key=PanelKey.LINE_SEARCH_ITERS,
         title="Line Search Iterations",
         ylabel="evals/iter",
         field="line_search_iters",
-        yscale="linear",
+        yscale=YScale.LINEAR,
     ),
     # Non-default — function_value and the individual gradient norms are
     # subsumed by the multi-series convergence / gradient_norms panels.
     Panel(
-        key="function_value",
+        key=PanelKey.FUNCTION_VALUE,
         title="Function Value",
         ylabel="f(x)",
         field="function_value",
-        yscale="log",
+        yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
         default=False,
     ),
     Panel(
-        key="gradient_norm",
+        key=PanelKey.GRADIENT_NORM,
         title="Gradient Norm",
         ylabel="||grad f||_2",
         field="gradient_norm",
-        yscale="log",
+        yscale=YScale.LOG,
         default=False,
     ),
     Panel(
-        key="projected_gradient",
+        key=PanelKey.PROJECTED_GRADIENT,
         title="Projected Gradient",
         ylabel="||proj grad f||_inf",
         field="projected_gradient_norm",
-        yscale="log",
+        yscale=YScale.LOG,
         default=False,
     ),
 )

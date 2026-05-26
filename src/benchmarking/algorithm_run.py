@@ -9,6 +9,7 @@ seed, and reports a RunTrace. Concrete classes:
 """
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Callable, Protocol, runtime_checkable
 
 import numpy as np
@@ -24,6 +25,26 @@ from src.core.config_base import BaseConfig
 
 
 _EIGENVALUE_FLOOR = 1e-30
+
+
+class HandoffTransform(StrEnum):
+    """How to turn the CMA-ES covariance into an L-BFGS-B initial Hessian.
+
+    Used by :class:`CMAESLBFGSBHandoff`.
+    """
+
+    INVERSE = "inverse"
+    """Use ``C^{-1}`` directly. The L-BFGS-B model becomes a true quadratic
+    approximation of the CMA-ES posterior around the warm-up mean."""
+
+    SIGMA_INVERSE = "sigma_inverse"
+    """Use ``(sigma^2 C)^{-1}`` — accounts for the CMA-ES global step-size
+    scaling. Sometimes more conservative than the bare inverse."""
+
+    IDENTITY = "identity"
+    """Drop the covariance and use the L-BFGS-B default (B_0 = I). Mainly a
+    control experiment: isolates the value of *passing covariance information*
+    from the value of *sharing a starting point* with CMA-ES."""
 
 
 @runtime_checkable
@@ -128,7 +149,7 @@ class CMAESLBFGSBHandoff:
     color: str
     cmaes_config_factory: Callable[[int], CMAESConfig]
     lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
-    transform: str = "inverse"
+    transform: HandoffTransform | str = HandoffTransform.INVERSE
 
     cmaes_extra_diagnostics: tuple[str, ...] = ("diag_eigen",)
     lbfgsb_extra_diagnostics: tuple[str, ...] = ()
@@ -139,7 +160,8 @@ class CMAESLBFGSBHandoff:
         eigenvalues_sqrt: NDArray[np.float64],
         sigma: float,
     ) -> NDArray[np.float64] | None:
-        if self.transform == "identity":
+        transform = str(self.transform)
+        if transform == HandoffTransform.IDENTITY:
             return None
 
         eigenvalues = np.maximum(eigenvalues_sqrt**2, _EIGENVALUE_FLOOR)
@@ -148,15 +170,15 @@ class CMAESLBFGSBHandoff:
         # are still valid but numpy raises spurious divide/overflow warnings
         # on the intermediates.
         with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-            if self.transform == "inverse":
+            if transform == HandoffTransform.INVERSE:
                 return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-            if self.transform == "sigma_inverse":
+            if transform == HandoffTransform.SIGMA_INVERSE:
                 inverse = (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
                 return inverse / (sigma * sigma)
 
+        valid = ", ".join(repr(value.value) for value in HandoffTransform)
         raise ValueError(
-            f"Unknown handoff transform: {self.transform!r}. "
-            f"Use 'inverse', 'sigma_inverse', or 'identity'."
+            f"Unknown handoff transform: {self.transform!r}. Use one of {valid}."
         )
 
     def run(

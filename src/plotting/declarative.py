@@ -28,36 +28,45 @@ from matplotlib.figure import Figure
 from src.algorithms.choices import AlgorithmChoice
 from src.core.base_optimizer import OptimizationResult
 from src.logging.base_logger import BaseLogData
-from src.plotting.panel import Panel, PanelRegistry, Series
+from src.plotting.panel import Panel, PanelRegistry
+from src.plotting.types import PanelKey, PanelSet
 
 
-_ALL_SENTINEL = "all"
+# Accepted shapes for the ``panels=`` argument across the public API.
+PanelSelection = Sequence[PanelKey | str | Panel] | PanelSet | str | None
 
 
 def _resolve_panels(
     algorithm: AlgorithmChoice,
-    panels: Sequence[str | Panel] | str | None,
+    panels: PanelSelection,
 ) -> list[Panel]:
     """Coerce a panel selection into concrete :class:`Panel` objects.
 
     Selection rules:
-    - ``None``           -> panels marked ``default=True`` for this algorithm.
-    - ``"all"``          -> every panel registered for this algorithm.
-    - ``Sequence[...]``  -> exact list; strings are looked up in the registry,
-                            :class:`Panel` instances pass through verbatim.
+
+    - ``None``                     -> panels marked ``default=True`` for this algorithm.
+    - ``PanelSet.DEFAULT``         -> same as ``None``.
+    - ``PanelSet.ALL`` / ``"all"`` -> every panel registered for this algorithm.
+    - ``Sequence[...]``            -> exact list. Each element may be a
+                                      :class:`PanelKey`, a raw string key,
+                                      or a :class:`Panel` instance (the latter
+                                      passes through without a registry lookup).
     """
-    if panels is None:
+    if panels is None or panels is PanelSet.DEFAULT:
         keys = PanelRegistry.default(algorithm)
         return [PanelRegistry.get(algorithm, key) for key in keys]
-    if isinstance(panels, str):
-        if panels != _ALL_SENTINEL:
+    if isinstance(panels, (str, PanelSet)):
+        # Single-value sentinel. PanelSet members are also strings (StrEnum),
+        # so the equality check handles both ``"all"`` and ``PanelSet.ALL``.
+        if str(panels) != str(PanelSet.ALL):
             raise ValueError(
-                f"panels={panels!r} not understood. Pass a list, None, or 'all'."
+                f"panels={panels!r} not understood. Pass a list, None, "
+                f"or PanelSet.ALL."
             )
         keys = PanelRegistry.available(algorithm)
         return [PanelRegistry.get(algorithm, key) for key in keys]
     return [
-        PanelRegistry.get(algorithm, panel) if isinstance(panel, str) else panel
+        panel if isinstance(panel, Panel) else PanelRegistry.get(algorithm, panel)
         for panel in panels
     ]
 
@@ -105,7 +114,7 @@ def _draw_one_series(
         y_values[:length],
         label=label,
         color=color,
-        linestyle=linestyle,
+        linestyle=str(linestyle),  # LineStyle (StrEnum) or raw string
         linewidth=linewidth,
     )
     return True
@@ -152,7 +161,7 @@ def _decorate(ax: Axes, panel: Panel) -> None:
     ax.set_xlabel(panel.x_field.replace("_", " ").title())
     ax.set_ylabel(panel.ylabel)
     ax.set_title(panel.title)
-    ax.set_yscale(panel.yscale)
+    ax.set_yscale(str(panel.yscale))  # YScale (StrEnum) or raw string
     ax.grid(True, alpha=0.3, which="both")
 
 
@@ -165,7 +174,7 @@ def _save_if_path(fig: Figure, save_path: Path | str | None) -> None:
 
 def plot_metrics(
     result: OptimizationResult,
-    panels: Sequence[str | Panel] | str | None = None,
+    panels: PanelSelection = None,
     *,
     ncols: int = 2,
     figsize_per_panel: tuple[float, float] = (6.0, 4.0),
@@ -222,7 +231,7 @@ def plot_metrics(
 
 def plot_comparison(
     results: dict[str, OptimizationResult],
-    panels: Sequence[str] | None = None,
+    panels: Sequence[PanelKey | str] | None = None,
     *,
     colors: dict[str, str] | None = None,
     ncols: int = 2,
@@ -266,7 +275,8 @@ def plot_comparison(
                 "Pass panels=[...] explicitly, or register more shared keys."
             )
     else:
-        panel_keys = list(panels)
+        # Normalize to plain str so PanelKey enums and raw strings both work.
+        panel_keys = [str(key) for key in panels]
 
     rows, cols = _grid_dims(len(panel_keys), ncols)
     fig, axes = plt.subplots(

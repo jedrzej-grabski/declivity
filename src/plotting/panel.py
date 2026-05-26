@@ -36,9 +36,10 @@ Example:
 """
 
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Sequence
 
 from src.algorithms.choices import AlgorithmChoice
+from src.plotting.types import LineStyle, PanelKey, YScale
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,8 @@ class Series:
         field: Attribute name on the LogData object for the y-values.
         label: Legend label. Empty string defaults to a humanized
             version of ``field``.
-        linestyle: Matplotlib linestyle (``"-"``, ``"--"``, ``":"``, ...).
+        linestyle: A :class:`~src.plotting.types.LineStyle` enum (or any
+            raw matplotlib linestyle string).
         color: Matplotlib color string. ``None`` falls back to the
             default color cycle. Per-series colors are mainly useful in
             single-algorithm views; in :py:func:`plot_comparison` the
@@ -62,7 +64,7 @@ class Series:
 
     field: str
     label: str = ""
-    linestyle: str = "-"
+    linestyle: LineStyle | str = LineStyle.SOLID
     color: str | None = None
 
     @property
@@ -100,13 +102,13 @@ class Panel:
             ``panels=[key]`` or ``panels="all"``).
     """
 
-    key: str
+    key: PanelKey | str
     title: str
     ylabel: str
     field: str | None = None
     series: tuple[Series, ...] | None = None
     x_field: str = "evaluations"
-    yscale: Literal["linear", "log"] = "log"
+    yscale: YScale | str = YScale.LOG
     floor: float | None = None
     default: bool = True
 
@@ -152,10 +154,12 @@ class PanelRegistry:
         """
         bucket = cls._panels.setdefault(algorithm, {})
         for panel in panels:
-            bucket[panel.key] = panel
+            # Normalize to plain str so lookups via either PanelKey or
+            # raw string land on the same entry.
+            bucket[str(panel.key)] = panel
 
     @classmethod
-    def get(cls, algorithm: AlgorithmChoice, key: str) -> Panel:
+    def get(cls, algorithm: AlgorithmChoice, key: PanelKey | str) -> Panel:
         """Look up a panel by ``(algorithm, key)``. Raises ``KeyError`` with a
         listing of what *is* available if the key is missing."""
         bucket = cls._panels.get(algorithm)
@@ -164,13 +168,14 @@ class PanelRegistry:
                 f"No panels registered for {algorithm}. "
                 f"Registered algorithms: {[a.value for a in cls._panels]}."
             )
-        if key not in bucket:
+        key_str = str(key)
+        if key_str not in bucket:
             available = ", ".join(sorted(bucket.keys()))
             raise KeyError(
-                f"Panel '{key}' not registered for {algorithm}. "
+                f"Panel '{key_str}' not registered for {algorithm}. "
                 f"Available: {available}."
             )
-        return bucket[key]
+        return bucket[key_str]
 
     @classmethod
     def available(cls, algorithm: AlgorithmChoice) -> list[str]:

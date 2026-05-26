@@ -23,12 +23,19 @@ from src.plotting.benchmark import (
 )
 from src.plotting.declarative import plot_comparison, plot_metrics
 from src.plotting.multi_algorithm_plotter import MultiAlgorithmPlotter
-from src.plotting.panel import Panel, PanelRegistry
+from src.plotting.panel import Panel, PanelRegistry, Series
+from src.plotting.types import LineStyle, PanelKey, PanelSet, XAxis, YScale
 
 __all__ = [
+    "LineStyle",
     "MultiAlgorithmPlotter",
     "Panel",
+    "PanelKey",
     "PanelRegistry",
+    "PanelSet",
+    "Series",
+    "XAxis",
+    "YScale",
     "plot_benchmark_boxplot",
     "plot_benchmark_convergence",
     "plot_comparison",
