@@ -4,12 +4,12 @@ from numpy.typing import NDArray
 from dataclasses import dataclass, field
 
 from src.algorithms.choices import AlgorithmChoice
-from src.logging.base_logger import BaseLogger, BaseLogData
+from src.logging.base_logger import BaseLogger, PopulationLogData
 from src.algorithms.cmaes.config import CMAESConfig
 
 
 @dataclass
-class CMAESLogData(BaseLogData):
+class CMAESLogData(PopulationLogData):
     """CMA-ES-specific log data container."""
 
     # Basic fitness statistics
@@ -40,8 +40,10 @@ class CMAESLogData(BaseLogData):
     mean_vector_norm: list[float] = field(default_factory=list)
     """Norm of mean vector"""
 
-    mean_fitness: list[float] = field(default_factory=list)
-    """Fitness evaluated at mean"""
+    # NOTE: CMA-ES populates the inherited ``mean_fitness`` field with f(m) —
+    # the fitness evaluated at the distribution mean, not the population
+    # average. The "midpoint_fitness" semantic panel key in standard_panels
+    # routes here so plots can label it correctly.
 
     # Covariance matrix properties
     covariance_determinant: list[float] = field(default_factory=list)
@@ -63,8 +65,7 @@ class CMAESLogData(BaseLogData):
     """Full covariance matrix C (logged when diag_eigen is enabled)"""
 
     def clear(self) -> None:
-        """Reset all log data including CMA-ES-specific."""
-        self.clear_common()
+        super().clear()
         self.median_fitness.clear()
         self.sigma.clear()
         self.pc.clear()
@@ -73,7 +74,6 @@ class CMAESLogData(BaseLogData):
         self.ps_norm.clear()
         self.mean_vector.clear()
         self.mean_vector_norm.clear()
-        self.mean_fitness.clear()
         self.covariance_determinant.clear()
         self.max_eigenvalue.clear()
         self.min_eigenvalue.clear()
@@ -81,27 +81,21 @@ class CMAESLogData(BaseLogData):
         self.covariance_matrix.clear()
 
     def to_dict(self) -> dict[str, list[Any]]:
-        """Convert all log data to dictionary format."""
-        result = self.to_dict_common()
-        result.update(
-            {
-                "median_fitness": self.median_fitness,
-                "sigma": self.sigma,
-                "pc": self.pc,
-                "ps": self.ps,
-                "pc_norm": self.pc_norm,
-                "ps_norm": self.ps_norm,
-                "mean_vector": self.mean_vector,
-                "mean_vector_norm": self.mean_vector_norm,
-                "mean_fitness": self.mean_fitness,
-                "covariance_determinant": self.covariance_determinant,
-                "max_eigenvalue": self.max_eigenvalue,
-                "min_eigenvalue": self.min_eigenvalue,
-                "coordinate_std": self.coordinate_std,
-                "covariance_matrix": self.covariance_matrix,
-            }
-        )
-        return result
+        return super().to_dict() | {
+            "median_fitness": self.median_fitness,
+            "sigma": self.sigma,
+            "pc": self.pc,
+            "ps": self.ps,
+            "pc_norm": self.pc_norm,
+            "ps_norm": self.ps_norm,
+            "mean_vector": self.mean_vector,
+            "mean_vector_norm": self.mean_vector_norm,
+            "covariance_determinant": self.covariance_determinant,
+            "max_eigenvalue": self.max_eigenvalue,
+            "min_eigenvalue": self.min_eigenvalue,
+            "coordinate_std": self.coordinate_std,
+            "covariance_matrix": self.covariance_matrix,
+        }
 
 
 class CMAESLogger(BaseLogger[CMAESLogData]):

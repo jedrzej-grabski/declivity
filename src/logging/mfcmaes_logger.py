@@ -4,12 +4,12 @@ from numpy.typing import NDArray
 from dataclasses import dataclass, field
 
 from src.algorithms.choices import AlgorithmChoice
-from src.logging.base_logger import BaseLogger, BaseLogData
+from src.logging.base_logger import BaseLogger, PopulationLogData
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 
 
 @dataclass
-class MFCMAESLogData(BaseLogData):
+class MFCMAESLogData(PopulationLogData):
     """MF-CMA-ES-specific log data."""
 
     sigma: list[float] = field(default_factory=list)
@@ -37,7 +37,7 @@ class MFCMAESLogData(BaseLogData):
     """Norm of mean vector"""
 
     def clear(self) -> None:
-        self.clear_common()
+        super().clear()
         self.sigma.clear()
         self.p_succ.clear()
         self.midpoint_fitness.clear()
@@ -48,20 +48,16 @@ class MFCMAESLogData(BaseLogData):
         self.mean_vector_norm.clear()
 
     def to_dict(self) -> dict[str, list[Any]]:
-        result = self.to_dict_common()
-        result.update(
-            {
-                "sigma": self.sigma,
-                "p_succ": self.p_succ,
-                "midpoint_fitness": self.midpoint_fitness,
-                "constraint_violations": self.constraint_violations,
-                "pc": self.pc,
-                "pc_norm": self.pc_norm,
-                "mean_vector": self.mean_vector,
-                "mean_vector_norm": self.mean_vector_norm,
-            }
-        )
-        return result
+        return super().to_dict() | {
+            "sigma": self.sigma,
+            "p_succ": self.p_succ,
+            "midpoint_fitness": self.midpoint_fitness,
+            "constraint_violations": self.constraint_violations,
+            "pc": self.pc,
+            "pc_norm": self.pc_norm,
+            "mean_vector": self.mean_vector,
+            "mean_vector_norm": self.mean_vector_norm,
+        }
 
 
 class MFCMAESLogger(BaseLogger[MFCMAESLogData]):

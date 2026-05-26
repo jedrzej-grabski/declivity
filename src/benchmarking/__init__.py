@@ -30,7 +30,6 @@ from src.benchmarking.persistence import (
     save_summary_csv,
     save_traces_json,
 )
-from src.benchmarking.plotter import BenchmarkPlotter
 from src.benchmarking.problem import Problem
 from src.benchmarking.run_trace import RunTrace
 
@@ -38,7 +37,6 @@ __all__ = [
     "AlgorithmRun",
     "Benchmark",
     "BenchmarkAlgorithm",
-    "BenchmarkPlotter",
     "CMAESLBFGSBHandoff",
     "HandoffAlgorithm",
     "HandoffTransform",
