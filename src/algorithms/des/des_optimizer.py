@@ -51,18 +51,18 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
         N = self.dimensions
         budget = self.config.budget
         lambda_ = self.config.population_size
-        pathLength = self.config.pathLength
-        initFt = self.config.initFt
+        pathLength = self.config.path_length
+        initFt = self.config.init_ft
         histSize = self.config.history
-        c_Ft = self.config.c_Ft
+        c_Ft = self.config.c_ft
         cp = self.config.cp
         max_iter = self.config.maxit
-        lamarckism = self.config.Lamarckism
+        lamarckism = self.config.lamarckian
         weights = self.config.weights
         mu = self.config.mu
-        mueff = self.config.mueff
-        ccum = self.config.ccum
-        pathRatio = self.config.pathRatio
+        mueff = self.config.mu_eff
+        ccum = self.config.c_cum
+        pathRatio = self.config.path_ratio
 
         self.evaluations = 0
         best_fitness = float("inf")

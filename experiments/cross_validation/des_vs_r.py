@@ -77,7 +77,7 @@ def run_python_des_cec2017():
                 "runtime": end_time - start_time,
                 "convergence_history": result.diagnostic.best_fitness,
                 "Ft_history": (
-                    result.diagnostic.Ft if hasattr(result.diagnostic, "Ft") else None
+                    result.diagnostic.ft if hasattr(result.diagnostic, "ft") else None
                 ),
             }
         )

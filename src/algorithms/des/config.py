@@ -44,7 +44,7 @@ def default_ccum(obj: "DESConfig") -> float:
 
 def default_pathratio(obj: "DESConfig") -> float:
     """Default path ratio based on path length."""
-    return np.sqrt(obj.pathLength)
+    return np.sqrt(obj.path_length)
 
 
 def compute_maxit(budget: int, population_size: int) -> int:
@@ -55,11 +55,11 @@ def compute_maxit(budget: int, population_size: int) -> int:
 def default_ft_scale(obj: "DESConfig") -> float:
     """Default Ft scaling factor."""
     N = obj.dimensions
-    mueff = obj.mueff
-    return ((mueff + 2) / (N + mueff + 3)) / (
+    mu_eff = obj.mu_eff
+    return ((mu_eff + 2) / (N + mu_eff + 3)) / (
         1
-        + 2 * max(0, np.sqrt((mueff - 1) / (N + 1)) - 1)
-        + (mueff + 2) / (N + mueff + 3)
+        + 2 * max(0, np.sqrt((mu_eff - 1) / (N + 1)) - 1)
+        + (mu_eff + 2) / (N + mu_eff + 3)
     )
 
 
@@ -70,23 +70,23 @@ class DESConfig(BaseConfig):
     Extends BaseConfig with DES-specific parameters.
     """
 
-    Ft: float = 1.0
+    ft: float = 1.0
     """Scaling factor of difference vectors"""
 
-    initFt: float = 1.0
+    init_ft: float = 1.0
     """Initial scaling factor"""
 
-    pathLength: int = 6
+    path_length: int = 6
     """Size of evolution path"""
 
-    c_Ft: float = 1
+    c_ft: float = 1
     """Control parameter for Ft adaptation"""
 
-    Lamarckism: bool = False
+    lamarckian: bool = False
     """Whether to use Lamarckian evolution"""
 
     # DES-specific diagnostic logging
-    diag_Ft: bool = False
+    diag_ft: bool = False
     """Log Ft values"""
 
     # Computed/derived parameters
@@ -102,19 +102,19 @@ class DESConfig(BaseConfig):
     weights: NDArray[np.float64] = field(init=False)
     """Recombination weights"""
 
-    ccum: float = field(init=False)
+    c_cum: float = field(init=False)
     """Evolution path decay factor"""
 
-    pathRatio: float = field(init=False)
+    path_ratio: float = field(init=False)
     """Path length control reference value"""
 
     maxit: int = field(init=False)
     """Maximum iterations"""
 
-    mueff: float = field(init=False)
+    mu_eff: float = field(init=False)
     """Effective selection mass"""
 
-    Ft_scale: float = field(init=False)
+    ft_scale: float = field(init=False)
     """Scaling factor for Ft"""
 
     def __post_init__(self) -> None:
@@ -128,13 +128,13 @@ class DESConfig(BaseConfig):
 
         self.mu = default_mu(self)
         self.weights = default_weights(self)
-        self.ccum = default_ccum(self)
-        self.pathRatio = default_pathratio(self)
+        self.c_cum = default_ccum(self)
+        self.path_ratio = default_pathratio(self)
 
         weights_sum_square = np.sum(self.weights**2)
-        self.mueff = np.sum(self.weights) ** 2 / weights_sum_square
+        self.mu_eff = np.sum(self.weights) ** 2 / weights_sum_square
 
-        self.Ft_scale = default_ft_scale(self)
+        self.ft_scale = default_ft_scale(self)
 
         self.maxit = compute_maxit(self.budget, self.population_size)
 
@@ -143,14 +143,14 @@ class DESConfig(BaseConfig):
     def enable_all_diagnostics(self) -> None:
         """Enable all diagnostic logging options including DES-specific ones."""
         super().enable_all_diagnostics()
-        self.diag_Ft = True
+        self.diag_ft = True
 
     def __str__(self) -> str:
         """String representation of the DESConfig."""
         return (
             f"DESConfig(dimensions={self.dimensions}, budget={self.budget}, "
-            f"population_size={self.population_size}, Ft={self.Ft}, "
-            f"initFt={self.initFt}, pathLength={self.pathLength}, "
-            f"c_Ft={self.c_Ft}, Lamarckism={self.Lamarckism}, "
-            f"diag_Ft={self.diag_Ft})"
+            f"population_size={self.population_size}, ft={self.ft}, "
+            f"init_ft={self.init_ft}, path_length={self.path_length}, "
+            f"c_ft={self.c_ft}, lamarckian={self.lamarckian}, "
+            f"diag_ft={self.diag_ft})"
         )
