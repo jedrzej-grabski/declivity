@@ -229,6 +229,71 @@ def plot_metrics(
     return fig
 
 
+def plot_evaluation_bars(
+    results: dict[str, OptimizationResult],
+    *,
+    colors: dict[str, str] | None = None,
+    title: str = "Function Evaluations",
+    figsize: tuple[float, float] | None = None,
+    save_path: Path | str | None = None,
+) -> Figure:
+    """Horizontal bar chart of total evaluations per algorithm.
+
+    Useful for runs that hit a convergence criterion at very different
+    points: the convergence plot says "they all converged"; the bar
+    chart says "...one of them needed 30x as many evals to get there".
+
+    Args:
+        results: ``{label: OptimizationResult}``. The bars appear in
+            insertion order (top to bottom), with the label drawn at
+            left.
+        colors: Optional ``{label: hex_color}``. Missing entries fall
+            back to a neutral gray.
+        title: Chart title.
+        figsize: Override the auto-computed figure size.
+        save_path: If set, the figure is saved here.
+
+    Returns:
+        The matplotlib :class:`Figure`.
+    """
+    if not results:
+        raise ValueError("results must contain at least one entry")
+
+    labels = list(results.keys())
+    evaluations = [results[label].evaluations for label in labels]
+
+    if figsize is None:
+        figsize = (10.0, max(3.0, len(labels) * 1.5))
+    fig, ax = plt.subplots(figsize=figsize)
+
+    bar_colors = [
+        (colors.get(label, "#888888") if colors else "#888888")
+        for label in labels
+    ]
+    bars = ax.barh(labels, evaluations, color=bar_colors, edgecolor="white")
+
+    # Annotate the eval count to the right of each bar so the figure is
+    # readable even when bar lengths span orders of magnitude.
+    max_evals = max(evaluations) if evaluations else 1
+    for bar, value in zip(bars, evaluations):
+        ax.text(
+            bar.get_width() + max_evals * 0.02,
+            bar.get_y() + bar.get_height() / 2,
+            f"{value:,}",
+            va="center",
+            fontsize=12,
+            fontweight="bold",
+        )
+
+    ax.set_xlabel("Function Evaluations", fontsize=13)
+    ax.set_title(title, fontsize=14)
+    ax.invert_yaxis()  # first key at top — matches dict-insertion order
+    fig.tight_layout()
+
+    _save_if_path(fig, save_path)
+    return fig
+
+
 def plot_comparison(
     results: dict[str, OptimizationResult],
     panels: Sequence[PanelKey | str] | None = None,
@@ -238,6 +303,8 @@ def plot_comparison(
     figsize_per_panel: tuple[float, float] = (6.0, 4.0),
     title: str | None = None,
     save_path: Path | str | None = None,
+    handoff_eval: int | None = None,
+    handoff_iter: int | None = None,
 ) -> Figure:
     """Overlay multiple algorithms in each panel, one panel per semantic key.
 
@@ -320,6 +387,21 @@ def plot_comparison(
             )
 
         _decorate(ax, reference_panel)
+
+        # Handoff vertical line, routed to the panel that matches the
+        # caller's x-axis hint. Panels by evaluations get the eval mark;
+        # panels by iteration get the iter mark.
+        if handoff_eval is not None and reference_panel.x_field == "evaluations":
+            ax.axvline(
+                handoff_eval, color="black", linestyle="--",
+                linewidth=1.2, alpha=0.45,
+            )
+        if handoff_iter is not None and reference_panel.x_field == "iteration":
+            ax.axvline(
+                handoff_iter, color="black", linestyle="--",
+                linewidth=1.2, alpha=0.45,
+            )
+
         ax.legend(fontsize=9, framealpha=0.9)
 
     for idx in range(len(panel_keys), len(flat_axes)):

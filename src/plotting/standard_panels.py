@@ -44,7 +44,7 @@ Importing this module triggers all registrations as a side effect.
 
 from src.algorithms.choices import AlgorithmChoice
 from src.plotting.panel import Panel, PanelRegistry, Series
-from src.plotting.types import LineStyle, PanelKey, YScale
+from src.plotting.types import LineStyle, PanelKey, XAxis, YScale
 
 
 # Floor used for log-scale fitness plots — runs that converge to (effectively)
@@ -393,6 +393,30 @@ PanelRegistry.register(
         title="Projected Gradient",
         ylabel="||proj grad f||_inf",
         field="projected_gradient_norm",
+        yscale=YScale.LOG,
+        default=False,
+    ),
+    # Iteration-axis variants — useful for L-BFGS-B variant studies that
+    # want to compare e.g. different line searches on a per-iteration
+    # basis (an evals axis would penalize the variant that does more
+    # evals per iter on the line search). Non-default; opt in via
+    # panels=[PanelKey.CONVERGENCE_BY_ITER, ...].
+    Panel(
+        key=PanelKey.CONVERGENCE_BY_ITER,
+        title="Convergence (by iteration)",
+        ylabel="Best Fitness (log)",
+        field="best_fitness",
+        x_field=XAxis.ITERATION,
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.STEP_SIZE_BY_ITER,
+        title="Line Search Step (by iteration)",
+        ylabel="alpha",
+        field="step_length",
+        x_field=XAxis.ITERATION,
         yscale=YScale.LOG,
         default=False,
     ),

@@ -58,6 +58,8 @@ class PanelKey(StrEnum):
     NUM_FREE = "num_free"
     NUM_CORRECTIONS = "num_corrections"
     LINE_SEARCH_ITERS = "line_search_iters"
+    CONVERGENCE_BY_ITER = "convergence_by_iter"
+    STEP_SIZE_BY_ITER = "step_size_by_iter"
 
     # MF-CMA-ES specific
     SUCCESS_PROBABILITY = "success_probability"
