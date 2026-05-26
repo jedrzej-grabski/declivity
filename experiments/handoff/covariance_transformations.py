@@ -18,7 +18,23 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
-from src.plotting.multi_algorithm_plotter import MultiAlgorithmPlotter
+from src.plotting import (
+    PanelKey,
+    plot_comparison,
+    plot_evaluation_bars,
+    plot_matrix_diagonal_comparison,
+)
+
+
+# 4-panel L-BFGS-B comparison layout — the equivalent of the legacy
+# plot_labeled_convergence_comparison: convergence by evals, by
+# iteration, projected gradient norm, line search step length.
+LBFGSB_COMPARISON_PANELS = [
+    PanelKey.CONVERGENCE,
+    PanelKey.CONVERGENCE_BY_ITER,
+    PanelKey.PROJECTED_GRADIENT,
+    PanelKey.STEP_SIZE_BY_ITER,
+]
 
 plt.ioff()
 plt.switch_backend("Agg")
@@ -71,7 +87,6 @@ def run_handoff_study(
 ):
     output_dir = Path("plots/handoff/covariance_transformations")
     output_dir.mkdir(parents=True, exist_ok=True)
-    plotter = MultiAlgorithmPlotter()
 
     rotations = [
         ("none",       "No rotation"),
@@ -110,7 +125,6 @@ def run_handoff_study(
         cmaes_config = CMAESConfig(
             dimensions=dimensions, budget=cmaes_budget, sigma=10.0,
         )
-        cmaes_config.diag_bestVal = True
         cmaes_config.diag_sigma = True
         cmaes_config.diag_eigen = True
 
@@ -154,7 +168,6 @@ def run_handoff_study(
                 factr=1e7,
                 budget=lbfgsb_budget,
             )
-            config.diag_bestVal = True
             config.diag_gradient_norm = True
             config.diag_step_length = True
 
@@ -196,8 +209,10 @@ def run_handoff_study(
         # Plotting
         safe_mode = rotation_mode.replace(" ", "_")
 
-        plotter.plot_labeled_convergence_comparison(
-            results, TRANSFORMATION_COLORS,
+        plot_comparison(
+            results,
+            panels=LBFGSB_COMPARISON_PANELS,
+            colors=TRANSFORMATION_COLORS,
             title=(
                 f"CMA-ES -> L-BFGS-B: Covariance Transformations\n"
                 f"{rotation_desc} ({dimensions}D, m={memory_size}, "
@@ -207,8 +222,9 @@ def run_handoff_study(
             handoff_eval=warmup_evals,
             handoff_iter=cmaes_iters,
         )
-        plotter.plot_evaluation_bar_chart(
-            results, TRANSFORMATION_COLORS,
+        plot_evaluation_bars(
+            results,
+            colors=TRANSFORMATION_COLORS,
             title=(
                 f"Total Evaluations: {rotation_desc} ({dimensions}D)"
             ),
@@ -221,7 +237,7 @@ def run_handoff_study(
             for label, matrix in transformations.items()
             if matrix is not None
         }
-        plotter.plot_matrix_diagonal_comparison(
+        plot_matrix_diagonal_comparison(
             non_identity,
             reference=true_hessian,
             reference_label="True Hessian",

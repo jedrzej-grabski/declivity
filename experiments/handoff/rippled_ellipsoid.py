@@ -25,7 +25,6 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.benchmarking import (
     Benchmark,
-    BenchmarkPlotter,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
@@ -36,11 +35,6 @@ from src.utils.benchmark_functions import RippledEllipsoid, RotatedFunction
 
 plt.ioff()
 plt.switch_backend("Agg")
-
-
-# MIGRATION COMPARE — side-by-side review dir. Remove this constant and
-# the legacy plot calls in render_combined once the new output is approved.
-COMPARE_DIR = Path("plots/_migration_compare/rippled_ellipsoid")
 
 
 COLORS = {
@@ -183,9 +177,6 @@ def render_combined(panels, output_dir: Path, title: str) -> None:
         for key, value in traces.items():
             combined_traces[key] = value
 
-    fitness_title = f"Final fitness distribution ({title})"
-
-    # Production output (new plotter).
     plot_benchmark_convergence(
         combined_traces,
         problems=problems,
@@ -197,43 +188,11 @@ def render_combined(panels, output_dir: Path, title: str) -> None:
         combined_traces,
         problems=problems,
         algorithms=representative_algorithms,
-        title=fitness_title,
+        title=f"Final fitness distribution ({title})",
         save_path=output_dir / "final_fitness.png",
     )
 
-    # MIGRATION COMPARE — same plots, side-by-side, for review.
-    COMPARE_DIR.mkdir(parents=True, exist_ok=True)
-    plot_benchmark_convergence(
-        combined_traces,
-        problems=problems,
-        algorithms=representative_algorithms,
-        title=title,
-        save_path=COMPARE_DIR / "new__convergence.png",
-    )
-    plot_benchmark_boxplot(
-        combined_traces,
-        problems=problems,
-        algorithms=representative_algorithms,
-        title=fitness_title,
-        save_path=COMPARE_DIR / "new__final_fitness.png",
-    )
-    legacy = BenchmarkPlotter(
-        problems=problems,
-        algorithms=representative_algorithms,
-        traces=combined_traces,
-        output_dir=COMPARE_DIR,
-    )
-    legacy.plot_convergence_grid(
-        save_path=COMPARE_DIR / "old__convergence.png",
-        title=title,
-    )
-    legacy.plot_final_fitness_boxplot(
-        save_path=COMPARE_DIR / "old__final_fitness.png",
-        title=fitness_title,
-    )
-
     print(f"\nCombined plot saved to {output_dir.absolute()}/convergence.png")
-    print(f"Compare plots:  {COMPARE_DIR.absolute()}")
 
 
 def main() -> None:

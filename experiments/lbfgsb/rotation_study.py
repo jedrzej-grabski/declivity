@@ -17,14 +17,29 @@ from src import AlgorithmFactory
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
-from src.plotting.multi_algorithm_plotter import MultiAlgorithmPlotter
+from src.plotting import (
+    PanelKey,
+    plot_comparison,
+    plot_evaluation_bars,
+    plot_function_landscape,
+    plot_function_landscape_grid,
+)
+
+
+# 4-panel L-BFGS-B comparison layout (convergence by evals, by iteration,
+# projected gradient, line search step).
+LBFGSB_COMPARISON_PANELS = [
+    PanelKey.CONVERGENCE,
+    PanelKey.CONVERGENCE_BY_ITER,
+    PanelKey.PROJECTED_GRADIENT,
+    PanelKey.STEP_SIZE_BY_ITER,
+]
 
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 def run_single(func, x0, config, gradient_fn, lower_bounds, upper_bounds):
-    config.diag_bestVal = True
     config.diag_gradient_norm = True
     config.diag_step_length = True
     optimizer = AlgorithmFactory.create_optimizer(
@@ -38,7 +53,6 @@ def run_single(func, x0, config, gradient_fn, lower_bounds, upper_bounds):
 def run_rotation_study():
     output_dir = Path("plots/lbfgsb/rotation_study")
     output_dir.mkdir(parents=True, exist_ok=True)
-    plotter = MultiAlgorithmPlotter()
 
     rotations = [
         ("none",       "No rotation (axis-aligned)"),
@@ -63,7 +77,7 @@ def run_rotation_study():
             landscape_hessians[rotation_desc] = func.hessian
         landscape_functions[rotation_desc] = func
 
-    plotter.plot_function_landscape_grid(
+    plot_function_landscape_grid(
         landscape_functions,
         hessians=landscape_hessians,
         extent=8.0,
@@ -78,7 +92,7 @@ def run_rotation_study():
         func = landscape_functions[rotation_desc]
         hessian = landscape_hessians[rotation_desc]
         safe_mode = rotation_mode.replace(" ", "_")
-        plotter.plot_function_landscape(
+        plot_function_landscape(
             func,
             title=f"{rotation_desc}\n(arrows = principal curvature directions)",
             extent=8.0,
@@ -168,16 +182,19 @@ def run_rotation_study():
 
             # 4-panel convergence comparison per rotation
             safe_mode = rotation_mode.replace(" ", "_")
-            plotter.plot_labeled_convergence_comparison(
-                results, hessian_colors,
+            plot_comparison(
+                results,
+                panels=LBFGSB_COMPARISON_PANELS,
+                colors=hessian_colors,
                 title=(
                     f"L-BFGS-B Initial Hessian Comparison\n"
                     f"{rotation_desc} ({n}D, m={m})"
                 ),
                 save_path=output_dir / f"{regime_label}_{safe_mode}_convergence.png",
             )
-            plotter.plot_evaluation_bar_chart(
-                results, hessian_colors,
+            plot_evaluation_bars(
+                results,
+                colors=hessian_colors,
                 title=f"{rotation_desc} ({n}D, m={m})",
                 save_path=output_dir / f"{regime_label}_{safe_mode}_bar.png",
             )

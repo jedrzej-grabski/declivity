@@ -29,7 +29,6 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.benchmarking import (
     Benchmark,
-    BenchmarkPlotter,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
@@ -40,13 +39,6 @@ from src.utils.benchmark_functions import Griewank, Rastrigin
 
 plt.ioff()
 plt.switch_backend("Agg")
-
-
-# MIGRATION COMPARE — populated alongside the production output for
-# side-by-side review of the legacy and declarative plotters. Remove this
-# constant and the corresponding write paths once the new plots are signed
-# off on.
-COMPARE_DIR = Path("plots/_migration_compare/multimodal")
 
 
 COLORS = {
@@ -197,65 +189,25 @@ def run_multimodal_handoff(
         for key, traces in bench.traces.items():
             combined_traces[key] = traces
 
-    convergence_title = (
-        f"Multimodal handoff: CMA-ES vs L-BFGS-B vs combined "
-        f"({dimensions}D, {num_seeds} seeds, total budget {total_budget})"
-    )
-    final_fitness_title = (
-        f"Final fitness distribution ({dimensions}D, {num_seeds} seeds)"
-    )
-
-    # Production output (new plotter).
     plot_benchmark_convergence(
         combined_traces,
         problems=all_problems,
         algorithms=all_algorithms,
-        title=convergence_title,
+        title=(
+            f"Multimodal handoff: CMA-ES vs L-BFGS-B vs combined "
+            f"({dimensions}D, {num_seeds} seeds, total budget {total_budget})"
+        ),
         save_path=output_dir / "convergence.png",
     )
     plot_benchmark_boxplot(
         combined_traces,
         problems=all_problems,
         algorithms=all_algorithms,
-        title=final_fitness_title,
+        title=f"Final fitness distribution ({dimensions}D, {num_seeds} seeds)",
         save_path=output_dir / "final_fitness.png",
     )
 
-    # MIGRATION COMPARE — duplicate the same plots into the review dir,
-    # alongside the legacy BenchmarkPlotter output. Remove this block once
-    # the new plots are signed off.
-    COMPARE_DIR.mkdir(parents=True, exist_ok=True)
-    plot_benchmark_convergence(
-        combined_traces,
-        problems=all_problems,
-        algorithms=all_algorithms,
-        title=convergence_title,
-        save_path=COMPARE_DIR / "new__convergence.png",
-    )
-    plot_benchmark_boxplot(
-        combined_traces,
-        problems=all_problems,
-        algorithms=all_algorithms,
-        title=final_fitness_title,
-        save_path=COMPARE_DIR / "new__final_fitness.png",
-    )
-    legacy_plotter = BenchmarkPlotter(
-        problems=all_problems,
-        algorithms=all_algorithms,
-        traces=combined_traces,
-        output_dir=COMPARE_DIR,
-    )
-    legacy_plotter.plot_convergence_grid(
-        save_path=COMPARE_DIR / "old__convergence.png",
-        title=convergence_title,
-    )
-    legacy_plotter.plot_final_fitness_boxplot(
-        save_path=COMPARE_DIR / "old__final_fitness.png",
-        title=final_fitness_title,
-    )
-
     print(f"\nPlots saved to: {output_dir.absolute()}")
-    print(f"Compare plots:  {COMPARE_DIR.absolute()}")
 
 
 def main() -> None:

@@ -18,11 +18,11 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.benchmarking import (
     Benchmark,
-    BenchmarkPlotter,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
 )
+from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from src.utils.benchmark_functions import RippledEllipsoid, RotatedFunction
 
 
@@ -151,13 +151,10 @@ def main() -> None:
     bench.run(verbose=True)
     bench.print_summary()
 
-    plotter = BenchmarkPlotter(
+    plot_benchmark_convergence(
+        bench.traces,
         problems=[problem],
         algorithms=algorithms,
-        traces=bench.traces,
-        output_dir=args.output_dir,
-    )
-    plotter.plot_convergence_grid(
         save_path=args.output_dir / "convergence.png",
         title=(
             f"Handoff timing on RippledEllipsoid (cond={args.condition:.0e}, "
@@ -166,7 +163,10 @@ def main() -> None:
         ),
         show_iqr=False,
     )
-    plotter.plot_final_fitness_boxplot(
+    plot_benchmark_boxplot(
+        bench.traces,
+        problems=[problem],
+        algorithms=algorithms,
         save_path=args.output_dir / "final_fitness.png",
         title=f"Final fitness vs warmup timing",
     )

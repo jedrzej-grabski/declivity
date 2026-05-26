@@ -17,7 +17,6 @@ from src import AlgorithmFactory
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 from src.plotting import plot_comparison, plot_metrics
-from src.plotting.multi_algorithm_plotter import MultiAlgorithmPlotter
 from src.utils.benchmark_functions import Sphere
 
 
@@ -25,8 +24,7 @@ plt.ioff()
 plt.switch_backend("Agg")
 
 
-PRODUCTION_DIR = Path("plots/lbfgsb/sphere_benchmark")
-COMPARE_DIR = Path("plots/_migration_compare/sphere_benchmark")
+OUTPUT_DIR = Path("plots/lbfgsb/sphere_benchmark")
 
 COLORS = {
     "L-BFGS-B (More-Thuente)": "#3498db",
@@ -109,75 +107,34 @@ def run_lbfgsb_benchmark() -> None:
     print(f"  Evaluations:   {result_cmaes.evaluations}")
     print(f"  Message:       {result_cmaes.message}\n")
 
-    PRODUCTION_DIR.mkdir(parents=True, exist_ok=True)
-    COMPARE_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     convergence_results = {
         "L-BFGS-B (More-Thuente)": result_mt,
         "L-BFGS-B (Armijo)":       result_armijo,
         "CMA-ES":                  result_cmaes,
     }
-    # plot_comparison defaults to the common keys, which on (LBFGSB, CMAES)
-    # is just convergence + step_size — exactly what the old call produced.
-
-    # Production output (new plotter).
+    # plot_comparison defaults to the common keys, which on
+    # (LBFGSB, CMAES) is [convergence, step_size] — both algorithms
+    # register both. The result is a two-panel overlay.
     plot_comparison(
         convergence_results,
         colors=COLORS,
         title="L-BFGS-B vs CMA-ES on Sphere (10D)",
-        save_path=PRODUCTION_DIR / "lbfgsb_convergence_comparison.png",
+        save_path=OUTPUT_DIR / "lbfgsb_convergence_comparison.png",
     )
     plot_metrics(
         result_mt,
         title="L-BFGS-B (More-Thuente) on Sphere (10D)",
-        save_path=PRODUCTION_DIR / "lbfgsb_metrics.png",
+        save_path=OUTPUT_DIR / "lbfgsb_metrics.png",
     )
     plot_metrics(
         result_cmaes,
         title="CMA-ES on Sphere (10D)",
-        save_path=PRODUCTION_DIR / "cmaes_sphere_metrics.png",
+        save_path=OUTPUT_DIR / "cmaes_sphere_metrics.png",
     )
 
-    # MIGRATION COMPARE — duplicate output for side-by-side review; remove
-    # once approved.
-    plot_comparison(
-        convergence_results,
-        colors=COLORS,
-        title="L-BFGS-B vs CMA-ES on Sphere (10D) — new plotter",
-        save_path=COMPARE_DIR / "new__convergence_comparison.png",
-    )
-    plot_metrics(
-        result_mt,
-        title="L-BFGS-B (MT) on Sphere — new plotter",
-        save_path=COMPARE_DIR / "new__lbfgsb_metrics.png",
-    )
-    plot_metrics(
-        result_cmaes,
-        title="CMA-ES on Sphere — new plotter",
-        save_path=COMPARE_DIR / "new__cmaes_metrics.png",
-    )
-    legacy = MultiAlgorithmPlotter()
-    # The old plot_convergence_comparison expected AlgorithmChoice keys.
-    legacy_results = {
-        AlgorithmChoice.LBFGSB: result_mt,
-        AlgorithmChoice.CMAES:  result_cmaes,
-    }
-    legacy.plot_convergence_comparison(
-        legacy_results,
-        save_path=COMPARE_DIR / "old__convergence_comparison.png",
-        title="L-BFGS-B vs CMA-ES on Sphere (10D)",
-    )
-    legacy.plot_algorithm_specific_metrics(
-        result_mt, AlgorithmChoice.LBFGSB,
-        save_path=COMPARE_DIR / "old__lbfgsb_metrics.png",
-    )
-    legacy.plot_algorithm_specific_metrics(
-        result_cmaes, AlgorithmChoice.CMAES,
-        save_path=COMPARE_DIR / "old__cmaes_metrics.png",
-    )
-
-    print(f"Production plots: {PRODUCTION_DIR.absolute()}")
-    print(f"Compare plots:    {COMPARE_DIR.absolute()}")
+    print(f"Plots saved to: {OUTPUT_DIR.absolute()}")
 
 
 if __name__ == "__main__":
