@@ -17,6 +17,10 @@ experiments keep working during migration.
 # registry.
 from src.plotting import standard_panels  # noqa: F401
 
+from src.plotting.benchmark import (
+    plot_benchmark_boxplot,
+    plot_benchmark_convergence,
+)
 from src.plotting.declarative import plot_comparison, plot_metrics
 from src.plotting.multi_algorithm_plotter import MultiAlgorithmPlotter
 from src.plotting.panel import Panel, PanelRegistry
@@ -25,6 +29,8 @@ __all__ = [
     "MultiAlgorithmPlotter",
     "Panel",
     "PanelRegistry",
+    "plot_benchmark_boxplot",
+    "plot_benchmark_convergence",
     "plot_comparison",
     "plot_metrics",
 ]
