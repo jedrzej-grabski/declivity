@@ -26,17 +26,17 @@ DES, CMA-ES, MF-CMA-ES, and L-BFGS-B.
 
 ```
 src/
-├── core/                  BaseOptimizer (ABC, generic), BaseConfig, AlgorithmFactory
+├── core/                  BaseOptimizer (ABC, generic), PopulationOptimizer (ABC),
+│                          BaseConfig, AlgorithmFactory (+ @register_optimizer)
 ├── algorithms/
 │   ├── choices.py         AlgorithmChoice enum (DES, CMAES, MFCMAES, LBFGSB)
 │   ├── des/               DESOptimizer + DESConfig
 │   ├── cmaes/             CMAESOptimizer (+ reference) + CMAESConfig
 │   ├── mfcmaes/           MFCMAESOptimizer + MFCMAESConfig
 │   └── lbfgsb/            LBFGSBOptimizer + LBFGSBConfig + InitialHessian + line_search
-├── utils/                 benchmark_functions, constraint_handlers, helpers,
-│                          ring_buffer, initial_point_generator,
-│                          population_initializers, repair_strategies,
-│                          covariance
+├── utils/                 benchmark_functions, constraint_handlers, repair_strategies,
+│                          initial_point_generator, population_initializers,
+│                          helpers, ring_buffer, covariance
 ├── logging/               BaseLogger + per-algorithm loggers + LoggerFactory
 │                          BaseLogData (minimal) + PopulationLogData (extends)
 ├── plotting/              Declarative panel system:
@@ -58,24 +58,35 @@ src/
                            AlgorithmRun (Protocol) + HandoffTransform (StrEnum)
 ```
 
-Five high-level concepts:
+Six high-level concepts:
 
-1. **Factory** — `AlgorithmFactory.create_optimizer(algorithm, func, x0, config, ...)`
-   returns a typed `BaseOptimizer[LogData, Config]` instance. Wraps construction
-   so callers don't need to import per-algorithm classes.
-2. **Generic base** — `BaseOptimizer[LogDataType, ConfigType]` enforces a typed
-   `optimize() -> OptimizationResult[LogDataType]` contract per algorithm.
+1. **Factory + decorator registration** — `AlgorithmFactory.create_optimizer(...)`
+   returns a typed `BaseOptimizer[LogData, Config]` instance. Optimizer
+   classes wire themselves into the factory via `@register_optimizer(AlgorithmChoice.X)`,
+   and loggers via `@register_logger(AlgorithmChoice.X)` — no manual registry
+   edits when adding an algorithm.
+2. **Generic base hierarchy** — `BaseOptimizer[LogDataType, ConfigType]` enforces
+   a typed `optimize() -> OptimizationResult[LogDataType]` contract.
+   `PopulationOptimizer` is an abstract subclass for evolutionary algorithms
+   (DES, CMA-ES, MF-CMA-ES) that structurally requires a `RepairStrategy`
+   and a `PopulationInitializer` at construction time.
 3. **LogData hierarchy** — `BaseLogData` carries the universal fields every
    algorithm logs (iteration, evaluations, best_fitness, best_solution);
    `PopulationLogData` extends it for evolutionary algorithms with
    worst/mean/std/population/eigenvalues. Single-point methods (L-BFGS-B)
    inherit `BaseLogData` directly.
-4. **Declarative plotting** — `Panel` specs registered against algorithms
+4. **Component ABCs** — Constraint handling, population repair, single-point
+   initialization, and population initialization are pluggable via four ABCs:
+   `ConstraintHandler`, `RepairStrategy`, `InitialPointGenerator`,
+   `PopulationInitializer`. Each ships a discoverability `*Type` enum with
+   a `.build(...)` factory method. See [Constraint handling](#constraint-handling)
+   and [Pluggable components](#pluggable-components).
+5. **Declarative plotting** — `Panel` specs registered against algorithms
    describe what to plot; rendering functions consume the registry.
    Adding a new panel is one `Panel(...)` line. Cross-algorithm semantic
-   keys (`PanelKey.STEP_SIZE` → `sigma`/`Ft`/`step_length`) make
+   keys (`PanelKey.STEP_SIZE` → `sigma`/`ft`/`step_length`) make
    `plot_comparison` produce meaningful overlays automatically.
-5. **Benchmark extension hierarchy** — `BenchmarkAlgorithm` ABC, with
+6. **Benchmark extension hierarchy** — `BenchmarkAlgorithm` ABC, with
    `HandoffAlgorithm` as a two-phase specialization and `AlgorithmRun`
    Protocol as the no-inheritance escape hatch.
 
@@ -139,12 +150,12 @@ ring buffer of successful steps.
 from src.algorithms.des.config import DESConfig
 
 config = DESConfig(dimensions=10)
-config.Ft = 1.0            # initial scaling factor of difference vectors
-config.pathLength = 6      # evolution-path history length
-config.Lamarckism = False  # if True, repair coordinates inherit into individuals
+config.ft = 1.0            # initial scaling factor of difference vectors
+config.path_length = 6     # evolution-path history length
+config.lamarckian = False  # if True, repaired coordinates inherit into individuals
 ```
 
-Algorithm-specific diagnostic flag: `diag_Ft` logs the per-iteration Ft trajectory.
+Algorithm-specific diagnostic flag: `diag_ft` logs the per-iteration Ft trajectory.
 
 ### CMA-ES
 
@@ -247,7 +258,7 @@ class BaseConfig:
 
 Diagnostic flags are kept lean: only flags that an optimizer or logger
 actually gates on appear. Algorithm-specific flags live on subclass configs
-(e.g. `diag_sigma` on `CMAESConfig`, `diag_Ft` on `DESConfig`).
+(e.g. `diag_sigma` on `CMAESConfig`, `diag_ft` on `DESConfig`).
 
 Helper methods on every config:
 
@@ -339,6 +350,52 @@ Custom handlers (e.g. inequality constraints, penalty methods) subclass
 `feasibility_distance`, then override `repair` and/or `penalty`. See
 `src/utils/constraint_handlers.py` for the ABC and
 `experiments/basic/constrained_rosenbrock.py` for a worked example.
+
+## Pluggable components
+
+Alongside `ConstraintHandler`, three more ABCs cover the swappable
+surfaces of every evolutionary optimizer. Each ABC ships a
+discoverability `*Type` enum with a `.build(...)` factory method so
+callers can either instantiate concrete classes directly or pick by name.
+
+| ABC                       | Lives on               | Default per algorithm                                                          |
+|---------------------------|------------------------|--------------------------------------------------------------------------------|
+| `ConstraintHandler`       | `BaseOptimizer`        | `BoxConstraintHandler(BoxStrategy.CLAMP, ...)`                                 |
+| `RepairStrategy`          | `PopulationOptimizer`  | `LamarckianRepair` (DES), `IdentityRepair` (CMA-ES), `ClampRepair` (MF-CMA-ES) |
+| `InitialPointGenerator`   | `Problem`              | `UniformInitialPointGenerator`                                                 |
+| `PopulationInitializer`   | `PopulationOptimizer`  | `NormalPopulationInitializer` (DES), `MeanSigmaPopulationInitializer` (MF-CMA-ES), `IdentityPopulationInitializer` (CMA-ES) |
+
+`ConstraintHandler` decides what is feasible and how to repair a single
+point. `RepairStrategy` decides how to apply that repair across a whole
+population (or whether to skip it). The split keeps L-BFGS-B
+(single-point) free of any `RepairStrategy` while letting evolutionary
+algorithms swap population-level policies without touching feasibility
+semantics.
+
+```python
+from src.utils.repair_strategies import LamarckianRepair, RepairStrategyType
+from src.utils.population_initializers import (
+    NormalPopulationInitializer, PopulationInitializerType,
+)
+from src.utils.initial_point_generator import (
+    UniformInitialPointGenerator, InitialPointGeneratorType,
+)
+
+# Direct instance construction:
+repair = LamarckianRepair(handler)
+pop_init = NormalPopulationInitializer(scale_factor=4.0)
+point_gen = UniformInitialPointGenerator()
+
+# Or via discoverability enum + .build():
+repair = RepairStrategyType.LAMARCKIAN.build(handler)
+pop_init = PopulationInitializerType.NORMAL.build(scale_factor=4.0)
+point_gen = InitialPointGeneratorType.UNIFORM.build()
+```
+
+`PopulationOptimizer` requires both `repair_strategy` and
+`population_initializer` in its constructor — pyright/mypy reject a
+subclass that omits them. The factory wires sensible per-algorithm
+defaults when callers don't supply them.
 
 ## Logging and diagnostics
 
@@ -732,6 +789,46 @@ class AlgorithmFactory:
         optimizer_class: type[BaseOptimizer],
         config_class: type[BaseConfig],
     ) -> None
+```
+
+### Registration decorators
+
+Optimizer and logger classes register themselves at import time via
+decorators imported from `src` (and re-exported from `src.core` /
+`src.logging`):
+
+```python
+from src import register_optimizer, register_logger
+from src.algorithms.choices import AlgorithmChoice
+
+
+@register_optimizer(AlgorithmChoice.DES)
+class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
+    ...
+
+
+@register_logger(AlgorithmChoice.DES)
+class DESLogger(BaseLogger[DESLogData]):
+    ...
+```
+
+The decorators wire `AlgorithmFactory` and `LoggerFactory` at module
+import. Adding a new algorithm requires only the two decorators (plus
+panel registrations in `src/plotting/standard_panels.py`) — there is no
+central registration block to edit.
+
+### `PopulationOptimizer`
+
+```python
+class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
+    """Abstract base for population-based optimizers (DES, CMA-ES, MF-CMA-ES).
+
+    Structurally requires repair_strategy and population_initializer in
+    __init__ — pyright/mypy reject a subclass that omits them.
+    """
+
+    repair_strategy: RepairStrategy
+    population_initializer: PopulationInitializer
 ```
 
 ### `BaseOptimizer`

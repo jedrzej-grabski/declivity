@@ -11,6 +11,53 @@ history that accompanied this commit).
 
 ---
 
+## Status after milestone M001 (2026-05-27)
+
+Milestone **M001 — Component modularization** closed pass on 2026-05-27,
+landing on `main` via merge `1adf3e5`. See `M001-VALIDATION.md` and the
+project-wide `REQUIREMENTS.md` (R001–R010 validated). M001 closed the
+following items from this roadmap:
+
+- [x] **#1 Delete dead code** — `repair_strategy.py` reborn as the new
+      `RepairStrategy` ABC; `register_all_algorithms()` duplicate
+      removed; `try/except ImportError` blocks replaced with bare
+      imports + decorator registration.
+- [x] **#3 Snake-case DES** — `ft`, `init_ft`, `path_length`, `c_ft`,
+      `lamarckian`, `mu_eff`, `c_cum`, `path_ratio`, `ft_scale`, `diag_ft`
+      all renamed; `optimize()` locals follow suit; vectorized
+      duplicate-detection; fixed 1-based `hist_head`.
+- [x] **#4 Auto-register via decorator** — `@register_optimizer` and
+      `@register_logger` ship; touch-points for adding an algorithm
+      dropped from 9 to ~6.
+- [x] **#5 Wire `InitialPointGenerator`** — `InitialPointGenerator` now
+      lives on `Problem` (single-point) and is paired with a separate
+      `PopulationInitializer` ABC on `PopulationOptimizer` (population-
+      level). Both ship discoverability `*Type` enums.
+- [x] **#6 Constraint-handling subsystem** (PoC scope) — `ConstraintHandler`
+      ABC with `BoxConstraintHandler` + `BoxStrategy` (CLAMP, BOUNCE_BACK);
+      `ConstraintHandlerType` discoverability enum; `BoundaryHandlerType`
+      removed (no backcompat alias — explicit instance injection only);
+      `experiments/basic/constrained_rosenbrock.py` demos custom handler
+      subclassing.
+
+Still open from this list:
+
+- [ ] **#2 Automated cross-validation tests** — deferred (R012).
+- [ ] **#6 Full constraint subsystem** — inequality / composite handlers
+      remain deferred (R011).
+- [ ] **#7 Algorithm-internal modularity (Lego blocks)** — deferred
+      (R013); thesis writeup still scopes the claim to "internal
+      modularity at the component-ABC level," not full compositional
+      algorithm construction.
+- [ ] **#8 Formal test suite** — deferred (R012, R028 merged).
+
+New follow-ups recorded during M001 (see `REQUIREMENTS.md`):
+
+- [ ] **R014** — CMA-ES reference-port migration onto the new ABCs.
+- [ ] **R015** — L-BFGS-B native inequality-constraint handling.
+
+---
+
 ## Maturity scorecard
 
 | Stated goal | Current grade | Limiting factor |

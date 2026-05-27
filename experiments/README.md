@@ -29,6 +29,7 @@ pdm run run-r            # experiments/cross_validation/des_vs_r.py
 | `declarative_benchmark.py`   | End-to-end demo of `plot_benchmark_convergence` and `plot_benchmark_boxplot` with a real CMA-ES → L-BFGS-B handoff | `plots/basic/declarative_benchmark/`    |
 | `custom_handoff.py`          | Builds a DES → L-BFGS-B handoff from scratch by subclassing `HandoffAlgorithm` (one `run_phases()` method) | `plots/basic/custom_handoff/`           |
 | `custom_algorithm.py`        | Multi-start CMA-ES via `BenchmarkAlgorithm` directly; shows the generic extension point | `plots/basic/custom_algorithm/`         |
+| `constrained_rosenbrock.py`  | 2D Rosenbrock under box-only vs. box + custom-penalty disk inequality across DES, CMA-ES, L-BFGS-B; demos the `ConstraintHandler` API end-to-end | `plots/basic/constrained_rosenbrock/`   |
 
 ## `cross_validation/` — checks against external references
 

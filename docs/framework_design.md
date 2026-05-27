@@ -232,7 +232,73 @@ re-plotting, and statistical aggregation all hinge on it.
 
 ---
 
-## Premise 8: `RunTrace` as the persistence boundary
+## Premise 8: Swappable components, structurally enforced
+
+The four moving parts inside every evolutionary optimizer — feasibility,
+population repair, single-point initialization, population initialization
+— are pluggable via four ABCs:
+
+```
+ConstraintHandler         — single-point feasibility, repair, penalty
+RepairStrategy            — population-level repair policy (evolutionary-only)
+InitialPointGenerator     — where the run starts
+PopulationInitializer     — how the initial population matrix is sampled
+```
+
+Each ABC ships a discoverability `*Type` enum with a `.build(...)`
+factory method. Two equivalent ways to construct a component:
+
+```python
+handler = BoxConstraintHandler(BoxStrategy.BOUNCE_BACK, lb, ub)
+handler = ConstraintHandlerType.BOX_BOUNCE_BACK.build(lb, ub)
+```
+
+The instance form covers parametrized cases that an enum alone can't
+express (user-supplied inequality callables, penalty coefficients).
+The enum form preserves the discoverability that the previous
+`BoundaryHandlerType` enum-as-API provided.
+
+### Why a `PopulationOptimizer` base class
+
+`ConstraintHandler` is universal — every optimizer takes one. The other
+three only make sense for population-based algorithms. The split is
+expressed by the inheritance hierarchy:
+
+```
+BaseOptimizer[LogDataType, ConfigType]      — single-point methods (L-BFGS-B)
+└── PopulationOptimizer[LogDataType, …]     — evolutionary algorithms
+        __init__ requires repair_strategy and population_initializer
+```
+
+`PopulationOptimizer.__init__` takes `repair_strategy` and
+`population_initializer` as **required** parameters with no defaults.
+Pyright/mypy reject a subclass whose `__init__` does not forward
+concrete instances — type-system enforcement instead of runtime
+"forgot to set self.repair_strategy" bugs.
+
+This mirrors the existing `BaseLogData` / `PopulationLogData` split
+at the logging layer. The two splits are independent (a single-point
+optimizer pairs `BaseOptimizer` with `BaseLogData`; an evolutionary
+optimizer pairs `PopulationOptimizer` with `PopulationLogData`), but
+the parallel structure makes the inheritance choices obvious.
+
+### Why `ConstraintHandler` and `RepairStrategy` are separate
+
+`ConstraintHandler` decides what is feasible and how to repair a
+*single point*. `RepairStrategy` decides how to apply that repair
+across an *entire population* (or whether to skip it). The split lets
+L-BFGS-B (single-point) carry a `ConstraintHandler` without paying for
+a `RepairStrategy` it would never use, and lets evolutionary
+algorithms swap population-level policy (Lamarckian vs. non-Lamarckian
+vs. clamp-only) without touching feasibility semantics.
+
+Folding the two into a single ABC would force CMA-ES to declare a
+no-op population-repair method just to satisfy the interface — a
+classic "interface segregation" violation.
+
+---
+
+## Premise 9: `RunTrace` as the persistence boundary
 
 Multi-seed benchmarks can produce gigabytes of `LogData` if every seed
 keeps the full population history. The framework distinguishes:

@@ -105,7 +105,9 @@ declivity/
 │   ├── algorithms/               DES, CMA-ES, MF-CMA-ES, L-BFGS-B
 │   ├── benchmarking/             Problem, Benchmark, RunTrace
 │   │                             + BenchmarkAlgorithm / HandoffAlgorithm ABCs
-│   ├── utils/                    Benchmark functions, boundary handlers, helpers
+│   ├── utils/                    Benchmark functions, constraint handlers,
+│   │                             repair strategies, initial-point generators,
+│   │                             population initializers, helpers
 │   ├── logging/                  BaseLogData / PopulationLogData + per-algo loggers
 │   └── plotting/                 Declarative panel system (Panel + 8 entry points)
 │
