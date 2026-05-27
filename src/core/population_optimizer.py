@@ -27,27 +27,30 @@ from src.algorithms.choices import AlgorithmChoice
 from src.core.base_optimizer import BaseOptimizer, LogDataType, ConfigType
 from src.utils.constraint_handlers import ConstraintHandler
 from src.utils.repair_strategies import RepairStrategy
+from src.utils.population_initializers import PopulationInitializer
 
 
 class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
     """Abstract base class for population-based optimisation algorithms.
 
-    Extends :class:`BaseOptimizer` with a *mandatory* ``repair_strategy``
-    attribute.  Every evolutionary optimiser (DES, CMA-ES, MF-CMA-ES) must
-    supply a concrete :class:`~src.utils.repair_strategies.RepairStrategy`
-    — either forwarded from the caller or via a sensible per-algorithm
-    default set before calling ``super().__init__``.
+    Extends :class:`BaseOptimizer` with two *mandatory* attributes:
+
+    - ``repair_strategy`` — how infeasible individuals are repaired.
+    - ``population_initializer`` — how the initial population is seeded.
+
+    Every evolutionary optimiser (DES, CMA-ES, MF-CMA-ES) must supply
+    concrete instances for both; subclasses typically provide sensible
+    per-algorithm defaults and allow callers to override.
 
     The structural enforcement means the following fails type-checking::
 
         class BadEvolutionary(PopulationOptimizer[LogDataType, ConfigType]):
             def __init__(self, func, initial_point, config):
-                # Missing repair_strategy — pyright reports an error here.
+                # Missing repair_strategy / population_initializer — pyright error.
                 super().__init__(func, initial_point, config)
 
-    Parameters common to all evolutionary algorithms (``repair_strategy``,
-    ``constraint_handler``, bounds, seed) are validated and stored once
-    here rather than being duplicated across subclasses.
+    Parameters common to all evolutionary algorithms are validated and
+    stored once here rather than being duplicated across subclasses.
     """
 
     def __init__(
@@ -56,6 +59,7 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
         initial_point: NDArray[np.float64],
         config: ConfigType,
         repair_strategy: RepairStrategy,
+        population_initializer: PopulationInitializer,
         algorithm: AlgorithmChoice = AlgorithmChoice.Unknown,
         constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
@@ -79,6 +83,13 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
             instance; subclasses typically default to a sensible strategy
             (``LamarckianRepair`` for DES, ``IdentityRepair`` for CMA-ES,
             ``ClampRepair`` for MF-CMA-ES) and allow callers to override.
+        population_initializer:
+            **Required — no default.**  Strategy used to seed the initial
+            population.  Subclasses pass a per-algorithm default
+            (``NormalPopulationInitializer`` for DES,
+            ``MeanSigmaPopulationInitializer`` for MF-CMA-ES,
+            ``IdentityPopulationInitializer`` for CMA-ES) and allow callers
+            to override.
         algorithm:
             :class:`~src.algorithms.choices.AlgorithmChoice` enum value
             forwarded to :class:`BaseOptimizer` for logging and result
@@ -102,3 +113,4 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
             seed=seed,
         )
         self.repair_strategy: RepairStrategy = repair_strategy
+        self.population_initializer: PopulationInitializer = population_initializer

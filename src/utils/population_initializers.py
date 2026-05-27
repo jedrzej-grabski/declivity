@@ -1,0 +1,182 @@
+"""
+Population initializers for evolutionary algorithms.
+
+Each concrete class encapsulates how a population is seeded at the start
+of a run, making initialization pluggable without touching algorithm logic.
+
+Hierarchy
+---------
+- ``PopulationInitializer`` — abstract base (single abstract method)
+- ``NormalPopulationInitializer`` — DES default; matches ``rng.normal(x0, (ub-lb)/scale_factor)``
+- ``MeanSigmaPopulationInitializer`` — MF-CMA-ES default; dim-first RNG layout preserved
+- ``IdentityPopulationInitializer`` — CMA-ES structural placeholder (raises NotImplementedError)
+- ``PopulationInitializerType`` — discoverability enum with ``.build()`` factory
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from enum import Enum
+
+import numpy as np
+from numpy.typing import NDArray
+
+
+class PopulationInitializer(ABC):
+    """Abstract base class for population initialization strategies.
+
+    Subclasses implement :meth:`generate_population` to produce an initial
+    population matrix of shape ``(pop_size, dim)`` for a given starting
+    point, bounds, and random state.
+    """
+
+    @abstractmethod
+    def generate_population(
+        self,
+        rng: np.random.Generator,
+        x0: NDArray[np.float64],
+        pop_size: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """Generate an initial population.
+
+        Parameters
+        ----------
+        rng:
+            NumPy random generator (caller-owned; this method may advance it).
+        x0:
+            Starting point / mean, shape ``(dim,)``.
+        pop_size:
+            Number of individuals to generate.
+        lower_bounds:
+            Per-dimension lower bounds, shape ``(dim,)``.
+        upper_bounds:
+            Per-dimension upper bounds, shape ``(dim,)``.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            Population matrix of shape ``(pop_size, dim)``.
+        """
+        ...
+
+
+class NormalPopulationInitializer(PopulationInitializer):
+    """DES-default initializer — normally distributed around *x0*.
+
+    Reproduces DES's inline code::
+
+        sigma = (ub - lb) / 6
+        population = rng.normal(loc=x0, scale=sigma, size=(pop_size, dim))
+
+    The ``scale_factor`` parameter controls the number of standard deviations
+    that span the search range; the DES default is ``6`` so that ~99.7 % of
+    the initial samples fall inside ``[lb, ub]``.
+    """
+
+    def __init__(self, scale_factor: float = 6.0) -> None:
+        self.scale_factor = scale_factor
+
+    def generate_population(
+        self,
+        rng: np.random.Generator,
+        x0: NDArray[np.float64],
+        pop_size: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        scale = (upper_bounds - lower_bounds) / self.scale_factor
+        return rng.normal(loc=x0, scale=scale, size=(pop_size, len(x0)))
+
+
+class MeanSigmaPopulationInitializer(PopulationInitializer):
+    """MF-CMA-ES-default initializer — isotropic Gaussian scaled by *sigma*.
+
+    Reproduces MF-CMA-ES's inline code::
+
+        initial_d = rng.standard_normal((dim, pop_size))   # dim-first layout
+        initial_arx = mean[:, np.newaxis] + sigma * initial_d
+
+    The population is returned transposed to ``(pop_size, dim)``; the
+    dim-first sampling order is preserved so that downstream code that
+    recovers direction vectors via ``d = (arx - mean) / sigma`` gets
+    numerically identical results.
+
+    Parameters
+    ----------
+    sigma:
+        Step-size scaling for the initial population.  Should match
+        ``MFCMAESConfig.sigma`` (default ``1.0``).
+    """
+
+    def __init__(self, sigma: float = 1.0) -> None:
+        self.sigma = sigma
+
+    def generate_population(
+        self,
+        rng: np.random.Generator,
+        x0: NDArray[np.float64],
+        pop_size: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        # Generate in (dim, pop_size) layout to match MF-CMA-ES's RNG sequence.
+        d = rng.standard_normal((len(x0), pop_size))
+        arx = x0[:, np.newaxis] + self.sigma * d
+        return arx.T  # (pop_size, dim)
+
+
+class IdentityPopulationInitializer(PopulationInitializer):
+    """CMA-ES structural placeholder — population is handled internally.
+
+    CMA-ES (via the reference port) generates its own candidates through
+    the ``CMA.ask()`` API; there is no external initial population call.
+    This class exists solely for structural enforcement: every
+    :class:`~src.core.population_optimizer.PopulationOptimizer` must carry
+    a ``population_initializer`` attribute, but CMA-ES never invokes it.
+
+    Calling :meth:`generate_population` raises :exc:`NotImplementedError`.
+    """
+
+    def generate_population(
+        self,
+        rng: np.random.Generator,
+        x0: NDArray[np.float64],
+        pop_size: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        raise NotImplementedError(
+            "CMAESOptimizer handles population generation internally via the "
+            "CMA.ask() reference API. IdentityPopulationInitializer is a "
+            "structural placeholder and must not be called directly."
+        )
+
+
+class PopulationInitializerType(Enum):
+    """Discoverability enum for built-in population initializers.
+
+    Each variant maps to a concrete :class:`PopulationInitializer` and
+    exposes a :meth:`build` factory that returns a ready-to-use instance
+    with sensible defaults.
+
+    Examples
+    --------
+    >>> initializer = PopulationInitializerType.NORMAL.build()
+    >>> population = initializer.generate_population(rng, x0, pop_size, lb, ub)
+    """
+
+    NORMAL = "normal"
+    MEAN_SIGMA = "mean_sigma"
+    IDENTITY = "identity"
+
+    def build(self) -> PopulationInitializer:
+        """Construct the corresponding :class:`PopulationInitializer` instance."""
+        match self:
+            case PopulationInitializerType.NORMAL:
+                return NormalPopulationInitializer()
+            case PopulationInitializerType.MEAN_SIGMA:
+                return MeanSigmaPopulationInitializer(sigma=1.0)
+            case PopulationInitializerType.IDENTITY:
+                return IdentityPopulationInitializer()

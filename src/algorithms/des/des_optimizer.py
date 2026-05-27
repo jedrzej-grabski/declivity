@@ -10,6 +10,7 @@ from src.utils.constraint_handlers import ConstraintHandler
 from src.utils.ring_buffer import RingBuffer
 from src.utils.helpers import delete_inf_nan, calculate_ft
 from src.utils.repair_strategies import RepairStrategy, LamarckianRepair
+from src.utils.population_initializers import PopulationInitializer, NormalPopulationInitializer
 
 from src.core.base_optimizer import OptimizationResult
 from src.core.population_optimizer import PopulationOptimizer
@@ -27,6 +28,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         initial_point: NDArray[np.float64],
         config: DESConfig | None = None,
         repair_strategy: RepairStrategy | None = None,
+        population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
@@ -42,6 +44,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             initial_point=initial_point,
             config=config,
             repair_strategy=repair_strategy or LamarckianRepair(),
+            population_initializer=population_initializer or NormalPopulationInitializer(),
             algorithm=AlgorithmChoice.DES,
             constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
@@ -80,9 +83,12 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         Ft = initFt
 
         # Create first population
-        sigma = (self.upper_bounds - self.lower_bounds) / 6
-        population = self.rng.normal(
-            loc=self.initial_point, scale=sigma, size=(lambda_, N)
+        population = self.population_initializer.generate_population(
+            rng=self.rng,
+            x0=self.initial_point,
+            pop_size=lambda_,
+            lower_bounds=self.lower_bounds,
+            upper_bounds=self.upper_bounds,
         )
 
         population = self.repair_strategy.repair_population(population, self.constraint_handler)

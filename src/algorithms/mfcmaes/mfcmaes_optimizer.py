@@ -6,6 +6,7 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 from src.utils.constraint_handlers import ConstraintHandler
 from src.utils.repair_strategies import RepairStrategy, ClampRepair
+from src.utils.population_initializers import PopulationInitializer, MeanSigmaPopulationInitializer
 from src.core.base_optimizer import OptimizationResult
 from src.core.population_optimizer import PopulationOptimizer
 from src.core.algorithm_factory import register_optimizer
@@ -26,6 +27,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         initial_point: NDArray[np.float64],
         config: MFCMAESConfig | None = None,
         repair_strategy: RepairStrategy | None = None,
+        population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
@@ -40,6 +42,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             initial_point=initial_point,
             config=config,
             repair_strategy=repair_strategy or ClampRepair(),
+            population_initializer=population_initializer or MeanSigmaPopulationInitializer(sigma=config.sigma),
             algorithm=AlgorithmChoice.MFCMAES,
             constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
@@ -143,8 +146,15 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self.midpoint_fitness = np.inf
         self.prev_midpoint_fitness = np.inf
 
-        initial_d = self.rng.standard_normal((self.config.dimensions, self.config.population_size))
-        initial_arx = self.mean[:, np.newaxis] + self.sigma * initial_d
+        initial_pop = self.population_initializer.generate_population(
+            rng=self.rng,
+            x0=self.mean,
+            pop_size=self.config.population_size,
+            lower_bounds=self.lower_bounds,
+            upper_bounds=self.upper_bounds,
+        )
+        initial_arx = initial_pop.T  # (dim, pop_size)
+        initial_d = (initial_arx - self.mean[:, np.newaxis]) / self.sigma
         initial_vx = self.repair_strategy.repair_population(initial_arx.T, self.constraint_handler).T
 
         initial_fitness = np.array(

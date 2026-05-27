@@ -1,142 +1,119 @@
+"""Pluggable initial-point generation for optimization problems.
+
+Two concrete implementations ship by default:
+- UniformInitialPointGenerator: reproduces Problem.starting_point's previous
+  rng.uniform(lower, upper, size=dim) behavior exactly (bit-identical RNG).
+- FixedInitialPointGenerator: wraps a pre-supplied NDArray and returns a copy,
+  ignoring RNG and bounds.
+
+Pick via the InitialPointGeneratorType discoverability enum:
+    ipg = InitialPointGeneratorType.UNIFORM.build()
+"""
+
+from abc import ABC, abstractmethod
 from enum import Enum
-from dataclasses import dataclass, field
+
 import numpy as np
 from numpy.typing import NDArray
 
 
+class InitialPointGenerator(ABC):
+    """ABC for single-point initial-position generators.
+
+    Subclasses must implement ``generate_point``.  The method receives
+    a seeded RNG and the full bounds arrays so implementations can be
+    both reproducible and bounds-aware without carrying state.
+    """
+
+    @abstractmethod
+    def generate_point(
+        self,
+        rng: np.random.Generator,
+        dimensions: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """Return a single starting point of shape ``(dimensions,)``.
+
+        Args:
+            rng: A seeded NumPy Generator (``np.random.default_rng(seed)``).
+            dimensions: Number of decision variables.
+            lower_bounds: Per-dimension lower bounds, shape ``(dimensions,)``.
+            upper_bounds: Per-dimension upper bounds, shape ``(dimensions,)``.
+
+        Returns:
+            Starting point array of shape ``(dimensions,)``.
+        """
+
+
+class UniformInitialPointGenerator(InitialPointGenerator):
+    """Samples uniformly at random within the box.
+
+    Calls ``rng.uniform(lower_bounds, upper_bounds, size=dimensions)``,
+    which is bit-identical to the previous Problem.starting_point()
+    implementation even when ``lower_bounds`` / ``upper_bounds`` are
+    passed as full NDArrays instead of scalars (NumPy broadcasts
+    identically for scalar vs array arguments to rng.uniform).
+    """
+
+    def generate_point(
+        self,
+        rng: np.random.Generator,
+        dimensions: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        return rng.uniform(lower_bounds, upper_bounds, size=dimensions)
+
+
+class FixedInitialPointGenerator(InitialPointGenerator):
+    """Always returns the same pre-supplied point.
+
+    Args:
+        point: The fixed starting point to return.  A copy is returned on
+               every call so callers cannot mutate the stored array.
+    """
+
+    def __init__(self, point: NDArray[np.float64]) -> None:
+        self.point = np.asarray(point, dtype=np.float64)
+
+    def generate_point(
+        self,
+        rng: np.random.Generator,
+        dimensions: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        return self.point.copy()
+
+
 class InitialPointGeneratorType(Enum):
-    """
-    Enum for different types of initial point generators.
+    """Discoverability enum for built-in InitialPointGenerator implementations.
+
+    Usage::
+
+        ipg = InitialPointGeneratorType.UNIFORM.build()
+        x0  = ipg.generate_point(rng, dim, lb, ub)
     """
 
-    NORMAL = "normal"
     UNIFORM = "uniform"
-    CUSTOM = "custom"
-    ZERO = "zero"
+    FIXED = "fixed"
 
-    def __str__(self):
-        return self.value
+    def build(self, **kwargs: object) -> InitialPointGenerator:
+        """Construct the corresponding InitialPointGenerator.
 
+        For UNIFORM no arguments are needed.
+        For FIXED pass ``point=<NDArray>``.
 
-@dataclass
-class InitialPointGenerator:
-    """
-    Base class for generating initial points for optimization algorithms.
-    """
-
-    dimensions: int
-    lower_bounds: int | float | NDArray[np.float64]
-    upper_bounds: int | float | NDArray[np.float64]
-    initial_point: NDArray[np.float64] | None = None
-    custom_std: NDArray[np.float64] | None = None
-    strategy: InitialPointGeneratorType = InitialPointGeneratorType.NORMAL
-
-    def __post_init__(self):
-        """Handle bound conversion after initialization."""
-        if isinstance(self.lower_bounds, (int, float)):
-            self.lower_bounds = np.full(self.dimensions, self.lower_bounds)
-        else:
-            self.lower_bounds = np.array(self.lower_bounds, dtype=float)
-
-        if isinstance(self.upper_bounds, (int, float)):
-            self.upper_bounds = np.full(self.dimensions, self.upper_bounds)
-        else:
-            self.upper_bounds = np.array(self.upper_bounds, dtype=float)
-
-    def generate(self) -> NDArray[np.float64]:
+        Raises:
+            ValueError: If FIXED is requested without a ``point`` argument.
         """
-        Generate an initial point.
-
-        Returns:
-            list of floats representing the initial point
-        """
-        match self.strategy:
-            case InitialPointGeneratorType.NORMAL:
-                return self._generate_normal()
-            case InitialPointGeneratorType.UNIFORM:
-                return self._generate_uniform()
-            case InitialPointGeneratorType.CUSTOM:
-                return self._generate_custom()
-            case InitialPointGeneratorType.ZERO:
-                return self._generate_zero()
-            case _:
-                raise ValueError(f"Unknown strategy: {self.strategy}")
-
-    def _generate_normal(self) -> NDArray[np.float64]:
-        """
-        Generate an initial point using a normal distribution.
-
-        This method uses the mean and standard deviation based on the bounds
-        and optionally custom mean and standard deviation if provided.
-
-        If initial_point is probided, it will be used as the mean of t he normal distribution.
-
-        Returns:
-            Array of floats sampled from a normal distribution
-        """
-        assert isinstance(self.lower_bounds, np.ndarray) and isinstance(
-            self.upper_bounds, np.ndarray
-        ), "Bounds must be numpy arrays"
-
-        if (
-            self.initial_point is not None
-            and len(self.initial_point) == self.dimensions
-        ):
-            mean = np.array(self.initial_point, dtype=np.float64)
-        else:
-            mean = np.array(
-                [
-                    (lower + upper) / 2
-                    for lower, upper in zip(self.lower_bounds, self.upper_bounds)
-                ]
-            )
-
-        if self.custom_std and len(self.custom_std) == self.dimensions:
-            std = np.array(self.custom_std, dtype=np.float64)
-        else:
-            # 6-sigma
-            std = np.array(
-                [
-                    (upper - lower) / 6
-                    for lower, upper in zip(self.lower_bounds, self.upper_bounds)
-                ]
-            )
-
-        point = np.random.normal(mean, std, size=self.dimensions)
-        return np.clip(point, self.lower_bounds, self.upper_bounds)
-
-    def _generate_uniform(self) -> NDArray[np.float64]:
-        """
-        Generate an initial point using a uniform distribution.
-
-        Returns:
-            Array of floats sampled uniformly from the bounds
-        """
-        return np.random.uniform(
-            self.lower_bounds, self.upper_bounds, size=self.dimensions
-        )
-
-    def _generate_custom(self) -> NDArray[np.float64]:
-        """
-        Generate an initial point using a custom predefined point.
-
-        Returns:
-            Array of floats from the predefined initial point
-        """
-        if self.initial_point is None:
-            raise ValueError("Custom initial point not provided")
-
-        elif len(self.initial_point) != self.dimensions:
-            raise ValueError(
-                f"Initial point length {len(self.initial_point)} does not match dimensions {self.dimensions}"
-            )
-        return np.array(self.initial_point, dtype=np.float64)
-
-    def _generate_zero(self) -> NDArray[np.float64]:
-        """
-        Generate an initial point with all zeros.
-
-        Returns:
-            Array of zeros
-        """
-        return np.zeros(self.dimensions, dtype=np.float64)
+        if self is InitialPointGeneratorType.UNIFORM:
+            return UniformInitialPointGenerator()
+        if self is InitialPointGeneratorType.FIXED:
+            if "point" not in kwargs:
+                raise ValueError(
+                    "InitialPointGeneratorType.FIXED.build() requires a 'point' keyword argument"
+                )
+            return FixedInitialPointGenerator(kwargs["point"])  # type: ignore[arg-type]
+        raise ValueError(f"Unknown InitialPointGeneratorType: {self}")
