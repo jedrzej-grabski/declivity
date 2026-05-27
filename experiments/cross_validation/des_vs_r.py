@@ -6,12 +6,8 @@ import numpy as np
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.des.config import DESConfig
 from src.core.algorithm_factory import AlgorithmFactory
-from src.utils.boundary_handlers import BoundaryHandlerType
+from src.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from src.utils.benchmark_functions import CEC17Function
-from src.utils.initial_point_generator import (
-    InitialPointGenerator,
-    InitialPointGeneratorType,
-)
 
 import warnings
 
@@ -60,7 +56,11 @@ def run_python_des_cec2017():
             config=config,
             lower_bounds=-100,
             upper_bounds=100,
-            boundary_strategy=BoundaryHandlerType.BOUNCE_BACK,
+            constraint_handler=BoxConstraintHandler(
+                BoxStrategy.BOUNCE_BACK,
+                np.full(dimensions, -100.0),
+                np.full(dimensions, 100.0),
+            ),
         )
 
         import time

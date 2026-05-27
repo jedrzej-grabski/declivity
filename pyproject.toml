@@ -13,6 +13,7 @@ license = {text = "MIT"}
 [tool.pdm.scripts]
 run-example = "python -m experiments.basic.simple_optimization"
 run-r = "python -m experiments.cross_validation.des_vs_r"
+pyright = {cmd = "npx pyright", env = {}}
 
 [tool.pdm]
 distribution = false

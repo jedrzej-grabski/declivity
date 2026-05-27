@@ -4,16 +4,20 @@ from numpy.typing import NDArray
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
-from src.core.base_optimizer import BaseOptimizer, OptimizationResult
-from src.logging.mfcmaes_logger import MFCMAESLogger
+from src.utils.constraint_handlers import ConstraintHandler
+from src.utils.repair_strategies import RepairStrategy, ClampRepair
+from src.utils.population_initializers import PopulationInitializer, MeanSigmaPopulationInitializer
+from src.core.base_optimizer import OptimizationResult
+from src.core.population_optimizer import PopulationOptimizer
+from src.core.algorithm_factory import register_optimizer
 
 if TYPE_CHECKING:
     from src.logging.mfcmaes_logger import MFCMAESLogData
 
 
 @final
-class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
+@register_optimizer(AlgorithmChoice.MFCMAES, MFCMAESConfig)
+class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
     """Matrix-Free CMA-ES optimizer implementation."""
 
     def __init__(
@@ -21,8 +25,9 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: MFCMAESConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        repair_strategy: RepairStrategy | None = None,
+        population_initializer: PopulationInitializer | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -35,15 +40,14 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
             func=func,
             initial_point=initial_point,
             config=config,
+            repair_strategy=repair_strategy or ClampRepair(),
+            population_initializer=population_initializer or MeanSigmaPopulationInitializer(sigma=config.sigma),
             algorithm=AlgorithmChoice.MFCMAES,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
         )
-
-        self.logger = MFCMAESLogger(config=self.config)
 
         self.mean = self.initial_point.copy()
         self.sigma = self.config.sigma
@@ -139,13 +143,16 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self.midpoint_fitness = np.inf
         self.prev_midpoint_fitness = np.inf
 
-        initial_d = self.rng.standard_normal((self.config.dimensions, self.config.population_size))
-        initial_arx = self.mean[:, np.newaxis] + self.sigma * initial_d
-        initial_vx = np.clip(
-            initial_arx,
-            self.boundary_handler.lower_bounds[:, np.newaxis],
-            self.boundary_handler.upper_bounds[:, np.newaxis],
+        initial_pop = self.population_initializer.generate_population(
+            rng=self.rng,
+            x0=self.mean,
+            pop_size=self.config.population_size,
+            lower_bounds=self.lower_bounds,
+            upper_bounds=self.upper_bounds,
         )
+        initial_arx = initial_pop.T  # (dim, pop_size)
+        initial_d = (initial_arx - self.mean[:, np.newaxis]) / self.sigma
+        initial_vx = self.repair_strategy.repair_population(initial_arx.T, self.constraint_handler).T
 
         initial_fitness = np.array(
             [self.evaluate(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
@@ -181,11 +188,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
             d = self._generate_population(generation)
             arx = self.mean[:, np.newaxis] + self.sigma * d
 
-            vx = np.clip(
-                arx,
-                self.boundary_handler.lower_bounds[:, np.newaxis],
-                self.boundary_handler.upper_bounds[:, np.newaxis],
-            )
+            vx = self.repair_strategy.repair_population(arx.T, self.constraint_handler).T
 
             self.constraint_violations = int(np.sum(np.any(vx != arx, axis=0)))
 

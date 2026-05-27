@@ -53,7 +53,7 @@ class InitialHessian:
             self._cholesky_factor = None
 
         elif np.isscalar(initial_hessian):
-            value = float(initial_hessian)
+            value = float(initial_hessian)  # type: ignore[arg-type]
             if value <= 0:
                 raise ValueError("Scalar initial_hessian must be positive")
             self._mode = InitialHessianMode.DIAGONAL
@@ -115,14 +115,17 @@ class InitialHessian:
         if self._mode == InitialHessianMode.DIAGONAL:
             return self._diagonal * v
         else:
+            assert self._matrix is not None
             with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
                 return self._matrix @ v
 
     def solve(self, v: NDArray[np.float64]) -> NDArray[np.float64]:
         """Compute B_0^{-1} * v."""
         if self._mode == InitialHessianMode.DIAGONAL:
+            assert self._diagonal_inverse is not None
             return self._diagonal_inverse * v
         else:
+            assert self._cholesky_factor is not None
             return cho_solve(self._cholesky_factor, v)
 
     def scale_columns(self, S: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -133,6 +136,7 @@ class InitialHessian:
         if self._mode == InitialHessianMode.DIAGONAL:
             return self._diagonal[:, np.newaxis] * S
         else:
+            assert self._matrix is not None
             with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
                 return self._matrix @ S
 
@@ -144,6 +148,7 @@ class InitialHessian:
         if self._mode == InitialHessianMode.DIAGONAL:
             return S.T @ (self._diagonal[:, np.newaxis] * S)
         else:
+            assert self._matrix is not None
             with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
                 return S.T @ (self._matrix @ S)
 
@@ -155,6 +160,7 @@ class InitialHessian:
         if self._mode == InitialHessianMode.DIAGONAL:
             return float(np.dot(self._diagonal * d, d))
         else:
+            assert self._matrix is not None
             with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
                 return float(d @ self._matrix @ d)
 

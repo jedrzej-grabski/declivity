@@ -52,6 +52,20 @@ class BenchmarkFunction:
         """
         raise NotImplementedError("Subclasses must implement this method")
 
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """
+        Compute the gradient at point x.
+
+        Not all subclasses implement this; raises NotImplementedError by default.
+
+        Args:
+            x: Input vector of length self.dimensions
+
+        Returns:
+            Gradient vector of length self.dimensions
+        """
+        raise NotImplementedError("Subclass does not implement gradient()")
+
 
 class Sphere(BenchmarkFunction):
     """

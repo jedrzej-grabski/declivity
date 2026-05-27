@@ -9,11 +9,7 @@ from src.logging.base_logger import BaseLogData, BaseLogger
 
 from src.logging.logger_factory import LoggerFactory
 from src.core.config_base import BaseConfig
-from src.utils.boundary_handlers import (
-    BoundaryHandler,
-    create_boundary_handler,
-    BoundaryHandlerType,
-)
+from src.utils.constraint_handlers import ConstraintHandler, BoxConstraintHandler, BoxStrategy
 
 LogDataType = TypeVar("LogDataType", bound=BaseLogData)
 ConfigType = TypeVar("ConfigType", bound=BaseConfig)
@@ -40,8 +36,7 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         initial_point: NDArray[np.float64],
         config: ConfigType,
         algorithm: AlgorithmChoice = AlgorithmChoice.Unknown,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -63,13 +58,11 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         self.upper_bounds = self._process_bounds(upper_bounds, self.dimensions)
         self._validate_bounds()
 
-        if boundary_handler is not None:
-            self.boundary_handler = boundary_handler
-        else:
-            boundary_strategy = boundary_strategy or BoundaryHandlerType.CLAMP
-            self.boundary_handler = create_boundary_handler(
-                boundary_strategy, self.lower_bounds, self.upper_bounds
-            )
+        self.constraint_handler: ConstraintHandler = (
+            constraint_handler
+            if constraint_handler is not None
+            else BoxConstraintHandler(BoxStrategy.CLAMP, self.lower_bounds, self.upper_bounds)
+        )
 
         self.logger: BaseLogger[LogDataType] = LoggerFactory.create_logger(
             algorithm, config
@@ -95,7 +88,7 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
     def evaluate(self, x: NDArray[np.float64]) -> float:
         """Evaluate a single solution and increment the evaluation counter."""
         self.evaluations += 1
-        return self.func(x)
+        return self.constraint_handler.penalty(x, self.func(x))
 
     def evaluate_population(
         self, population: NDArray[np.float64]

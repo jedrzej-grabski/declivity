@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from src.algorithms.choices import AlgorithmChoice
 from src.logging.base_logger import BaseLogger, BaseLogData
+from src.logging.logger_factory import register_logger
 
 
 @dataclass
@@ -59,6 +60,7 @@ class LBFGSBLogData(BaseLogData):
         }
 
 
+@register_logger(AlgorithmChoice.LBFGSB)
 class LBFGSBLogger(BaseLogger[LBFGSBLogData]):
     """Logger for L-BFGS-B algorithm."""
 

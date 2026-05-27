@@ -32,12 +32,13 @@ inherit                         :class:`Protocol` — just expose ``name``,
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Callable, Protocol, runtime_checkable
+from typing import Callable, Protocol, cast, runtime_checkable
 
 import numpy as np
 from numpy.typing import NDArray
 
 from src.algorithms.choices import AlgorithmChoice
+from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
 from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking.problem import Problem
@@ -374,7 +375,7 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             if hasattr(cmaes_config, flag):
                 setattr(cmaes_config, flag, True)
 
-        cmaes_optimizer = AlgorithmFactory.create_optimizer(
+        _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.CMAES,
             problem.function,
             x0,
@@ -383,14 +384,16 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             upper_bounds=problem.upper_bound,
             seed=seed,
         )
+        assert isinstance(_raw_cmaes_optimizer, CMAESOptimizer)
+        cmaes_optimizer = _raw_cmaes_optimizer
         cmaes_result = cmaes_optimizer.optimize()
 
         # Pull CMA-ES internal state for the handoff: the eigendecomposition
         # of the covariance and the current mean become L-BFGS-B's B_0
         # and starting point respectively.
-        eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
+        eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()  # type: ignore[union-attr]
         initial_hessian = self._initial_hessian_from_cmaes(
-            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma,
+            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma,  # type: ignore[union-attr]
         )
 
         # Phase 2: L-BFGS-B from the CMA-ES mean with the derived B_0.
@@ -407,7 +410,7 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         lbfgsb_result = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.LBFGSB,
             problem.function,
-            cmaes_optimizer.mean,
+            cmaes_optimizer.mean,  # type: ignore[union-attr]
             lbfgsb_config,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,

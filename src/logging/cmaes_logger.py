@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from src.algorithms.choices import AlgorithmChoice
 from src.logging.base_logger import BaseLogger, PopulationLogData
 from src.algorithms.cmaes.config import CMAESConfig
+from src.logging.logger_factory import register_logger
 
 
 @dataclass
@@ -98,6 +99,7 @@ class CMAESLogData(PopulationLogData):
         }
 
 
+@register_logger(AlgorithmChoice.CMAES)
 class CMAESLogger(BaseLogger[CMAESLogData]):
     """Logger for CMA-ES algorithm with proper typing."""
 

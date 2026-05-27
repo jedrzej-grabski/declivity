@@ -27,15 +27,16 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
 from src.algorithms.lbfgsb.line_search import perform_line_search
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
+from src.utils.constraint_handlers import ConstraintHandler
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
-from src.logging.lbfgsb_logger import LBFGSBLogger
+from src.core.algorithm_factory import register_optimizer
 
 if TYPE_CHECKING:
     from src.logging.lbfgsb_logger import LBFGSBLogData
 
 
 @final
+@register_optimizer(AlgorithmChoice.LBFGSB, LBFGSBConfig)
 class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     """L-BFGS-B optimizer for bound-constrained minimization.
 
@@ -51,8 +52,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: LBFGSBConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -66,14 +66,12 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             initial_point=initial_point,
             config=config,
             algorithm=AlgorithmChoice.LBFGSB,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
         )
 
-        self.logger = LBFGSBLogger(config=self.config)
         self._gradient_fn = gradient_fn
         self._finite_diff_epsilon = config._fd_eps_actual
         self._finite_diff_method = config.fd_method
@@ -610,6 +608,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         # full subblock inverse. Recompute properly.
         if B0.mode == InitialHessianMode.DENSE:
             # Extract the free-variable subblock of B_0
+            assert B0._matrix is not None
             free_idx = np.array(free_variable_indices)
             B0_free = np.zeros((num_free, num_free))
             for j1 in range(num_free):

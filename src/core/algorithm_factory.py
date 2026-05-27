@@ -1,5 +1,6 @@
-from typing import Callable, Type, Union, overload, Literal
-from typing import TYPE_CHECKING
+from __future__ import annotations
+
+from typing import Callable, Type, Union, overload, Literal, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
@@ -7,16 +8,17 @@ from src.algorithms.choices import AlgorithmChoice
 from src.core.base_optimizer import BaseOptimizer
 
 from src.core.config_base import BaseConfig
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
+from src.utils.constraint_handlers import ConstraintHandler
 
-from src.algorithms.des.des_optimizer import DESOptimizer
-from src.algorithms.des.config import DESConfig
-from src.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
-from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
-from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from src.algorithms.lbfgsb.config import LBFGSBConfig
+if TYPE_CHECKING:
+    from src.algorithms.des.des_optimizer import DESOptimizer
+    from src.algorithms.des.config import DESConfig
+    from src.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
+    from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
+    from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
+    from src.algorithms.cmaes.config import CMAESConfig
+    from src.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+    from src.algorithms.lbfgsb.config import LBFGSBConfig
 
 
 class AlgorithmFactory:
@@ -33,6 +35,8 @@ class AlgorithmFactory:
         config_class: Type[BaseConfig],
     ) -> None:
         """Register a new optimization algorithm."""
+        if name in cls._algorithms:
+            raise ImportError(f"Duplicate optimizer registration for {name}")
         cls._algorithms[name] = optimizer_class
         cls._configs[name] = config_class
 
@@ -44,8 +48,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: "DESConfig | None" = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -61,8 +64,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: BaseConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -78,8 +80,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: "MFCMAESConfig | None" = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -94,8 +95,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: "CMAESConfig | None" = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -110,8 +110,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: "LBFGSBConfig | None" = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -125,8 +124,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: BaseConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -147,8 +145,7 @@ class AlgorithmFactory:
             func=func,
             initial_point=initial_point,
             config=config,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -171,3 +168,25 @@ class AlgorithmFactory:
 
         config_class = cls._configs[algorithm]
         return config_class(dimensions=dimensions, **kwargs)
+
+
+def register_optimizer(
+    choice: AlgorithmChoice, config_class: type[BaseConfig]
+) -> Callable[[type[BaseOptimizer]], type[BaseOptimizer]]:
+    """Class decorator that registers an optimizer with the AlgorithmFactory.
+
+    Usage::
+
+        @register_optimizer(AlgorithmChoice.DES, DESConfig)
+        class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
+            ...
+
+    Raises:
+        ImportError: if the same AlgorithmChoice is registered twice.
+    """
+
+    def decorator(cls: type[BaseOptimizer]) -> type[BaseOptimizer]:
+        AlgorithmFactory.register_algorithm(choice, cls, config_class)
+        return cls
+
+    return decorator

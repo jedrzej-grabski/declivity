@@ -13,7 +13,6 @@ from src import AlgorithmFactory
 from src.algorithms.choices import AlgorithmChoice
 from src.plotting import plot_metrics
 from src.utils.benchmark_functions import Sphere
-from src.utils.boundary_handlers import BoundaryHandlerType
 
 
 plt.ioff()
@@ -51,7 +50,6 @@ def run_one(algorithm: AlgorithmChoice) -> None:
         config=config,
         lower_bounds=-50.12,
         upper_bounds=50.12,
-        boundary_strategy=BoundaryHandlerType.CLAMP,
         seed=42,
     )
     result = optimizer.optimize()

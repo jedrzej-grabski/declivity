@@ -33,8 +33,9 @@ src/
 │   ├── cmaes/             CMAESOptimizer (+ reference) + CMAESConfig
 │   ├── mfcmaes/           MFCMAESOptimizer + MFCMAESConfig
 │   └── lbfgsb/            LBFGSBOptimizer + LBFGSBConfig + InitialHessian + line_search
-├── utils/                 benchmark_functions, boundary_handlers, helpers,
-│                          ring_buffer, initial_point_generator, repair_strategy,
+├── utils/                 benchmark_functions, constraint_handlers, helpers,
+│                          ring_buffer, initial_point_generator,
+│                          population_initializers, repair_strategies,
 │                          covariance
 ├── logging/               BaseLogger + per-algorithm loggers + LoggerFactory
 │                          BaseLogData (minimal) + PopulationLogData (extends)
@@ -303,21 +304,41 @@ modes for `RotatedEllipsoid` / `RotatedFunction`:
 | `"golden"`    | Givens chain at `(k+1)·137.5°` per plane (aperiodic)    |
 | `"random"`    | QR factor of an `N(0,1)` matrix (full random orthogonal)|
 
-## Boundary handling
+## Constraint handling
+
+Constraints are injected as `ConstraintHandler` instances. The default
+when none is supplied is `BoxConstraintHandler(BoxStrategy.CLAMP, ...)`
+constructed from the optimizer's `lower_bounds` / `upper_bounds`.
 
 ```python
-from src.utils.boundary_handlers import BoundaryHandlerType
+from src.utils.constraint_handlers import (
+    BoxConstraintHandler,
+    BoxStrategy,
+    ConstraintHandlerType,
+)
+
+# Explicit instance construction:
+handler = BoxConstraintHandler(
+    BoxStrategy.BOUNCE_BACK, lower_bounds, upper_bounds
+)
+
+# Or via the discoverability enum:
+handler = ConstraintHandlerType.BOX_BOUNCE_BACK.build(
+    lower_bounds, upper_bounds
+)
 
 optimizer = AlgorithmFactory.create_optimizer(
     algorithm=AlgorithmChoice.CMAES,
     ...,
-    boundary_strategy=BoundaryHandlerType.CLAMP,        # default
-    # or BoundaryHandlerType.BOUNCE_BACK
+    constraint_handler=handler,
 )
 ```
 
-You can also pass `boundary_handler=<your BoundaryHandler instance>` for
-custom logic — see `src/utils/boundary_handlers.py`.
+Custom handlers (e.g. inequality constraints, penalty methods) subclass
+`ConstraintHandler` directly — implement `is_feasible` and
+`feasibility_distance`, then override `repair` and/or `penalty`. See
+`src/utils/constraint_handlers.py` for the ABC and
+`experiments/basic/constrained_rosenbrock.py` for a worked example.
 
 ## Logging and diagnostics
 
@@ -689,8 +710,7 @@ class AlgorithmFactory:
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: BaseConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
         upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | None = None,           # CMA-ES / handoff repeatability
@@ -808,9 +828,14 @@ class AlgorithmChoice(Enum):
     LBFGSB = "LBFGSB"
 
 
-class BoundaryHandlerType(Enum):
-    BOUNCE_BACK = "bounce_back"
+class BoxStrategy(Enum):
     CLAMP = "clamp"
+    BOUNCE_BACK = "bounce_back"
+
+
+class ConstraintHandlerType(Enum):
+    BOX_CLAMP = "box_clamp"
+    BOX_BOUNCE_BACK = "box_bounce_back"
 
 
 class LineSearchMethod(Enum):
