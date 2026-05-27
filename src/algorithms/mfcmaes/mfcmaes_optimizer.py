@@ -5,7 +5,9 @@ from numpy.typing import NDArray
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 from src.utils.constraint_handlers import ConstraintHandler
-from src.core.base_optimizer import BaseOptimizer, OptimizationResult
+from src.utils.repair_strategies import RepairStrategy, ClampRepair
+from src.core.base_optimizer import OptimizationResult
+from src.core.population_optimizer import PopulationOptimizer
 from src.core.algorithm_factory import register_optimizer
 from src.logging.mfcmaes_logger import MFCMAESLogger
 
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
 
 @final
 @register_optimizer(AlgorithmChoice.MFCMAES, MFCMAESConfig)
-class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
+class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
     """Matrix-Free CMA-ES optimizer implementation."""
 
     def __init__(
@@ -23,6 +25,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: MFCMAESConfig | None = None,
+        repair_strategy: RepairStrategy | None = None,
         constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
@@ -36,6 +39,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
             func=func,
             initial_point=initial_point,
             config=config,
+            repair_strategy=repair_strategy or ClampRepair(),
             algorithm=AlgorithmChoice.MFCMAES,
             constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
@@ -141,11 +145,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
         initial_d = self.rng.standard_normal((self.config.dimensions, self.config.population_size))
         initial_arx = self.mean[:, np.newaxis] + self.sigma * initial_d
-        initial_vx = np.clip(
-            initial_arx,
-            self.lower_bounds[:, np.newaxis],
-            self.upper_bounds[:, np.newaxis],
-        )
+        initial_vx = self.repair_strategy.repair_population(initial_arx.T, self.constraint_handler).T
 
         initial_fitness = np.array(
             [self.evaluate(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
@@ -181,11 +181,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
             d = self._generate_population(generation)
             arx = self.mean[:, np.newaxis] + self.sigma * d
 
-            vx = np.clip(
-                arx,
-                self.lower_bounds[:, np.newaxis],
-                self.upper_bounds[:, np.newaxis],
-            )
+            vx = self.repair_strategy.repair_population(arx.T, self.constraint_handler).T
 
             self.constraint_violations = int(np.sum(np.any(vx != arx, axis=0)))
 

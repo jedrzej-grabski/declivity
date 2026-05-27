@@ -9,14 +9,16 @@ from src.logging.des_logger import DESLogData
 from src.utils.constraint_handlers import ConstraintHandler
 from src.utils.ring_buffer import RingBuffer
 from src.utils.helpers import delete_inf_nan, calculate_ft
+from src.utils.repair_strategies import RepairStrategy, LamarckianRepair
 
-from src.core.base_optimizer import BaseOptimizer, OptimizationResult
+from src.core.base_optimizer import OptimizationResult
+from src.core.population_optimizer import PopulationOptimizer
 from src.core.algorithm_factory import register_optimizer
 
 
 @final
 @register_optimizer(AlgorithmChoice.DES, DESConfig)
-class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
+class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
     """Differential Evolution Strategy optimizer with proper typing."""
 
     def __init__(
@@ -24,6 +26,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: DESConfig | None = None,
+        repair_strategy: RepairStrategy | None = None,
         constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
@@ -38,6 +41,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             func=func,
             initial_point=initial_point,
             config=config,
+            repair_strategy=repair_strategy or LamarckianRepair(),
             algorithm=AlgorithmChoice.DES,
             constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
@@ -81,15 +85,11 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             loc=self.initial_point, scale=sigma, size=(lambda_, N)
         )
 
-        population = np.array(
-            [self.constraint_handler.repair(individual) for individual in population]
-        )
+        population = self.repair_strategy.repair_population(population, self.constraint_handler)
 
         cumulative_mean = (self.upper_bounds + self.lower_bounds) / 2
 
-        population_repaired = np.array(
-            [self.constraint_handler.repair(individual) for individual in population]
-        )
+        population_repaired = self.repair_strategy.repair_population(population, self.constraint_handler)
 
         if lamarckism:
             population = population_repaired
@@ -235,9 +235,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             population = delete_inf_nan(population)
 
             # Check constraints violations and repair if necessary
-            population_repaired = np.array(
-                [self.constraint_handler.repair(individual) for individual in population]
-            )
+            population_repaired = self.repair_strategy.repair_population(population, self.constraint_handler)
 
             # Count repaired individuals
             counter_repaired = int(np.any(population != population_repaired, axis=1).sum())

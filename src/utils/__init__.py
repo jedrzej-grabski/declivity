@@ -19,6 +19,13 @@ from src.utils.benchmark_functions import (
     Rosenbrock,
     CEC17Function,
 )
+from src.utils.repair_strategies import (
+    RepairStrategy,
+    IdentityRepair,
+    LamarckianRepair,
+    ClampRepair,
+    RepairStrategyType,
+)
 
 __all__ = [
     # Constraint handler surface
@@ -34,4 +41,10 @@ __all__ = [
     "Rastrigin",
     "Rosenbrock",
     "CEC17Function",
+    # Repair strategy surface
+    "RepairStrategy",
+    "IdentityRepair",
+    "LamarckianRepair",
+    "ClampRepair",
+    "RepairStrategyType",
 ]
