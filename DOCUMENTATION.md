@@ -159,9 +159,16 @@ Algorithm-specific diagnostic flag: `diag_ft` logs the per-iteration Ft trajecto
 
 ### CMA-ES
 
-Hansen's CMA-ES with rank-1 + rank-μ updates and an explicit
-eigendecomposition cache. `cmaes_optimizer.py` is the framework adapter;
-`cmaes_reference.py` is the underlying port (kept as a verification reference).
+Hansen 2016 active CMA-ES with rank-1 + rank-μ updates and an explicit
+eigendecomposition cache. `cmaes_optimizer.py` is the framework-native
+implementation — mean / σ / covariance / evolution paths / eigendecomposition
+all live on the optimizer and step through the framework's primitives
+(`ConstraintHandler`, `RepairStrategy`, `PopulationInitializer`, structured
+logger, caller-owned RNG). `cmaes_reference.py` is retained as the
+historical reference port and is only used as the oracle in
+`experiments/cross_validation/cmaes_vs_reference.py`. See
+[`docs/cmaes_framework_integration.md`](docs/cmaes_framework_integration.md)
+for the migration story and convergence-equivalence evidence.
 
 ```python
 from src.algorithms.cmaes.config import CMAESConfig
@@ -637,6 +644,15 @@ base class that fits:
 clamping, handoff metadata) so subclasses only describe the two phases.
 `BenchmarkAlgorithm` provides `trace_from_result()` for the common
 single-result → `RunTrace` packaging.
+
+`SingleAlgorithm` also exposes optional `repair_strategy` and
+`population_initializer` fields. When set, they are forwarded to the
+factory so evolutionary variants (e.g. `LamarckianRepair`,
+`NormalPopulationInitializer`) can be swapped through the standard
+benchmarking surface without subclassing `BenchmarkAlgorithm` — see
+[`experiments/cross_validation/cmaes_components.py`](experiments/cross_validation/cmaes_components.py)
+for a worked three-variant comparison. The fields are no-ops for
+L-BFGS-B since the kwargs are only emitted when non-`None`.
 
 ### Standard usage
 

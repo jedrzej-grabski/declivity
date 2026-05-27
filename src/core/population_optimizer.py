@@ -81,15 +81,14 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
             **Required — no default.**  Strategy used to repair infeasible
             population members.  Callers must pass an explicit concrete
             instance; subclasses typically default to a sensible strategy
-            (``LamarckianRepair`` for DES, ``IdentityRepair`` for CMA-ES,
-            ``ClampRepair`` for MF-CMA-ES) and allow callers to override.
+            (``LamarckianRepair`` for DES, ``ClampRepair`` for CMA-ES and
+            MF-CMA-ES) and allow callers to override.
         population_initializer:
             **Required — no default.**  Strategy used to seed the initial
             population.  Subclasses pass a per-algorithm default
             (``NormalPopulationInitializer`` for DES,
-            ``MeanSigmaPopulationInitializer`` for MF-CMA-ES,
-            ``IdentityPopulationInitializer`` for CMA-ES) and allow callers
-            to override.
+            ``MeanSigmaPopulationInitializer`` for CMA-ES and MF-CMA-ES)
+            and allow callers to override.
         algorithm:
             :class:`~src.algorithms.choices.AlgorithmChoice` enum value
             forwarded to :class:`BaseOptimizer` for logging and result

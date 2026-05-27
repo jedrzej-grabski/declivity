@@ -9,7 +9,7 @@ Hierarchy
 - ``PopulationInitializer`` — abstract base (single abstract method)
 - ``NormalPopulationInitializer`` — DES default; matches ``rng.normal(x0, (ub-lb)/scale_factor)``
 - ``MeanSigmaPopulationInitializer`` — MF-CMA-ES default; dim-first RNG layout preserved
-- ``IdentityPopulationInitializer`` — CMA-ES structural placeholder (raises NotImplementedError)
+- ``IdentityPopulationInitializer`` — explicit no-op placeholder (raises NotImplementedError)
 - ``PopulationInitializerType`` — discoverability enum with ``.build()`` factory
 """
 
@@ -128,13 +128,15 @@ class MeanSigmaPopulationInitializer(PopulationInitializer):
 
 
 class IdentityPopulationInitializer(PopulationInitializer):
-    """CMA-ES structural placeholder — population is handled internally.
+    """Explicit no-op placeholder — must not be called.
 
-    CMA-ES (via the reference port) generates its own candidates through
-    the ``CMA.ask()`` API; there is no external initial population call.
-    This class exists solely for structural enforcement: every
-    :class:`~src.core.population_optimizer.PopulationOptimizer` must carry
-    a ``population_initializer`` attribute, but CMA-ES never invokes it.
+    Use this when an optimiser generates its own candidates without going
+    through a :class:`PopulationInitializer` and the framework still
+    requires one for structural enforcement.  Currently no shipped
+    algorithm uses it as a default (CMA-ES, DES, and MF-CMA-ES all route
+    iteration-0 sampling through a real initializer), but it remains
+    available for custom optimisers that need an explicit "this seam is
+    intentionally unused" marker.
 
     Calling :meth:`generate_population` raises :exc:`NotImplementedError`.
     """
@@ -148,9 +150,9 @@ class IdentityPopulationInitializer(PopulationInitializer):
         upper_bounds: NDArray[np.float64],
     ) -> NDArray[np.float64]:
         raise NotImplementedError(
-            "CMAESOptimizer handles population generation internally via the "
-            "CMA.ask() reference API. IdentityPopulationInitializer is a "
-            "structural placeholder and must not be called directly."
+            "IdentityPopulationInitializer is a structural placeholder and "
+            "must not be called directly. The optimiser using it should "
+            "produce its own candidates without invoking this method."
         )
 
 

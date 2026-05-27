@@ -11,6 +11,10 @@ roughly chronologically and by topic.
 - [`lbfgsb_initial_hessian_design.md`](lbfgsb_initial_hessian_design.md) —
   Cost analysis and dispatch strategy for the configurable initial
   Hessian extension (None / scalar / diagonal / dense).
+- [`cmaes_framework_integration.md`](cmaes_framework_integration.md) —
+  How the framework-native CMA-ES wires `RepairStrategy` and
+  `PopulationInitializer`, what changed vs the historical reference
+  port, and the convergence-equivalence evidence.
 
 ## Study writeups
 
