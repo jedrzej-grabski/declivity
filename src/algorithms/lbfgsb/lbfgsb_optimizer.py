@@ -610,6 +610,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         # full subblock inverse. Recompute properly.
         if B0.mode == InitialHessianMode.DENSE:
             # Extract the free-variable subblock of B_0
+            assert B0._matrix is not None
             free_idx = np.array(free_variable_indices)
             B0_free = np.zeros((num_free, num_free))
             for j1 in range(num_free):

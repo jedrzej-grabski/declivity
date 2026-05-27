@@ -14,6 +14,8 @@ from pathlib import Path
 import time
 from typing import Optional
 
+import numpy as np
+from numpy.typing import NDArray
 from joblib import Parallel, delayed
 
 from src.benchmarking.algorithm_run import AlgorithmRun
@@ -59,7 +61,7 @@ class Benchmark:
         self.output_dir = Path(self.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def _build_jobs(self) -> list[tuple[AlgorithmRun, Problem, "np.ndarray", int]]:
+    def _build_jobs(self) -> list[tuple[AlgorithmRun, Problem, NDArray[np.float64], int]]:
         jobs = []
         for problem in self.problems:
             for seed in self.seeds:
@@ -162,8 +164,8 @@ class Benchmark:
             delayed(_execute_one)(algorithm, problem, x0, seed)
             for algorithm, problem, x0, seed in jobs
         )
-        for result in raw:
-            results.append(callback(result))
+        for result in (raw or []):
+            results.append(callback(result))  # type: ignore[arg-type]
         return results
 
     def _print_progress(

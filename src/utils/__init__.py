@@ -11,6 +11,8 @@ from src.utils.constraint_handlers import (
 )
 from src.utils.initial_point_generator import (
     InitialPointGenerator,
+    UniformInitialPointGenerator,
+    FixedInitialPointGenerator,
     InitialPointGeneratorType,
 )
 from src.utils.benchmark_functions import (
@@ -26,6 +28,13 @@ from src.utils.repair_strategies import (
     ClampRepair,
     RepairStrategyType,
 )
+from src.utils.population_initializers import (
+    PopulationInitializer,
+    NormalPopulationInitializer,
+    MeanSigmaPopulationInitializer,
+    IdentityPopulationInitializer,
+    PopulationInitializerType,
+)
 
 __all__ = [
     # Constraint handler surface
@@ -35,6 +44,8 @@ __all__ = [
     "ConstraintHandlerType",
     # Initial point generation
     "InitialPointGenerator",
+    "UniformInitialPointGenerator",
+    "FixedInitialPointGenerator",
     "InitialPointGeneratorType",
     # Benchmark functions
     "Sphere",
@@ -47,4 +58,10 @@ __all__ = [
     "LamarckianRepair",
     "ClampRepair",
     "RepairStrategyType",
+    # Population initializer surface
+    "PopulationInitializer",
+    "NormalPopulationInitializer",
+    "MeanSigmaPopulationInitializer",
+    "IdentityPopulationInitializer",
+    "PopulationInitializerType",
 ]

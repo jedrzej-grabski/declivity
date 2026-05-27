@@ -9,6 +9,7 @@ from src.algorithms.cmaes.cmaes_reference import CMA
 
 from src.utils.constraint_handlers import ConstraintHandler
 from src.utils.repair_strategies import RepairStrategy, IdentityRepair
+from src.utils.population_initializers import PopulationInitializer, IdentityPopulationInitializer
 
 from src.core.base_optimizer import OptimizationResult
 from src.core.population_optimizer import PopulationOptimizer
@@ -16,6 +17,7 @@ from src.core.algorithm_factory import register_optimizer
 
 if TYPE_CHECKING:
     from src.logging.cmaes_logger import CMAESLogData
+    from src.utils.covariance import CovarianceMatrix
 
 
 @final
@@ -29,6 +31,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         initial_point: NDArray[np.float64],
         config: CMAESConfig | None = None,
         repair_strategy: RepairStrategy | None = None,
+        population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
@@ -44,6 +47,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             initial_point=initial_point,
             config=config,
             repair_strategy=repair_strategy or IdentityRepair(),
+            population_initializer=population_initializer or IdentityPopulationInitializer(),
             algorithm=AlgorithmChoice.CMAES,
             constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,

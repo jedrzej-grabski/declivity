@@ -152,9 +152,11 @@ def plot_benchmark_convergence(
                 trace for trace in algorithm_traces if trace.handoff_eval is not None
             ]
             if handoff_traces:
-                median_eval = int(
-                    np.median([trace.handoff_eval for trace in handoff_traces])
-                )
+                handoff_evals = [
+                    e for trace in handoff_traces
+                    if (e := trace.handoff_eval) is not None
+                ]
+                median_eval = int(np.median(handoff_evals))
                 handoff_iters = [
                     trace.handoff_iter
                     for trace in handoff_traces
