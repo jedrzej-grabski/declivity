@@ -3,10 +3,11 @@ Utility modules for the optimization package.
 """
 
 # Import core utilities without circular dependencies
-from src.utils.boundary_handlers import (
-    BoundaryHandler,
-    BoundaryHandlerType,
-    create_boundary_handler,
+from src.utils.constraint_handlers import (
+    BoxStrategy,
+    ConstraintHandler,
+    BoxConstraintHandler,
+    ConstraintHandlerType,
 )
 from src.utils.initial_point_generator import (
     InitialPointGenerator,
@@ -20,11 +21,15 @@ from src.utils.benchmark_functions import (
 )
 
 __all__ = [
-    "BoundaryHandler",
-    "BoundaryHandlerType",
-    "create_boundary_handler",
+    # Constraint handler surface
+    "BoxStrategy",
+    "ConstraintHandler",
+    "BoxConstraintHandler",
+    "ConstraintHandlerType",
+    # Initial point generation
     "InitialPointGenerator",
     "InitialPointGeneratorType",
+    # Benchmark functions
     "Sphere",
     "Rastrigin",
     "Rosenbrock",

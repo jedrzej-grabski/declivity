@@ -4,8 +4,9 @@ from numpy.typing import NDArray
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
+from src.utils.constraint_handlers import ConstraintHandler
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
+from src.core.algorithm_factory import register_optimizer
 from src.logging.mfcmaes_logger import MFCMAESLogger
 
 if TYPE_CHECKING:
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 
 
 @final
+@register_optimizer(AlgorithmChoice.MFCMAES, MFCMAESConfig)
 class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
     """Matrix-Free CMA-ES optimizer implementation."""
 
@@ -21,8 +23,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: MFCMAESConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -36,8 +37,7 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
             initial_point=initial_point,
             config=config,
             algorithm=AlgorithmChoice.MFCMAES,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -143,8 +143,8 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
         initial_arx = self.mean[:, np.newaxis] + self.sigma * initial_d
         initial_vx = np.clip(
             initial_arx,
-            self.boundary_handler.lower_bounds[:, np.newaxis],
-            self.boundary_handler.upper_bounds[:, np.newaxis],
+            self.lower_bounds[:, np.newaxis],
+            self.upper_bounds[:, np.newaxis],
         )
 
         initial_fitness = np.array(
@@ -183,8 +183,8 @@ class MFCMAESOptimizer(BaseOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
             vx = np.clip(
                 arx,
-                self.boundary_handler.lower_bounds[:, np.newaxis],
-                self.boundary_handler.upper_bounds[:, np.newaxis],
+                self.lower_bounds[:, np.newaxis],
+                self.upper_bounds[:, np.newaxis],
             )
 
             self.constraint_violations = int(np.sum(np.any(vx != arx, axis=0)))

@@ -7,15 +7,17 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.cmaes.cmaes_reference import CMA
 
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
+from src.utils.constraint_handlers import ConstraintHandler
 
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
+from src.core.algorithm_factory import register_optimizer
 
 if TYPE_CHECKING:
     from src.logging.cmaes_logger import CMAESLogData
 
 
 @final
+@register_optimizer(AlgorithmChoice.CMAES, CMAESConfig)
 class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
     """CMA-ES optimizer wrapper around reference implementation with proper logging."""
 
@@ -24,8 +26,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: CMAESConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -40,8 +41,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
             initial_point=initial_point,
             config=config,
             algorithm=AlgorithmChoice.CMAES,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -49,15 +49,13 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
 
         # Auto-calculate sigma if not set
         if self.config.sigma == 0.0:
-            bounds_range = (
-                self.boundary_handler.upper_bounds - self.boundary_handler.lower_bounds
-            )
+            bounds_range = self.upper_bounds - self.lower_bounds
             self.config.sigma = float(np.mean(bounds_range) / 5.0)
 
         # Prepare bounds in the format expected by reference implementation
         # bounds should be (n_dim, 2) where bounds[:, 0] is lower, bounds[:, 1] is upper
         bounds_array = np.column_stack(
-            (self.boundary_handler.lower_bounds, self.boundary_handler.upper_bounds)
+            (self.lower_bounds, self.upper_bounds)
         )
 
         # Initialize the reference CMA-ES implementation, sharing the rng
@@ -117,7 +115,7 @@ class CMAESOptimizer(BaseOptimizer["CMAESLogData", CMAESConfig]):
             median_fitness = float(np.median(fitness_array))
 
             # Evaluate mean
-            mean_repaired = self.boundary_handler.repair(self._cma.mean)
+            mean_repaired = self.constraint_handler.repair(self._cma.mean)
             mean_fitness_value = self.evaluate(mean_repaired)
 
             # Get internal state for logging

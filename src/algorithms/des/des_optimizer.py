@@ -6,14 +6,16 @@ from scipy.special import gamma
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.des.config import DESConfig
 from src.logging.des_logger import DESLogData
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
+from src.utils.constraint_handlers import ConstraintHandler
 from src.utils.ring_buffer import RingBuffer
 from src.utils.helpers import delete_inf_nan, calculate_ft
 
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
+from src.core.algorithm_factory import register_optimizer
 
 
 @final
+@register_optimizer(AlgorithmChoice.DES, DESConfig)
 class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
     """Differential Evolution Strategy optimizer with proper typing."""
 
@@ -22,8 +24,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: DESConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -38,8 +39,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             initial_point=initial_point,
             config=config,
             algorithm=AlgorithmChoice.DES,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -82,13 +82,13 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
         )
 
         population = np.array(
-            [self.boundary_handler.repair(individual) for individual in population]
+            [self.constraint_handler.repair(individual) for individual in population]
         )
 
         cumulative_mean = (self.upper_bounds + self.lower_bounds) / 2
 
         population_repaired = np.array(
-            [self.boundary_handler.repair(individual) for individual in population]
+            [self.constraint_handler.repair(individual) for individual in population]
         )
 
         if lamarckism:
@@ -236,7 +236,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
 
             # Check constraints violations and repair if necessary
             population_repaired = np.array(
-                [self.boundary_handler.repair(individual) for individual in population]
+                [self.constraint_handler.repair(individual) for individual in population]
             )
 
             # Count repaired individuals
@@ -273,7 +273,7 @@ class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
 
             # Check if the mean point is better
             cumulative_mean = 0.8 * cumulative_mean + 0.2 * new_mean
-            cumulative_mean_repaired = self.boundary_handler.repair(cumulative_mean)
+            cumulative_mean_repaired = self.constraint_handler.repair(cumulative_mean)
             mean_fitness = self.evaluate(cumulative_mean_repaired)
 
             if mean_fitness < best_fitness:

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from src.algorithms.choices import AlgorithmChoice
 from src.logging.base_logger import BaseLogger, PopulationLogData
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
+from src.logging.logger_factory import register_logger
 
 
 @dataclass
@@ -60,6 +61,7 @@ class MFCMAESLogData(PopulationLogData):
         }
 
 
+@register_logger(AlgorithmChoice.MFCMAES)
 class MFCMAESLogger(BaseLogger[MFCMAESLogData]):
     """Logger for MF-CMA-ES algorithm."""
 

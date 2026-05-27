@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from src.algorithms.choices import AlgorithmChoice
 from src.logging.base_logger import BaseLogger, PopulationLogData
 from src.algorithms.des.config import DESConfig
+from src.logging.logger_factory import register_logger
 
 
 @dataclass
@@ -30,6 +31,7 @@ class DESLogData(PopulationLogData):
         }
 
 
+@register_logger(AlgorithmChoice.DES)
 class DESLogger(BaseLogger[DESLogData]):
     """Logger for DES algorithm with proper typing."""
 

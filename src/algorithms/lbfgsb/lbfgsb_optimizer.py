@@ -27,8 +27,9 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
 from src.algorithms.lbfgsb.line_search import perform_line_search
-from src.utils.boundary_handlers import BoundaryHandler, BoundaryHandlerType
+from src.utils.constraint_handlers import ConstraintHandler
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
+from src.core.algorithm_factory import register_optimizer
 from src.logging.lbfgsb_logger import LBFGSBLogger
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
 
 
 @final
+@register_optimizer(AlgorithmChoice.LBFGSB, LBFGSBConfig)
 class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     """L-BFGS-B optimizer for bound-constrained minimization.
 
@@ -51,8 +53,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
         config: LBFGSBConfig | None = None,
-        boundary_handler: BoundaryHandler | None = None,
-        boundary_strategy: BoundaryHandlerType | None = None,
+        constraint_handler: ConstraintHandler | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -66,8 +67,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             initial_point=initial_point,
             config=config,
             algorithm=AlgorithmChoice.LBFGSB,
-            boundary_handler=boundary_handler,
-            boundary_strategy=boundary_strategy,
+            constraint_handler=constraint_handler,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
