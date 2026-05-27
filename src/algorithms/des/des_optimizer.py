@@ -91,8 +91,6 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             upper_bounds=self.upper_bounds,
         )
 
-        population = self.repair_strategy.repair_population(population, self.constraint_handler)
-
         cumulative_mean = (self.upper_bounds + self.lower_bounds) / 2
 
         population_repaired = self.repair_strategy.repair_population(population, self.constraint_handler)

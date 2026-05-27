@@ -10,7 +10,6 @@ from src.utils.population_initializers import PopulationInitializer, MeanSigmaPo
 from src.core.base_optimizer import OptimizationResult
 from src.core.population_optimizer import PopulationOptimizer
 from src.core.algorithm_factory import register_optimizer
-from src.logging.mfcmaes_logger import MFCMAESLogger
 
 if TYPE_CHECKING:
     from src.logging.mfcmaes_logger import MFCMAESLogData
@@ -49,8 +48,6 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             upper_bounds=upper_bounds,
             seed=seed,
         )
-
-        self.logger = MFCMAESLogger(config=self.config)
 
         self.mean = self.initial_point.copy()
         self.sigma = self.config.sigma

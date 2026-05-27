@@ -30,7 +30,6 @@ from src.algorithms.lbfgsb.line_search import perform_line_search
 from src.utils.constraint_handlers import ConstraintHandler
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
 from src.core.algorithm_factory import register_optimizer
-from src.logging.lbfgsb_logger import LBFGSBLogger
 
 if TYPE_CHECKING:
     from src.logging.lbfgsb_logger import LBFGSBLogData
@@ -73,7 +72,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             seed=seed,
         )
 
-        self.logger = LBFGSBLogger(config=self.config)
         self._gradient_fn = gradient_fn
         self._finite_diff_epsilon = config._fd_eps_actual
         self._finite_diff_method = config.fd_method
