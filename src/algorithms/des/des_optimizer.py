@@ -58,18 +58,18 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         N = self.dimensions
         budget = self.config.budget
         lambda_ = self.config.population_size
-        pathLength = self.config.path_length
-        initFt = self.config.init_ft
-        histSize = self.config.history
-        c_Ft = self.config.c_ft
+        path_length = self.config.path_length
+        init_ft = self.config.init_ft
+        hist_size = self.config.history
+        c_ft = self.config.c_ft
         cp = self.config.cp
         max_iter = self.config.maxit
-        lamarckism = self.config.lamarckian
+        lamarckian = self.config.lamarckian
         weights = self.config.weights
         mu = self.config.mu
-        mueff = self.config.mu_eff
-        ccum = self.config.c_cum
-        pathRatio = self.config.path_ratio
+        mu_eff = self.config.mu_eff
+        c_cum = self.config.c_cum
+        path_ratio = self.config.path_ratio
 
         self.evaluations = 0
         best_fitness = float("inf")
@@ -80,7 +80,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
 
         hist_head = 0
         history: list[NDArray[np.float64]] = []
-        Ft = initFt
+        ft = init_ft
 
         # Create first population
         population = self.population_initializer.generate_population(
@@ -95,12 +95,12 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
 
         population_repaired = self.repair_strategy.repair_population(population, self.constraint_handler)
 
-        if lamarckism:
+        if lamarckian:
             population = population_repaired
 
         # Evaluate initial population
         fitness = self.evaluate_population(
-            population if lamarckism else population_repaired
+            population if lamarckian else population_repaired
         )
 
         old_mean = np.zeros(N)
@@ -120,15 +120,15 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         counter_repaired = 0
 
         # Allocate buffers
-        steps = RingBuffer(pathLength * N)
-        d_mean = np.zeros((N, histSize))
-        ft_history = np.zeros(histSize)
-        pc = np.zeros((N, histSize))
+        steps = RingBuffer(path_length * N)
+        d_mean = np.zeros((N, hist_size))
+        ft_history = np.zeros(hist_size)
+        pc = np.zeros((N, hist_size))
 
         # Main optimization loop
         while self.evaluations < budget:
             iter_count += 1
-            hist_head = (hist_head + 1) % histSize
+            hist_head = (hist_head + 1) % hist_size
 
             mu = math.floor(lambda_ / 2)
             weights = np.log(mu + 1) - np.log(np.arange(1, mu + 1))
@@ -137,7 +137,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             self.logger.log_iteration(
                 iteration=iter_count,
                 evaluations=self.evaluations,
-                ft=Ft,
+                ft=ft,
                 fitness=fitness,
                 population=population if self.config.diag_pop else None,
                 best_fitness=best_fitness,
@@ -158,10 +158,10 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             selected_points = population[selection]
 
             # Save selected population in history buffer
-            if len(history) < histSize:
-                history.append(selected_points.T * hist_norm / Ft)
+            if len(history) < hist_size:
+                history.append(selected_points.T * hist_norm / ft)
             else:
-                history[hist_head] = selected_points.T * hist_norm / Ft
+                history[hist_head] = selected_points.T * hist_norm / ft
 
             # Calculate weighted mean of selected points
             old_mean = new_mean.copy()
@@ -169,30 +169,30 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
 
             # Write to buffers
             mu_mean = new_mean
-            d_mean[:, hist_head] = (mu_mean - pop_mean) / Ft
+            d_mean[:, hist_head] = (mu_mean - pop_mean) / ft
 
-            step = (new_mean - old_mean) / Ft
+            step = (new_mean - old_mean) / ft
 
             # Update buffer of steps
             steps.push_all(step)
 
-            # Update Ft
-            ft_history[hist_head] = Ft
+            # Update ft
+            ft_history[hist_head] = ft
             if (
-                iter_count > pathLength - 1
+                iter_count > path_length - 1
                 and not np.any(step == 0)
                 and counter_repaired < 0.1 * lambda_
             ):
-                Ft = calculate_ft(
+                ft = calculate_ft(
                     steps.peek(),
                     N,
                     lambda_,
-                    pathLength,
-                    Ft,
-                    c_Ft,
-                    pathRatio,
+                    path_length,
+                    ft,
+                    c_ft,
+                    path_ratio,
                     chi_N,
-                    mueff,
+                    mu_eff,
                 )
 
             # Update parameters
@@ -204,7 +204,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 ) * step
 
             # Sample from history
-            limit = min(iter_count, histSize)
+            limit = min(iter_count, hist_size)
             history_sample = self.rng.choice(limit, lambda_, replace=True)
             history_sample2 = self.rng.choice(limit, lambda_, replace=True)
 
@@ -223,14 +223,14 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 x2 = history[hist_idx][:, x2_sample[i]]
 
                 diffs[:, i] = (
-                    np.sqrt(ccum) * (x1 - x2 + self.rng.standard_normal() * d_mean[:, hist_idx])
-                    + np.sqrt(1 - ccum) * self.rng.standard_normal() * pc[:, history_sample2[i]]
+                    np.sqrt(c_cum) * (x1 - x2 + self.rng.standard_normal() * d_mean[:, hist_idx])
+                    + np.sqrt(1 - c_cum) * self.rng.standard_normal() * pc[:, history_sample2[i]]
                 )
 
             # Generate new population
             population = (
                 new_mean.reshape(1, -1)
-                + Ft * diffs.T
+                + ft * diffs.T
                 + (1 - 2 / N**2) ** (iter_count / 2)
                 * self.rng.standard_normal(size=(lambda_, N))
                 / chi_N
@@ -244,14 +244,14 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             # Count repaired individuals
             counter_repaired = int(np.any(population != population_repaired, axis=1).sum())
 
-            if lamarckism:
+            if lamarckian:
                 population = population_repaired
 
             pop_mean = np.mean(population, axis=0)
 
             # Evaluate population
             fitness = self.evaluate_population(
-                population if lamarckism else population_repaired
+                population if lamarckian else population_repaired
             )
 
             # Check for best fitness
@@ -260,7 +260,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 best_fitness = fitness[best_idx]
                 best_solution = (
                     population_repaired[best_idx]
-                    if not lamarckism
+                    if not lamarckian
                     else population[best_idx]
                 )
 
