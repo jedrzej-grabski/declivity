@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Type, Union, overload, Literal, TYPE_CHECKING
+from typing import Callable, Type, TypeVar, Union, overload, Literal, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
@@ -170,9 +170,12 @@ class AlgorithmFactory:
         return config_class(dimensions=dimensions, **kwargs)
 
 
+_OptimizerT = TypeVar("_OptimizerT", bound=BaseOptimizer)
+
+
 def register_optimizer(
     choice: AlgorithmChoice, config_class: type[BaseConfig]
-) -> Callable[[type[BaseOptimizer]], type[BaseOptimizer]]:
+) -> Callable[[type[_OptimizerT]], type[_OptimizerT]]:
     """Class decorator that registers an optimizer with the AlgorithmFactory.
 
     Usage::
@@ -181,11 +184,16 @@ def register_optimizer(
         class DESOptimizer(BaseOptimizer[DESLogData, DESConfig]):
             ...
 
+    The TypeVar preserves the decorated class's specific type, so
+    ``CMAESOptimizer`` and friends retain their full constructor
+    signature (including ``repair_strategy`` / ``population_initializer``)
+    rather than being narrowed to ``type[BaseOptimizer]``.
+
     Raises:
         ImportError: if the same AlgorithmChoice is registered twice.
     """
 
-    def decorator(cls: type[BaseOptimizer]) -> type[BaseOptimizer]:
+    def decorator(cls: type[_OptimizerT]) -> type[_OptimizerT]:
         AlgorithmFactory.register_algorithm(choice, cls, config_class)
         return cls
 

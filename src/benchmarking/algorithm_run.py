@@ -46,6 +46,8 @@ from src.benchmarking.run_trace import RunTrace
 from src.core.algorithm_factory import AlgorithmFactory
 from src.core.base_optimizer import OptimizationResult
 from src.core.config_base import BaseConfig
+from src.utils.population_initializers import PopulationInitializer
+from src.utils.repair_strategies import RepairStrategy
 
 
 _EIGENVALUE_FLOOR = 1e-30
@@ -170,6 +172,13 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     Concrete — instantiate directly with the optimizer choice and a
     config factory; no subclass needed unless you want to override
     :py:meth:`run`.
+
+    For evolutionary algorithms (DES, CMA-ES, MF-CMA-ES) you can
+    optionally pin a :class:`RepairStrategy` and / or
+    :class:`PopulationInitializer` to override the per-algorithm
+    defaults. These are forwarded to the factory only when set, so
+    single-point algorithms like L-BFGS-B (which do not accept them) are
+    unaffected.
     """
 
     name: str
@@ -180,6 +189,20 @@ class SingleAlgorithm(BenchmarkAlgorithm):
 
     extra_diagnostics: tuple[str, ...] = ()
     """Names of additional diag_* flags to enable on the config."""
+
+    repair_strategy: RepairStrategy | None = None
+    """Population-level repair policy. Only applicable to evolutionary
+    algorithms; ignored for L-BFGS-B. ``None`` keeps the optimizer's
+    own default (``LamarckianRepair`` for DES, ``ClampRepair`` for
+    CMA-ES and MF-CMA-ES)."""
+
+    population_initializer: PopulationInitializer | None = None
+    """How the iteration-0 population is seeded. Only applicable to
+    evolutionary algorithms; ignored for L-BFGS-B. ``None`` keeps the
+    optimizer's own default
+    (``NormalPopulationInitializer`` for DES,
+    ``MeanSigmaPopulationInitializer(sigma=config.sigma)`` for CMA-ES
+    and MF-CMA-ES)."""
 
     def run(
         self,
@@ -195,6 +218,10 @@ class SingleAlgorithm(BenchmarkAlgorithm):
         kwargs: dict = {}
         if problem.gradient is not None and self.algorithm == AlgorithmChoice.LBFGSB:
             kwargs["gradient_fn"] = problem.gradient
+        if self.repair_strategy is not None:
+            kwargs["repair_strategy"] = self.repair_strategy
+        if self.population_initializer is not None:
+            kwargs["population_initializer"] = self.population_initializer
 
         result = AlgorithmFactory.create_optimizer(
             self.algorithm,

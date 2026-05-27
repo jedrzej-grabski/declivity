@@ -394,8 +394,14 @@ A few things were deliberately left as deferred work:
 - **`MultiPhaseAlgorithm` as an explicit base class.** A three-phase
   algorithm today implements `BenchmarkAlgorithm.run()` directly. If
   three-phase becomes common, extract a base class then, not now.
-- **Removing the `cmaes_reference.py` port.** It's still used as a
-  verification reference against `cmaes_optimizer.py`. Keep it.
+- **Removing the `cmaes_reference.py` port.** It is kept solely as the
+  oracle in `experiments/cross_validation/cmaes_vs_reference.py`. The
+  framework CMA-ES (`cmaes_optimizer.py`) is now a clean Hansen-2016
+  implementation that uses `RepairStrategy` + `PopulationInitializer`
+  through the standard `PopulationOptimizer` ABC, so the two
+  implementations are no longer bit-equivalent — see
+  `docs/cmaes_framework_integration.md` for the convergence-equivalence
+  evidence.
 
 The point of leaving them: **abstractions extracted before you have
 the duplication are usually wrong**.
