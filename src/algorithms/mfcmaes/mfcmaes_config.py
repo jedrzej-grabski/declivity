@@ -7,8 +7,14 @@ from src.core.config_base import BaseConfig
 
 
 def default_population_size(dimensions: int) -> int:
-    """Default population size based on dimensions."""
-    return 4 + math.floor(3 * math.log(dimensions))
+    """Default population size based on dimensions.
+
+    Matches the R reference (``nm-cma-es-vectorized.R`` line 48):
+    ``lambda = 4*N``.  This differs from the textbook Hansen recipe
+    ``4 + floor(3*log(N))`` — the R reference's larger default is what
+    the MF-CMA-ES paper validates on.
+    """
+    return 4 * dimensions
 
 
 def default_budget(dimensions: int) -> int:
@@ -27,21 +33,18 @@ def default_window_size(dimensions: int) -> int:
 
 
 def compute_weights(population_size: int, mu: int) -> tuple[NDArray[np.float64], float]:
+    """Compute recombination weights for MF-CMA-ES.
+
+    Matches the R reference (``nm-cma-es-vectorized.R`` line 51):
+    ``weights = rep(1, mu)`` normalised to sum to one, giving uniform
+    ``1/mu`` weights and ``mu_eff = mu``.  The textbook log-decreasing
+    weights ``log(mu + 0.5) - log(i + 1)`` are *not* used here — the
+    R reference deliberately uses uniform weighting and several of the
+    downstream constants (``cc``, ``damps``) are calibrated for that
+    choice.
     """
-    Compute recombination weights for MF-CMA-ES.
-    Returns: (weights, mu_eff)
-    """
-    # Create weights_prime for mu individuals
-    weights_prime = np.array(
-        [max(0, math.log(mu + 0.5) - math.log(i + 1)) for i in range(mu)]
-    )
-
-    # Normalize to sum to 1
-    weights = weights_prime / np.sum(weights_prime)
-
-    # Calculate mu_eff
-    mu_eff = 1.0 / np.sum(weights**2)
-
+    weights = np.ones(mu, dtype=np.float64) / mu
+    mu_eff = (weights.sum() ** 2) / np.sum(weights ** 2)
     return weights, mu_eff
 
 
@@ -97,6 +100,9 @@ class MFCMAESConfig(BaseConfig):
     cc: float = field(init=False)
     """Learning rate for cumulation for the rank-one update"""
 
+    cs: float = field(init=False)
+    """Damping-related learning rate (``(mueff+2)/(N+mueff+3)`` in R)."""
+
     c_cov: float = field(init=False)
     """Learning rate for covariance matrix adaptation"""
 
@@ -106,8 +112,15 @@ class MFCMAESConfig(BaseConfig):
     c_mu: float = field(init=False)
     """Learning rate for rank-mu update component"""
 
+    damps: float = field(init=False)
+    """Damping factor used by the flatland-escape sigma bump."""
+
     maxit: int = field(init=False)
     """Maximum iterations"""
+
+    do_flatland_escape: bool = True
+    """Whether to bump ``sigma`` when the population collapses onto a
+    flat fitness plateau.  Matches R's ``do_flatland_escape`` default."""
 
     def __post_init__(self) -> None:
         """Calculate derived parameters that depend on other params"""
@@ -121,31 +134,37 @@ class MFCMAESConfig(BaseConfig):
         self._recalculate_derived_params()
 
     def _recalculate_derived_params(self) -> None:
-        """Recalculate all derived parameters based on current population_size."""
+        """Recalculate derived parameters using the R reference formulas
+        (``nm-cma-es-vectorized.R`` lines 54–68)."""
         self.tolx = 1e-12 * self.sigma
 
         self.mu = default_mu(self.population_size)
 
-        # Compute weights and mu_eff
+        # Compute weights and mu_eff (uniform weights, mu_eff == mu).
         self.weights, self.mu_eff = compute_weights(self.population_size, self.mu)
 
         n_dim = self.dimensions
 
-        # Learning rate for cumulation for the rank-one update
-        self.cc = (4 + self.mu_eff / n_dim) / (n_dim + 4 + 2 * self.mu_eff / n_dim)
+        # Path cumulation rate — R: ``cc = 4/(N+4)``.
+        self.cs = (self.mu_eff + 2.0) / (n_dim + self.mu_eff + 3.0)
+        self.cc = 4.0 / (n_dim + 4.0)
 
-        # Covariance matrix adaptation learning rates
-        alpha_cov = 2.0
-        self.c_1 = alpha_cov / ((n_dim + 1.3) ** 2 + self.mu_eff)
-        self.c_mu = min(
-            1 - self.c_1,
-            alpha_cov
-            * (self.mu_eff - 2 + 1 / self.mu_eff)
-            / ((n_dim + 2) ** 2 + alpha_cov * self.mu_eff / 2),
+        # Covariance update split — R: derive ``ccov`` first, then split
+        # into rank-1 and rank-mu shares.  ``mucov`` is just ``mu_eff``.
+        mucov = self.mu_eff
+        c_cov = (
+            (1.0 / mucov) * 2.0 / (n_dim + 1.4) ** 2
+            + (1.0 - 1.0 / mucov)
+            * ((2.0 * mucov - 1.0) / ((n_dim + 2.0) ** 2 + 2.0 * mucov))
         )
+        self.c_cov = c_cov
+        self.c_mu = c_cov * (1.0 - 1.0 / mucov)
+        self.c_1 = c_cov - self.c_mu
 
-        # Total covariance adaptation rate
-        self.c_cov = self.c_1 + self.c_mu
+        # Damping factor (used by flatland-escape only).
+        self.damps = 1.0 + 2.0 * max(
+            0.0, math.sqrt((self.mu_eff - 1.0) / (n_dim + 1.0)) - 1.0
+        ) + self.cs
 
         self.maxit = math.floor(self.budget / self.population_size)
 

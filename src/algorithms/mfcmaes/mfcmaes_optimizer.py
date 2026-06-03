@@ -1,4 +1,6 @@
+import math
 from typing import Callable, final, Union, TYPE_CHECKING
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -105,13 +107,19 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         d_relevant = self.d_history[:, :relevant_d_size]
 
         weighted_d = d_relevant * (decay_rep[:relevant_d_size] * w[:relevant_d_size])
-        rank_mu = np.sqrt(self.config.c_mu) * (weighted_d @ r_mu[:relevant_d_size, :])
 
-        r_1 = self.rng.standard_normal((window_size, self.config.population_size))
-        p_relevant = self.p_history[:, :window_size]
-        rank_1 = np.sqrt(self.config.c_1) * (
-            p_relevant @ (r_1 * decay[:window_size, np.newaxis])
-        )
+        # Late-iter decay-table underflow makes the matmul multiply
+        # denormalised numbers — numpy reports spurious "divide by
+        # zero" / "invalid" / "overflow" warnings even though the
+        # accumulated result is mathematically well-defined.
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
+            rank_mu = np.sqrt(self.config.c_mu) * (weighted_d @ r_mu[:relevant_d_size, :])
+
+            r_1 = self.rng.standard_normal((window_size, self.config.population_size))
+            p_relevant = self.p_history[:, :window_size]
+            rank_1 = np.sqrt(self.config.c_1) * (
+                p_relevant @ (r_1 * decay[:window_size, np.newaxis])
+            )
 
         if generation <= self.config.window:
             last_decay = self.decay_table[generation - 1]
@@ -154,9 +162,18 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         initial_d = (initial_arx - self.mean[:, np.newaxis]) / self.sigma
         initial_vx = self.repair_strategy.repair_population(initial_arx.T, self.constraint_handler).T
 
-        initial_fitness = np.array(
+        initial_pen = 1.0 + np.sum((initial_arx - initial_vx) ** 2, axis=0)
+        initial_pen = np.where(
+            np.isfinite(initial_pen), initial_pen, np.finfo(np.float64).max / 2.0
+        )
+        initial_raw = np.array(
             [self.evaluate(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
         )
+        # ``arfitness = raw * pen`` (R lines 163, 179).  Penalty is the
+        # quadratic distance from the unclamped sample to its repaired
+        # image, which is zero for in-bounds points and grows
+        # quadratically with the violation otherwise.
+        initial_fitness = initial_raw * initial_pen
 
         arindex = np.argsort(initial_fitness)
         aripop = arindex[: self.config.mu]
@@ -165,8 +182,11 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         d_start, d_end = self._d_range(1)
         self.d_history[:, d_start:d_end] = initial_seld
 
+        # R: ``xmean <- drop(selx %*% weights)`` where ``selx = arx[, aripop]``.
+        # ``arx = xmean + sigma * d``, so ``selx @ weights = xmean + sigma * dmean``.
+        # The path cumulation update uses the un-scaled ``dmean`` directly.
         dmean = initial_seld @ self.config.weights
-        self.mean = self.mean + dmean
+        self.mean = self.mean + self.sigma * dmean
         self.pc = (
             np.sqrt(self.config.cc * (2 - self.config.cc) * self.config.mu_eff) * dmean
         )
@@ -174,10 +194,18 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         p_idx = self._p_index(1)
         self.p_history[:, p_idx] = self.pc
 
-        best_idx = np.argmin(initial_fitness)
-        if initial_fitness[best_idx] < best_fitness:
-            best_fitness = initial_fitness[best_idx]
-            best_solution = initial_vx[:, best_idx].copy()
+        # Track the best raw-fitness individual among in-bounds samples
+        # only — R lines 181–186.  Penalised fitness wins selection, but
+        # the reported ``best_fit`` is the un-penalised value among the
+        # feasible subset.
+        valid_mask = initial_pen <= 1.0
+        if np.any(valid_mask):
+            valid_raw = initial_raw[valid_mask]
+            valid_vx = initial_vx[:, valid_mask]
+            wb = int(np.argmin(valid_raw))
+            if valid_raw[wb] < best_fitness:
+                best_fitness = float(valid_raw[wb])
+                best_solution = valid_vx[:, wb].copy()
 
         self._update_sigma_ppmf_first(initial_vx, initial_fitness)
 
@@ -190,14 +218,21 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
             vx = self.repair_strategy.repair_population(arx.T, self.constraint_handler).T
 
-            self.constraint_violations = int(np.sum(np.any(vx != arx, axis=0)))
+            pen = 1.0 + np.sum((arx - vx) ** 2, axis=0)
+            pen = np.where(np.isfinite(pen), pen, np.finfo(np.float64).max / 2.0)
+            self.constraint_violations = int(np.sum(pen > 1.0))
 
-            fitness_values = np.array([self.evaluate(vx[:, i]) for i in range(vx.shape[1])])
+            raw_fitness = np.array([self.evaluate(vx[:, i]) for i in range(vx.shape[1])])
+            fitness_values = raw_fitness * pen
 
-            best_idx = np.argmin(fitness_values)
-            if fitness_values[best_idx] < best_fitness:
-                best_fitness = fitness_values[best_idx]
-                best_solution = vx[:, best_idx].copy()
+            valid_mask = pen <= 1.0
+            if np.any(valid_mask):
+                valid_raw = raw_fitness[valid_mask]
+                valid_vx = vx[:, valid_mask]
+                wb = int(np.argmin(valid_raw))
+                if valid_raw[wb] < best_fitness:
+                    best_fitness = float(valid_raw[wb])
+                    best_solution = valid_vx[:, wb].copy()
 
             worst_fitness = max(worst_fitness, float(np.max(fitness_values)))
 
@@ -205,8 +240,10 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             aripop = arindex[: self.config.mu]
             seld = d[:, aripop]
 
+            # R: ``xmean <- selx %*% weights`` ≡ ``xmean_old + sigma * dmean``;
+            # ``pc`` uses the un-scaled ``dmean`` (see R lines 194–205).
             dmean = seld @ self.config.weights
-            self.mean = self.mean + dmean
+            self.mean = self.mean + self.sigma * dmean
 
             self.pc = (1 - self.config.cc) * self.pc + np.sqrt(
                 self.config.cc * (2 - self.config.cc) * self.config.mu_eff
@@ -237,7 +274,11 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 mean_vector=self.mean,
             )
 
-            if fitness_values[0] <= self.config.tolfun:
+            # Match R: ``terminate.stopfitness`` checks the best raw
+            # fitness from this generation against ``stopfitness``.  R
+            # also terminates on max iterations, which the budget check
+            # below covers via ``self.evaluations >= self.config.budget``.
+            if float(fitness_values[0]) <= self.config.tolfun:
                 message = "Target fitness reached."
                 break
 
@@ -245,13 +286,17 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 message = "Maximum function evaluations reached."
                 break
 
-            if self.sigma > self.config.tolxup:
-                message = f"Step size diverged (too large): sigma={self.sigma:.2e}"
-                break
-
-            if self.sigma < self.config.tolx:
-                message = f"Step size too small: sigma={self.sigma:.2e}"
-                break
+            # R-DES-style "flatland escape": when the best and the
+            # ⌊λ/2⌋-th individual tie, the population has collapsed onto
+            # a flat patch — bump sigma to escape (R lines 232–238).
+            if self.config.do_flatland_escape:
+                cmp_idx = min(
+                    1 + self.config.population_size // 2,
+                    2 + math.ceil(self.config.population_size / 4),
+                )
+                fitness_sorted = fitness_values[arindex]
+                if cmp_idx <= self.config.population_size and fitness_sorted[0] == fitness_sorted[cmp_idx - 1]:
+                    self.sigma = self.sigma * math.exp(0.2 + self.config.cs / self.config.damps)
 
         if message is None:
             message = "Maximum function evaluations reached."
@@ -270,9 +315,15 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
     def _update_sigma_ppmf_first(
         self, vx: NDArray[np.float64], fitness_values: NDArray[np.float64]
     ) -> None:
-        """
-        First call to PPMF - just initialize midpoint_fitness.
-        Don't update sigma yet.
+        """First PPMF call — matches what R does on iteration 1.
+
+        In R, the very first call to ``sigma_updater(sigma)`` sees
+        ``prev_midpoint_fitness = +Inf``, which makes ``p_succ = 1`` and
+        bumps sigma by ``exp(damps_ppmf * (1 - p_target) / (1 - p_target))``
+        — typically a single multiplicative jump of ``exp(damps_ppmf)``.
+        Doing nothing on the first call (the previous framework
+        behaviour) leaves sigma a factor of ``exp(damps_ppmf)`` below
+        R for the rest of the run.
         """
         if not self.config.use_ppmf:
             self.midpoint_fitness = np.inf
@@ -280,13 +331,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             self.p_succ = 0.0
             return
 
-        self.prev_midpoint_fitness = self.midpoint_fitness
-
-        population_midpoint = np.mean(vx, axis=1)
-        self.midpoint_fitness = self.evaluate(population_midpoint)
-
-        num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
-        self.p_succ = num_successes / self.config.population_size
+        self._update_sigma_ppmf(vx, fitness_values)
 
     def _update_sigma_ppmf(
         self, vx: NDArray[np.float64], fitness_values: NDArray[np.float64]
@@ -316,8 +361,13 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
         self.p_succ = num_successes / self.config.population_size
 
+        # PPMF update — matches sigma_updaters.R lines 54–67.  The R
+        # source multiplies the exponent by ``damps_ppmf``; an earlier
+        # version of this file divided by it, which damped the update
+        # by a factor of ``damps_ppmf**2`` per iteration and shifted the
+        # whole sigma trajectory.
         self.sigma = self.sigma * np.exp(
-            (1.0 / self.config.damps_ppmf)
+            self.config.damps_ppmf
             * (self.p_succ - self.config.p_target_ppmf)
             / (1.0 - self.config.p_target_ppmf)
         )
