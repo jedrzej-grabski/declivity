@@ -70,6 +70,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         mu_eff = self.config.mu_eff
         c_cum = self.config.c_cum
         path_ratio = self.config.path_ratio
+        tol = self.config.tol
+        weights_pop = self.config.weights_pop
 
         self.evaluations = 0
         best_fitness = float("inf")
@@ -104,11 +106,15 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         )
 
         old_mean = np.zeros(N)
-        new_mean = cumulative_mean.copy()
+        # Matches DES.R line 215: ``newMean <- par`` — the algorithm
+        # carries the user-supplied initial point as the first mean.
+        new_mean = self.initial_point.copy()
         worst_fitness = np.max(fitness)
 
-        # Store population and selection means
-        pop_mean = np.mean(population, axis=0)
+        # Log-weighted column average (DES.R line 220 uses weightsPop on
+        # the (dim, lambda)-laid population; in our (lambda, dim) layout
+        # the weights apply along axis 0).
+        pop_mean = weights_pop @ population
         mu_mean = new_mean
 
         # Initialize matrices for creating diffs
@@ -195,9 +201,10 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     mu_eff,
                 )
 
-            # Update parameters
+            # Evolution-path update (matches DES.R lines 276–279).
+            # First-iter branch: ``(1 - cp) * 0 + sqrt(mu*cp*(2-cp)) * step``.
             if hist_head == 0:
-                pc[:, hist_head] = np.sqrt(mu) * step
+                pc[:, hist_head] = np.sqrt(mu * cp * (2 - cp)) * step
             else:
                 pc[:, hist_head] = (1 - cp) * pc[:, hist_head - 1] + np.sqrt(
                     mu * cp * (2 - cp)
@@ -227,11 +234,16 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     + np.sqrt(1 - c_cum) * self.rng.standard_normal() * pc[:, history_sample2[i]]
                 )
 
-            # Generate new population
+            # Generate new population — DES.R line 299.  The ``tol``
+            # factor (≈ 1e-12) is load-bearing: it scales the auxiliary
+            # noise term down to a numerical perturbation rather than
+            # the O(1/chi_N) Gaussian that destabilises late-stage
+            # convergence on multimodal problems.
             population = (
                 new_mean.reshape(1, -1)
                 + ft * diffs.T
-                + (1 - 2 / N**2) ** (iter_count / 2)
+                + tol
+                * (1 - 2 / N**2) ** (iter_count / 2)
                 * self.rng.standard_normal(size=(lambda_, N))
                 / chi_N
             )
@@ -247,7 +259,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             if lamarckian:
                 population = population_repaired
 
-            pop_mean = np.mean(population, axis=0)
+            pop_mean = weights_pop @ population
 
             # Evaluate population
             fitness = self.evaluate_population(
