@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Callable, final, Union, TYPE_CHECKING
 import numpy as np
 import math
@@ -7,7 +8,6 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.des.config import DESConfig
 from src.logging.des_logger import DESLogData
 from src.utils.constraint_handlers import ConstraintHandler
-from src.utils.ring_buffer import RingBuffer
 from src.utils.helpers import delete_inf_nan, calculate_ft
 from src.utils.repair_strategies import RepairStrategy, LamarckianRepair
 from src.utils.population_initializers import PopulationInitializer, NormalPopulationInitializer
@@ -126,7 +126,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         counter_repaired = 0
 
         # Allocate buffers
-        steps = RingBuffer(path_length * N)
+        steps: deque[float] = deque(maxlen=path_length * N)
         d_mean = np.zeros((N, hist_size))
         ft_history = np.zeros(hist_size)
         pc = np.zeros((N, hist_size))
@@ -180,7 +180,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             step = (new_mean - old_mean) / ft
 
             # Update buffer of steps
-            steps.push_all(step)
+            steps.extend(step)
 
             # Update ft
             ft_history[hist_head] = ft
@@ -190,7 +190,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 and counter_repaired < 0.1 * lambda_
             ):
                 ft = calculate_ft(
-                    steps.peek(),
+                    np.array(steps),
                     N,
                     lambda_,
                     path_length,
