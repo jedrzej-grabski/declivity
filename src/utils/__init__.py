@@ -25,7 +25,6 @@ from src.utils.repair_strategies import (
     RepairStrategy,
     IdentityRepair,
     LamarckianRepair,
-    ClampRepair,
     RepairStrategyType,
 )
 from src.utils.population_initializers import (
@@ -56,7 +55,6 @@ __all__ = [
     "RepairStrategy",
     "IdentityRepair",
     "LamarckianRepair",
-    "ClampRepair",
     "RepairStrategyType",
     # Population initializer surface
     "PopulationInitializer",

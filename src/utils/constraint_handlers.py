@@ -61,6 +61,19 @@ class ConstraintHandler(ABC):
         """
         return x
 
+    def repair_batch(
+        self, population: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """
+        Repair every row of *population* and return the result.
+
+        Default implementation loops per row calling :meth:`repair`.
+        Subclasses with a vectorised projection should override this for
+        performance — boxes, ellipsoids, etc. can usually do the whole
+        matrix in one call.
+        """
+        return np.array([self.repair(row) for row in population])
+
     def penalty(self, x: NDArray[np.float64], f_x: float) -> float:
         """
         Return an augmented objective value for *x* with objective *f_x*.
@@ -124,6 +137,21 @@ class BoxConstraintHandler(ConstraintHandler):
             return self._repair_clamp(x)
         else:
             return self._repair_bounce_back(x)
+
+    @override
+    def repair_batch(
+        self, population: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """Vectorised box repair.
+
+        For ``CLAMP``, a single ``np.clip`` over the whole matrix
+        replaces the per-row loop.  ``BOUNCE_BACK`` is recursive and
+        keeps the per-row fallback.
+        """
+        if self.strategy is BoxStrategy.CLAMP:
+            clipped = np.clip(population, self.lower_bounds, self.upper_bounds)
+            return self._remove_inf_nan(clipped)
+        return super().repair_batch(population)
 
     @override
     def penalty(self, x: NDArray[np.float64], f_x: float) -> float:

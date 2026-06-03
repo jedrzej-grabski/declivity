@@ -39,7 +39,7 @@ from src.utils.population_initializers import (
     MeanSigmaPopulationInitializer,
     PopulationInitializer,
 )
-from src.utils.repair_strategies import ClampRepair, RepairStrategy
+from src.utils.repair_strategies import LamarckianRepair, RepairStrategy
 
 if TYPE_CHECKING:
     from src.logging.cmaes_logger import CMAESLogData
@@ -58,7 +58,9 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
     Constraint handling is fully delegated to the injected
     :class:`~src.utils.repair_strategies.RepairStrategy` (default:
-    :class:`~src.utils.repair_strategies.ClampRepair`).  The iteration-0
+    :class:`~src.utils.repair_strategies.LamarckianRepair`, which
+    routes the λ candidates through
+    :meth:`ConstraintHandler.repair_batch`).  The iteration-0
     population is produced by the injected
     :class:`~src.utils.population_initializers.PopulationInitializer`
     (default: :class:`~src.utils.population_initializers.MeanSigmaPopulationInitializer`
@@ -93,7 +95,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             func=func,
             initial_point=initial_point,
             config=config,
-            repair_strategy=repair_strategy or ClampRepair(),
+            repair_strategy=repair_strategy or LamarckianRepair(),
             population_initializer=(
                 population_initializer
                 or MeanSigmaPopulationInitializer(sigma=config.sigma)

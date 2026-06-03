@@ -4,8 +4,11 @@ This experiment exercises the two seams that were wired into
 :class:`~src.algorithms.cmaes.CMAESOptimizer` during the framework
 integration milestone:
 
-* :class:`~src.utils.repair_strategies.RepairStrategy` — vectorised
-  ``ClampRepair`` (default) vs per-individual ``LamarckianRepair``.
+* :class:`~src.utils.repair_strategies.RepairStrategy` — policy layer.
+  Default ``LamarckianRepair`` (routes each λ candidate through
+  ``ConstraintHandler.repair_batch``) vs ``IdentityRepair`` (skip
+  repair entirely — the algorithm carries possibly-infeasible
+  candidates through, exercising the policy seam end-to-end).
 * :class:`~src.utils.population_initializers.PopulationInitializer` —
   ``MeanSigmaPopulationInitializer`` (default, samples ``N(m, σ²I)``)
   vs ``NormalPopulationInitializer`` (DES-style ``rng.normal`` around
@@ -13,15 +16,16 @@ integration milestone:
 
 Three variants are run through the standard
 :class:`~src.benchmarking.Benchmark` harness across five seeds and
-three problems (Sphere, Rosenbrock, Rastrigin — 10D each).  Equivalent
-convergence curves across variants confirm that:
+three problems (Sphere, Rosenbrock, Rastrigin — 10D each).  The
+expected outcome:
 
-1. The default behaviour is preserved (no regression vs the previous
-   resampling-based ``_ask`` loop on bound-feasible problems).
-2. The injected components actually drive the optimiser — swapping
-   them changes the trajectory in the expected direction (Lamarckian
-   repair adds the ``_remove_inf_nan`` pass; the DES-style initializer
-   widens the iteration-0 distribution).
+1. ``LamarckianRepair`` (default) and ``IdentityRepair`` track each
+   other closely on bound-feasible problems, because the iteration-0
+   population stays inside the box and the optimiser keeps sampling
+   inside it — the policy choice rarely fires.
+2. ``NormalPopulationInitializer`` produces a wider iteration-0
+   distribution, leaving a visible trajectory difference on
+   multimodal problems.
 
 This script also exercises the
 ``repair_strategy`` / ``population_initializer`` fields on
@@ -44,7 +48,7 @@ from src.benchmarking import AlgorithmRun, Benchmark, Problem, SingleAlgorithm
 from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from src.utils.benchmark_functions import Rastrigin, Rosenbrock, Sphere
 from src.utils.population_initializers import NormalPopulationInitializer
-from src.utils.repair_strategies import LamarckianRepair
+from src.utils.repair_strategies import IdentityRepair
 
 
 plt.ioff()
@@ -70,17 +74,17 @@ def main() -> None:
 
     algorithms: list[AlgorithmRun] = [
         SingleAlgorithm(
-            name="default (ClampRepair + MeanSigma)",
+            name="default (LamarckianRepair + MeanSigma)",
             color="#e74c3c",
             algorithm=AlgorithmChoice.CMAES,
             config_factory=config_factory,
         ),
         SingleAlgorithm(
-            name="LamarckianRepair",
+            name="IdentityRepair",
             color="#3498db",
             algorithm=AlgorithmChoice.CMAES,
             config_factory=config_factory,
-            repair_strategy=LamarckianRepair(),
+            repair_strategy=IdentityRepair(),
         ),
         SingleAlgorithm(
             name="NormalPopulationInitializer",

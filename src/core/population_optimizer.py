@@ -80,9 +80,9 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
         repair_strategy:
             **Required — no default.**  Strategy used to repair infeasible
             population members.  Callers must pass an explicit concrete
-            instance; subclasses typically default to a sensible strategy
-            (``LamarckianRepair`` for DES, ``ClampRepair`` for CMA-ES and
-            MF-CMA-ES) and allow callers to override.
+            instance; subclasses typically default to ``LamarckianRepair``
+            (the canonical "apply ``ConstraintHandler.repair_batch`` to
+            every individual" policy) and allow callers to override.
         population_initializer:
             **Required — no default.**  Strategy used to seed the initial
             population.  Subclasses pass a per-algorithm default

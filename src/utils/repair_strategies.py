@@ -1,22 +1,23 @@
 """
 Population-level repair strategy abstractions.
 
-A RepairStrategy operates on an entire population matrix (n_individuals,
-n_dimensions) and produces a repaired matrix of the same shape.  It
-delegates the per-individual constraint logic to an injected
-ConstraintHandler, keeping repair policy separate from feasibility
-semantics.
+A RepairStrategy is the *policy* layer that sits above
+:class:`~src.utils.constraint_handlers.ConstraintHandler`: it decides
+whether to repair a population at all, leaving the per-point (and
+per-batch) projection mechanics to the handler.
 
 Relationship to ConstraintHandler
 ----------------------------------
-* ``ConstraintHandler`` decides *what is feasible* and how to repair a
-  **single point**.
-* ``RepairStrategy`` decides *how to apply that repair across a
-  population* (or whether to skip it entirely).
+* ``ConstraintHandler`` defines *mechanism* — what is feasible, and
+  how to project a single point (``repair``) or a whole population
+  (``repair_batch``) onto the feasible region.
+* ``RepairStrategy`` defines *policy* — does the optimiser apply
+  ``repair_batch`` to its λ candidates this generation, or carry them
+  through unrepaired?
 
-The split means that L-BFGS-B (single-point) never needs a
-RepairStrategy, while evolutionary algorithms can swap policies without
-touching their ConstraintHandler.
+Together the split keeps L-BFGS-B (single-point, no policy needed)
+free of strategy machinery while letting evolutionary algorithms swap
+policy without touching the handler.
 """
 
 from abc import ABC, abstractmethod
@@ -26,7 +27,7 @@ from typing import final, override
 import numpy as np
 from numpy.typing import NDArray
 
-from src.utils.constraint_handlers import BoxConstraintHandler, ConstraintHandler
+from src.utils.constraint_handlers import ConstraintHandler
 
 
 class RepairStrategy(ABC):
@@ -35,8 +36,10 @@ class RepairStrategy(ABC):
 
     A ``RepairStrategy`` receives a population matrix of shape
     ``(n_individuals, n_dimensions)`` — each **row** is one individual —
-    and returns a matrix of the same shape with infeasible individuals
-    repaired.
+    and returns a matrix of the same shape.  Concrete strategies are
+    pure delegators: they decide whether to call
+    :meth:`ConstraintHandler.repair_batch` on the population, not how
+    that batch repair is computed.
 
     Implementations must be stateless: the same instance must produce
     identical output given the same inputs.
@@ -49,7 +52,7 @@ class RepairStrategy(ABC):
         constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         """
-        Return a repaired copy of *population*.
+        Return a (possibly repaired) copy of *population*.
 
         Parameters
         ----------
@@ -57,14 +60,14 @@ class RepairStrategy(ABC):
             Array of shape ``(n_individuals, n_dimensions)``.  Rows are
             individuals.
         constraint_handler:
-            The constraint handler whose ``repair()`` method is used for
-            per-individual repair (except for optimised vectorised paths).
+            The constraint handler that provides
+            :meth:`~ConstraintHandler.repair_batch` for the actual
+            per-row projection.
 
         Returns
         -------
         NDArray[np.float64]
-            Array of the same shape as *population* with infeasible
-            individuals repaired.
+            Array of the same shape as *population*.
         """
         ...
 
@@ -74,9 +77,9 @@ class IdentityRepair(RepairStrategy):
     """
     No-op repair — returns the population unchanged.
 
-    Intended for CMA-ES, where the reference port handles boundary
-    correction internally and a second repair pass would break numerical
-    equivalence.
+    Use when the algorithm needs to carry possibly-infeasible
+    individuals through (e.g., to compute its own penalty term) rather
+    than projecting them onto the feasible region.
     """
 
     @override
@@ -91,12 +94,14 @@ class IdentityRepair(RepairStrategy):
 @final
 class LamarckianRepair(RepairStrategy):
     """
-    Per-individual repair via ``constraint_handler.repair()``.
+    Apply repair to every row of the population.
 
-    Applies ``constraint_handler.repair()`` to every row in *population*.
-    For ``BoxConstraintHandler`` this goes through
-    ``_repair_clamp`` → ``_remove_inf_nan``, exactly matching the
-    boundary-handling behaviour in the current DES implementation.
+    Delegates straight through to
+    :meth:`ConstraintHandler.repair_batch`.  For
+    :class:`~src.utils.constraint_handlers.BoxConstraintHandler` with
+    ``BoxStrategy.CLAMP`` that is a single vectorised ``np.clip`` plus
+    a NaN/Inf strip; for other handlers it falls back to the per-row
+    default in the ABC.
     """
 
     @override
@@ -105,70 +110,28 @@ class LamarckianRepair(RepairStrategy):
         population: NDArray[np.float64],
         constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        return np.array(
-            [constraint_handler.repair(individual) for individual in population]
-        )
-
-
-@final
-class ClampRepair(RepairStrategy):
-    """
-    Vectorised clamp repair.
-
-    Fast path: if *constraint_handler* is a ``BoxConstraintHandler``,
-    delegates to ``np.clip`` directly and skips the ``_remove_inf_nan``
-    pass.  This matches the current MF-CMA-ES ``np.clip`` behaviour,
-    preserving numerical equivalence.
-
-    Fallback: for any other ``ConstraintHandler``, falls back to
-    per-individual ``constraint_handler.repair()``.
-
-    .. note::
-       The deliberate absence of ``_remove_inf_nan`` in the fast path is
-       intentional — see the critical equivalence note in T01 plan.
-    """
-
-    @override
-    def repair_population(
-        self,
-        population: NDArray[np.float64],
-        constraint_handler: ConstraintHandler,
-    ) -> NDArray[np.float64]:
-        if isinstance(constraint_handler, BoxConstraintHandler):
-            return np.clip(
-                population,
-                constraint_handler.lower_bounds,
-                constraint_handler.upper_bounds,
-            )
-        # Generic fallback — per-individual repair
-        return np.array(
-            [constraint_handler.repair(individual) for individual in population]
-        )
+        return constraint_handler.repair_batch(population)
 
 
 class RepairStrategyType(Enum):
     """
     Discoverability enum listing all built-in repair strategies.
 
-    Call ``.build()`` to obtain a ready-to-use ``RepairStrategy`` instance
-    without importing concrete classes directly.
+    Call ``.build()`` to obtain a ready-to-use ``RepairStrategy``
+    instance without importing concrete classes directly.
 
     Members
     -------
     IDENTITY
-        No-op repair.  Use for CMA-ES (reference port handles boundaries
-        internally).
+        No-op repair.  Carries the population through unmodified — the
+        algorithm is responsible for any penalty term.
     LAMARCKIAN
-        Per-individual repair via ``ConstraintHandler.repair()``.  Use
-        for DES (includes ``_remove_inf_nan`` for box constraints).
-    CLAMP
-        Vectorised ``np.clip`` for box constraints, per-individual fallback
-        otherwise.  Use for MF-CMA-ES.
+        Apply ``ConstraintHandler.repair_batch`` to every individual.
+        The default for every evolutionary algorithm in the framework.
     """
 
     IDENTITY = "identity"
     LAMARCKIAN = "lamarckian"
-    CLAMP = "clamp"
 
     def build(self) -> RepairStrategy:
         """
@@ -183,7 +146,5 @@ class RepairStrategyType(Enum):
             return IdentityRepair()
         elif self is RepairStrategyType.LAMARCKIAN:
             return LamarckianRepair()
-        elif self is RepairStrategyType.CLAMP:
-            return ClampRepair()
         # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")

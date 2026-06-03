@@ -37,7 +37,7 @@ pdm run run-r            # experiments/cross_validation/des_vs_r.py
 |-------------------------|---------------------------------------------------------------------------------------|-----------------------------------------------------|
 | `des_vs_r.py`           | Runs DES on CEC2017 F10 (10D, 10 seeds, fixed `x0=50·1`); writes convergence + summary CSVs that can be diffed against output from `reference/cmaes.r` / `reference/mf_cmaes.r` | `reference/outputs/python_*_f10_d10.csv`            |
 | `cmaes_vs_reference.py` | Convergence-equivalence oracle between framework CMA-ES and the historical reference port across Sphere / Ellipsoid / Rosenbrock / Rastrigin / Ackley / CEC17 F10; produces convergence overlays, state trajectories, and a max-diff heatmap | `plots/cross_validation/cmaes_vs_reference/`        |
-| `cmaes_components.py`   | Framework CMA-ES under different `RepairStrategy` / `PopulationInitializer` injections (default vs `LamarckianRepair` vs `NormalPopulationInitializer`) — confirms the seams are live and the default is non-regressing | `plots/cross_validation/cmaes_components/`          |
+| `cmaes_components.py`   | Framework CMA-ES under different `RepairStrategy` / `PopulationInitializer` injections (default `LamarckianRepair` vs `IdentityRepair` vs `NormalPopulationInitializer`) — confirms both seams are live and the default is non-regressing | `plots/cross_validation/cmaes_components/`          |
 
 ## `lbfgsb/` — L-BFGS-B feature studies
 

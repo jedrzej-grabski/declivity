@@ -193,8 +193,8 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     repair_strategy: RepairStrategy | None = None
     """Population-level repair policy. Only applicable to evolutionary
     algorithms; ignored for L-BFGS-B. ``None`` keeps the optimizer's
-    own default (``LamarckianRepair`` for DES, ``ClampRepair`` for
-    CMA-ES and MF-CMA-ES)."""
+    own default (``LamarckianRepair`` for every evolutionary algorithm
+    — DES, CMA-ES, and MF-CMA-ES)."""
 
     population_initializer: PopulationInitializer | None = None
     """How the iteration-0 population is seeded. Only applicable to

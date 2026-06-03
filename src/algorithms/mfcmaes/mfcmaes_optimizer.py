@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 from src.utils.constraint_handlers import ConstraintHandler
-from src.utils.repair_strategies import RepairStrategy, ClampRepair
+from src.utils.repair_strategies import RepairStrategy, LamarckianRepair
 from src.utils.population_initializers import PopulationInitializer, MeanSigmaPopulationInitializer
 from src.core.base_optimizer import OptimizationResult
 from src.core.population_optimizer import PopulationOptimizer
@@ -42,7 +42,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             func=func,
             initial_point=initial_point,
             config=config,
-            repair_strategy=repair_strategy or ClampRepair(),
+            repair_strategy=repair_strategy or LamarckianRepair(),
             population_initializer=population_initializer or MeanSigmaPopulationInitializer(sigma=config.sigma),
             algorithm=AlgorithmChoice.MFCMAES,
             constraint_handler=constraint_handler,
