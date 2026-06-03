@@ -21,9 +21,6 @@ class LBFGSBConfig(BaseConfig):
     budget: int = field(default=0)
     """Maximum number of function evaluations (0 = auto: 10000 * dimensions)."""
 
-    population_size: int = field(default=1)
-    """Fixed to 1 for L-BFGS-B (single-point optimizer)"""
-
     initial_hessian: Union[None, float, NDArray[np.float64]] = None
     """Initial Hessian approximation B_0. Controls the scaling of the first iteration
     before L-BFGS corrections are available. Once correction pairs accumulate, the
@@ -105,7 +102,6 @@ class LBFGSBConfig(BaseConfig):
     def __post_init__(self) -> None:
         if self.budget <= 0:
             self.budget = default_budget(self.dimensions)
-        self.population_size = 1
         self._recalculate_derived_params()
 
     def _recalculate_derived_params(self) -> None:

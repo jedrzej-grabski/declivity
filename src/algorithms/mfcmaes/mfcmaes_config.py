@@ -3,7 +3,7 @@ import numpy as np
 import math
 from numpy.typing import NDArray
 
-from src.core.config_base import BaseConfig
+from src.core.config_base import PopulationBaseConfig
 
 
 def default_population_size(dimensions: int) -> int:
@@ -49,17 +49,14 @@ def compute_weights(population_size: int, mu: int) -> tuple[NDArray[np.float64],
 
 
 @dataclass
-class MFCMAESConfig(BaseConfig):
+class MFCMAESConfig(PopulationBaseConfig):
     """
     Configuration for the Matrix-Free CMA-ES optimizer.
-    Extends BaseConfig with MF-CMA-ES-specific parameters.
+    Extends PopulationBaseConfig with MF-CMA-ES-specific parameters.
     """
 
     sigma: float = 1.0
     """Initial step size (standard deviation)"""
-
-    population_size: int = field(default=0)
-    """Size of the population (0 means use default)"""
 
     budget: int = field(default=0)
     """Maximum number of function evaluations (0 means use default)"""

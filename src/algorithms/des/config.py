@@ -3,7 +3,7 @@ import numpy as np
 import math
 from numpy.typing import NDArray
 
-from src.core.config_base import BaseConfig
+from src.core.config_base import PopulationBaseConfig
 
 
 def default_population_size(obj: "DESConfig") -> int:
@@ -73,10 +73,10 @@ def default_ft_scale(obj: "DESConfig") -> float:
 
 
 @dataclass
-class DESConfig(BaseConfig):
+class DESConfig(PopulationBaseConfig):
     """
     Configuration for the DES optimizer.
-    Extends BaseConfig with DES-specific parameters.
+    Extends PopulationBaseConfig with DES-specific parameters.
     """
 
     ft: float = 1.0

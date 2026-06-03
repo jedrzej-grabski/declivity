@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from src.core.config_base import BaseConfig
+from src.core.config_base import PopulationBaseConfig
 
 
 def default_population_size(dimensions: int) -> int:
@@ -94,7 +94,7 @@ def chi_n_expected(dimensions: int) -> float:
 
 
 @dataclass
-class CMAESConfig(BaseConfig):
+class CMAESConfig(PopulationBaseConfig):
     """Configuration for the CMA-ES optimizer."""
 
     sigma: float = 0.0
