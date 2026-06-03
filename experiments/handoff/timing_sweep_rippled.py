@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
+from src.algorithms.lbfgsb import ArmijoBacktracking
+from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
@@ -53,10 +54,8 @@ def build_algorithms(
     memory_size: int,
     initial_sigma: float,
 ):
-    lbfgsb_kwargs = dict(
-        m=memory_size, pgtol=1e-10, factr=0,
-        line_search=LineSearchMethod.ARMIJO,
-    )
+    lbfgsb_kwargs = dict(m=memory_size, pgtol=1e-10, factr=0)
+    armijo = ArmijoBacktracking()
 
     cmaes_only = SingleAlgorithm(
         name="CMA-ES",
@@ -74,6 +73,7 @@ def build_algorithms(
         config_factory=lambda d: LBFGSBConfig(
             dimensions=d, budget=total_budget, **lbfgsb_kwargs,
         ),
+        line_search=armijo,
     )
 
     handoffs = []
@@ -91,6 +91,7 @@ def build_algorithms(
                     dimensions=d, budget=p, **lbfgsb_kwargs,
                 ),
                 transform="inverse",
+                lbfgsb_line_search=armijo,
             )
         )
         # Identity
@@ -105,6 +106,7 @@ def build_algorithms(
                     dimensions=d, budget=p, **lbfgsb_kwargs,
                 ),
                 transform="identity",
+                lbfgsb_line_search=armijo,
             )
         )
     return [cmaes_only, lbfgsb_only, *handoffs]

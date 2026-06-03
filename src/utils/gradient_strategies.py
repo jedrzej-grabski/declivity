@@ -14,7 +14,6 @@ Hierarchy
 - :class:`GradientStrategy` — abstract base (single abstract method)
 - :class:`ForwardFD` — one-sided 2-point difference, ``N+1`` evals, ``O(ε)`` error
 - :class:`CentralFD` — symmetric 2-point difference, ``2N`` evals, ``O(ε²)`` error
-- :class:`GradientStrategyType` — discoverability enum with ``.build()`` factory
 
 The strategy accepts a *callable* ``f`` rather than a reference to the
 owning optimiser so that evaluation-count bookkeeping stays a concern
@@ -26,7 +25,6 @@ counter naturally.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Callable
 
 import numpy as np
@@ -143,27 +141,3 @@ class CentralFD(GradientStrategy):
         return gradient
 
 
-class GradientStrategyType(Enum):
-    """Discoverability enum for built-in gradient strategies.
-
-    Each variant maps to a concrete :class:`GradientStrategy` and
-    exposes :meth:`build` to construct an instance with default
-    settings.  Useful as a config-friendly handle when a full
-    :class:`GradientStrategy` instance is not needed at config time.
-
-    Examples
-    --------
-    >>> strategy = GradientStrategyType.CENTRAL.build()
-    >>> grad = strategy.compute(f, x, eps=1e-8)
-    """
-
-    FORWARD = "forward"
-    CENTRAL = "central"
-
-    def build(self) -> GradientStrategy:
-        """Construct the corresponding :class:`GradientStrategy` instance."""
-        match self:
-            case GradientStrategyType.FORWARD:
-                return ForwardFD()
-            case GradientStrategyType.CENTRAL:
-                return CentralFD()

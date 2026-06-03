@@ -32,7 +32,8 @@ import matplotlib.pyplot as plt
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
+from src.algorithms.lbfgsb import ArmijoBacktracking
+from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
@@ -87,8 +88,8 @@ def build_algorithms(
         config_factory=lambda d: LBFGSBConfig(
             dimensions=d, budget=total_budget, m=memory_size,
             pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
         ),
+        line_search=ArmijoBacktracking(),
     )
 
     handoff_inverse = CMAESLBFGSBHandoff(
@@ -100,9 +101,9 @@ def build_algorithms(
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
             dimensions=d, budget=lbfgsb_handoff_budget, m=memory_size,
             pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
         ),
         transform="inverse",
+        lbfgsb_line_search=ArmijoBacktracking(),
     )
 
     handoff_identity = CMAESLBFGSBHandoff(
@@ -114,9 +115,9 @@ def build_algorithms(
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
             dimensions=d, budget=lbfgsb_handoff_budget, m=memory_size,
             pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
         ),
         transform="identity",
+        lbfgsb_line_search=ArmijoBacktracking(),
     )
 
     return [cmaes_only, lbfgsb_only, handoff_inverse, handoff_identity]

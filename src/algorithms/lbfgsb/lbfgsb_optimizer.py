@@ -26,9 +26,12 @@ from scipy.linalg import cho_factor, cho_solve
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
-from src.algorithms.lbfgsb.line_search import perform_line_search
+from src.algorithms.lbfgsb.line_search import (
+    LineSearchStrategy,
+    MoreThuenteLineSearch,
+)
 from src.utils.constraint_handlers import ConstraintHandler
-from src.utils.gradient_strategies import GradientStrategy, GradientStrategyType
+from src.utils.gradient_strategies import CentralFD, GradientStrategy
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
 from src.core.algorithm_factory import register_optimizer
 
@@ -59,6 +62,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         seed: int | np.random.Generator | None = None,
         gradient_fn: Callable[[NDArray[np.float64]], NDArray[np.float64]] | None = None,
         gradient_strategy: GradientStrategy | None = None,
+        line_search: LineSearchStrategy | None = None,
     ) -> None:
         if config is None:
             config = LBFGSBConfig(dimensions=len(initial_point))
@@ -76,13 +80,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         self._gradient_fn = gradient_fn
         self._finite_diff_epsilon = config._fd_eps_actual
-        # Resolve the gradient strategy.  Explicit constructor argument
-        # wins; otherwise fall back to ``config.fd_method`` so existing
-        # callers (and tests) that set the string field still work.
-        if gradient_strategy is None:
-            self._gradient_strategy = GradientStrategyType(config.fd_method).build()
-        else:
-            self._gradient_strategy = gradient_strategy
+        self._gradient_strategy = gradient_strategy or CentralFD()
+        self._line_search = line_search or MoreThuenteLineSearch()
         self._memory_size = config.m
         self._machine_epsilon = np.finfo(float).eps
 
@@ -856,8 +855,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             ) -> tuple[float, float]:
                 return self._compute_directional_derivative(_x, _d, alpha)
 
-            line_search_result = perform_line_search(
-                method=config.line_search,
+            line_search_result = self._line_search.search(
                 phi_dphi=phi_and_dphi,
                 stp0=initial_step,
                 phi0=function_value,

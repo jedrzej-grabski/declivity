@@ -41,11 +41,13 @@ from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
 from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig
+from src.algorithms.lbfgsb.line_search import LineSearchStrategy
 from src.benchmarking.problem import Problem
 from src.benchmarking.run_trace import RunTrace
 from src.core.algorithm_factory import AlgorithmFactory
 from src.core.base_optimizer import OptimizationResult
 from src.core.config_base import BaseConfig
+from src.utils.gradient_strategies import GradientStrategy
 from src.utils.population_initializers import PopulationInitializer
 from src.utils.repair_strategies import RepairStrategy
 
@@ -204,6 +206,16 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     ``MeanSigmaPopulationInitializer(sigma=config.sigma)`` for CMA-ES
     and MF-CMA-ES)."""
 
+    line_search: LineSearchStrategy | None = None
+    """Line-search strategy for L-BFGS-B; ignored for evolutionary
+    algorithms. ``None`` keeps the optimizer's default
+    (``MoreThuenteLineSearch``)."""
+
+    gradient_strategy: GradientStrategy | None = None
+    """Gradient-approximation strategy for L-BFGS-B; ignored for
+    evolutionary algorithms. ``None`` keeps the optimizer's default
+    (``CentralFD``)."""
+
     def run(
         self,
         problem: Problem,
@@ -216,8 +228,13 @@ class SingleAlgorithm(BenchmarkAlgorithm):
                 setattr(config, flag, True)
 
         kwargs: dict = {}
-        if problem.gradient is not None and self.algorithm == AlgorithmChoice.LBFGSB:
-            kwargs["gradient_fn"] = problem.gradient
+        if self.algorithm == AlgorithmChoice.LBFGSB:
+            if problem.gradient is not None:
+                kwargs["gradient_fn"] = problem.gradient
+            if self.line_search is not None:
+                kwargs["line_search"] = self.line_search
+            if self.gradient_strategy is not None:
+                kwargs["gradient_strategy"] = self.gradient_strategy
         if self.repair_strategy is not None:
             kwargs["repair_strategy"] = self.repair_strategy
         if self.population_initializer is not None:
@@ -363,6 +380,14 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
     cmaes_extra_diagnostics: tuple[str, ...] = ("diag_eigen",)
     lbfgsb_extra_diagnostics: tuple[str, ...] = ()
 
+    lbfgsb_line_search: LineSearchStrategy | None = None
+    """Line-search strategy for the L-BFGS-B refinement phase. ``None``
+    keeps the optimizer default (``MoreThuenteLineSearch``)."""
+
+    lbfgsb_gradient_strategy: GradientStrategy | None = None
+    """Gradient-approximation strategy for the L-BFGS-B refinement
+    phase. ``None`` keeps the optimizer default (``CentralFD``)."""
+
     def _initial_hessian_from_cmaes(
         self,
         eigenvectors: NDArray[np.float64],
@@ -433,6 +458,10 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         lbfgsb_kwargs: dict = {}
         if problem.gradient is not None:
             lbfgsb_kwargs["gradient_fn"] = problem.gradient
+        if self.lbfgsb_line_search is not None:
+            lbfgsb_kwargs["line_search"] = self.lbfgsb_line_search
+        if self.lbfgsb_gradient_strategy is not None:
+            lbfgsb_kwargs["gradient_strategy"] = self.lbfgsb_gradient_strategy
 
         lbfgsb_result = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.LBFGSB,

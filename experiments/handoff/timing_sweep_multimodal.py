@@ -23,7 +23,8 @@ import matplotlib.pyplot as plt
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
+from src.algorithms.lbfgsb import ArmijoBacktracking
+from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
@@ -105,6 +106,8 @@ def build_algorithms(
         ),
     )
 
+    armijo = ArmijoBacktracking()
+
     lbfgsb_only = SingleAlgorithm(
         name="L-BFGS-B",
         color=REFERENCE_COLORS["L-BFGS-B"],
@@ -112,8 +115,8 @@ def build_algorithms(
         config_factory=lambda d: LBFGSBConfig(
             dimensions=d, budget=total_budget, m=memory_size,
             pgtol=1e-10, factr=0,
-            line_search=LineSearchMethod.ARMIJO,
         ),
+        line_search=armijo,
     )
 
     handoffs: list[CMAESLBFGSBHandoff] = []
@@ -130,9 +133,9 @@ def build_algorithms(
                 lbfgsb_config_factory=lambda d, b=post_handoff_budget: LBFGSBConfig(
                     dimensions=d, budget=b, m=memory_size,
                     pgtol=1e-10, factr=0,
-                    line_search=LineSearchMethod.ARMIJO,
                 ),
                 transform="inverse",
+                lbfgsb_line_search=armijo,
             )
         )
 

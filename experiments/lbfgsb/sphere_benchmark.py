@@ -15,7 +15,8 @@ import numpy as np
 
 from src import AlgorithmFactory
 from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
+from src.algorithms.lbfgsb import ArmijoBacktracking
+from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.plotting import plot_comparison, plot_metrics
 from src.utils.benchmark_functions import Sphere
 
@@ -47,10 +48,8 @@ def run_lbfgsb_benchmark() -> None:
     print(f"Initial point f(x) = {objective(initial_point):.6f}")
     print(f"Bounds: [{lower_bounds}, {upper_bounds}]\n")
 
-    # L-BFGS-B (More-Thuente)
-    config_mt = LBFGSBConfig(
-        dimensions=dimensions, m=10, line_search=LineSearchMethod.MORE_THUENTE,
-    )
+    # L-BFGS-B (More-Thuente, default line search)
+    config_mt = LBFGSBConfig(dimensions=dimensions, m=10)
     config_mt.enable_all_diagnostics()
     optimizer_mt = AlgorithmFactory.create_optimizer(
         algorithm=AlgorithmChoice.LBFGSB,
@@ -68,9 +67,7 @@ def run_lbfgsb_benchmark() -> None:
     print(f"  Message:       {result_mt.message}\n")
 
     # L-BFGS-B (Armijo)
-    config_armijo = LBFGSBConfig(
-        dimensions=dimensions, m=10, line_search=LineSearchMethod.ARMIJO,
-    )
+    config_armijo = LBFGSBConfig(dimensions=dimensions, m=10)
     config_armijo.enable_all_diagnostics()
     optimizer_armijo = AlgorithmFactory.create_optimizer(
         algorithm=AlgorithmChoice.LBFGSB,
@@ -80,6 +77,7 @@ def run_lbfgsb_benchmark() -> None:
         lower_bounds=lower_bounds,
         upper_bounds=upper_bounds,
         seed=seed,
+        line_search=ArmijoBacktracking(),
     )
     result_armijo = optimizer_armijo.optimize()
     print(f"L-BFGS-B (Armijo):")

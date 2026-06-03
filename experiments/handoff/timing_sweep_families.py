@@ -22,7 +22,8 @@ import matplotlib.pyplot as plt
 
 from src.algorithms.choices import AlgorithmChoice
 from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
+from src.algorithms.lbfgsb import ArmijoBacktracking
+from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
@@ -76,7 +77,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 10,
             "total_budget": 6000,
             "memory_size": 10,
-            "ls_settings": dict(pgtol=1e-10, factr=0, line_search=LineSearchMethod.ARMIJO),
+            "ls_settings": dict(pgtol=1e-10, factr=0),
         }
     if family == "reproduce_old":
         base = RippledEllipsoid(50, condition=1e6, amplitude=0.0)
@@ -89,7 +90,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 50,
             "total_budget": 10000,
             "memory_size": 5,
-            "ls_settings": dict(pgtol=1e-8, factr=1e7, line_search=LineSearchMethod.ARMIJO),
+            "ls_settings": dict(pgtol=1e-8, factr=1e7),
         }
     if family == "low_amp":
         base = RippledEllipsoid(30, condition=1e6, amplitude=0.1)
@@ -102,7 +103,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 30,
             "total_budget": 10000,
             "memory_size": 5,
-            "ls_settings": dict(pgtol=1e-10, factr=0, line_search=LineSearchMethod.ARMIJO),
+            "ls_settings": dict(pgtol=1e-10, factr=0),
         }
     if family == "multimodal":
         base = RippledEllipsoid(50, condition=1e6, amplitude=1.0)
@@ -115,7 +116,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 50,
             "total_budget": 10000,
             "memory_size": 5,
-            "ls_settings": dict(pgtol=1e-8, factr=1e7, line_search=LineSearchMethod.ARMIJO),
+            "ls_settings": dict(pgtol=1e-8, factr=1e7),
         }
     raise ValueError(f"unknown family {family!r}")
 
@@ -143,6 +144,7 @@ def build_algorithms(
     ls_settings = family_cfg["ls_settings"]
 
     lbfgsb_kwargs = dict(**ls_settings, m=memory_size)
+    armijo = ArmijoBacktracking()
 
     cmaes_only = SingleAlgorithm(
         name="CMA-ES",
@@ -160,6 +162,7 @@ def build_algorithms(
         config_factory=lambda d: LBFGSBConfig(
             dimensions=d, budget=total_budget, **lbfgsb_kwargs,
         ),
+        line_search=armijo,
     )
 
     handoffs: list[CMAESLBFGSBHandoff] = []
@@ -181,6 +184,7 @@ def build_algorithms(
                 dimensions=d, budget=b, **lbfgsb_kwargs,
             ),
             transform="inverse",
+            lbfgsb_line_search=armijo,
         ))
         handoffs.append(CMAESLBFGSBHandoff(
             name=f"identity @ {warmup_gens} gen",
@@ -192,6 +196,7 @@ def build_algorithms(
                 dimensions=d, budget=b, **lbfgsb_kwargs,
             ),
             transform="identity",
+            lbfgsb_line_search=armijo,
         ))
 
     return [cmaes_only, lbfgsb_only, *handoffs]

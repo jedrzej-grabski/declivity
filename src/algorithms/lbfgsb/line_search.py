@@ -9,12 +9,11 @@ References:
     Sufficient Decrease", ACM Trans. Math. Software 20 (1994), pp. 286-307.
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, final, override
 
 import numpy as np
-
-from src.algorithms.lbfgsb.config import LineSearchMethod
 
 
 @dataclass
@@ -28,40 +27,117 @@ class LineSearchResult:
     converged: bool
 
 
-def perform_line_search(
-    method: LineSearchMethod,
-    phi_dphi: Callable[[float], tuple[float, float]],
-    stp0: float,
-    phi0: float,
-    dphi0: float,
-    stpmax: float,
-    ftol: float = 1e-3,
-    gtol: float = 0.9,
-    xtol: float = 0.1,
-    maxiter: int = 20,
-) -> LineSearchResult:
-    """Dispatch to the selected line search method.
+class LineSearchStrategy(ABC):
+    """Abstract base class for line-search strategies.
 
-    Args:
-        method: Line search algorithm to use.
-        phi_dphi: Callable returning (phi(alpha), phi'(alpha)) at a given step.
-        stp0: Initial step length.
-        phi0: Function value at alpha = 0.
-        dphi0: Directional derivative at alpha = 0 (must be negative).
-        stpmax: Maximum step length for bound feasibility.
-        ftol: Sufficient decrease parameter.
-        gtol: Curvature condition parameter (More-Thuente only).
-        xtol: Interval width tolerance (More-Thuente only).
-        maxiter: Maximum trial evaluations.
+    A line-search strategy returns a step length ``alpha > 0`` along a
+    descent direction such that some sufficient-decrease condition is
+    met (Armijo, Wolfe, or strong Wolfe depending on the concrete
+    implementation).  Optimisers receive a strategy at construction
+    time and call its :meth:`search` method whenever they need a step
+    — same pattern as
+    :class:`~src.utils.gradient_strategies.GradientStrategy` and
+    :class:`~src.utils.repair_strategies.RepairStrategy`.
     """
-    if method == LineSearchMethod.MORE_THUENTE:
+
+    @abstractmethod
+    def search(
+        self,
+        phi_dphi: Callable[[float], tuple[float, float]],
+        stp0: float,
+        phi0: float,
+        dphi0: float,
+        stpmax: float,
+        ftol: float,
+        gtol: float,
+        xtol: float,
+        maxiter: int,
+    ) -> LineSearchResult:
+        """Find a step ``alpha`` satisfying the strategy's acceptance test.
+
+        Parameters
+        ----------
+        phi_dphi:
+            Callable returning ``(phi(alpha), phi'(alpha))`` at a given step.
+        stp0:
+            Initial step length.
+        phi0:
+            Function value at ``alpha = 0``.
+        dphi0:
+            Directional derivative at ``alpha = 0`` (must be negative).
+        stpmax:
+            Maximum step length for bound feasibility.
+        ftol:
+            Sufficient-decrease (Armijo) parameter.
+        gtol:
+            Curvature-condition parameter (used by Wolfe-style searches;
+            ignored by pure Armijo backtracking).
+        xtol:
+            Interval-width tolerance (used by bracketing searches;
+            ignored by pure Armijo backtracking).
+        maxiter:
+            Maximum trial evaluations.
+        """
+        ...
+
+
+@final
+class MoreThuenteLineSearch(LineSearchStrategy):
+    """More-Thuente line search satisfying the strong Wolfe conditions.
+
+    Wraps :func:`more_thuente_search` — a port of the Fortran
+    ``dcsrch`` / ``dcstep`` subroutines (More and Thuente, 1994).
+    Finds a step ``alpha`` such that both the sufficient-decrease and
+    curvature conditions hold, using a two-stage safeguarded
+    interpolation scheme.
+    """
+
+    @override
+    def search(
+        self,
+        phi_dphi: Callable[[float], tuple[float, float]],
+        stp0: float,
+        phi0: float,
+        dphi0: float,
+        stpmax: float,
+        ftol: float,
+        gtol: float,
+        xtol: float,
+        maxiter: int,
+    ) -> LineSearchResult:
         return more_thuente_search(
             phi_dphi, stp0, phi0, dphi0, stpmax, ftol, gtol, xtol, maxiter
         )
-    elif method == LineSearchMethod.ARMIJO:
+
+
+@final
+class ArmijoBacktracking(LineSearchStrategy):
+    """Armijo backtracking line search.
+
+    Wraps :func:`armijo_search`.  Finds a step ``alpha`` satisfying
+    only the sufficient-decrease condition, contracting the trial step
+    on each rejected trial.  ``gtol`` and ``xtol`` are accepted to
+    keep the interface uniform with :class:`MoreThuenteLineSearch` but
+    are unused.
+    """
+
+    @override
+    def search(
+        self,
+        phi_dphi: Callable[[float], tuple[float, float]],
+        stp0: float,
+        phi0: float,
+        dphi0: float,
+        stpmax: float,
+        ftol: float,
+        gtol: float,
+        xtol: float,
+        maxiter: int,
+    ) -> LineSearchResult:
+        del gtol, xtol  # Armijo ignores Wolfe-style curvature / bracket bounds.
         return armijo_search(phi_dphi, stp0, phi0, dphi0, stpmax, ftol, maxiter)
-    else:
-        raise ValueError(f"Unknown line search method: {method}")
+
+
 
 
 def more_thuente_search(

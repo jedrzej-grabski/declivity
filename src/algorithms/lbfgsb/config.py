@@ -1,20 +1,14 @@
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Union
 import numpy as np
 from numpy.typing import NDArray
 
 from src.core.config_base import BaseConfig
 
-
-class LineSearchMethod(Enum):
-    """Available line search methods for L-BFGS-B."""
-
-    MORE_THUENTE = "more_thuente"
-    """More-Thuente line search (default). Finds steps satisfying the strong Wolfe conditions
-    using a sophisticated two-stage safeguarded interpolation."""
-
-    ARMIJO = "armijo"
+__all__ = [
+    "LBFGSBConfig",
+    "default_budget",
+]
 
 
 def default_budget(dimensions: int) -> int:
@@ -63,9 +57,6 @@ class LBFGSBConfig(BaseConfig):
         ||projected_gradient||_inf <= pgtol
     where the projected gradient accounts for active bound constraints."""
 
-    line_search: LineSearchMethod = LineSearchMethod.MORE_THUENTE
-    """Line search method to use."""
-
     ftol: float = 1e-3
     """Sufficient decrease (Armijo) parameter for the line search. Controls how much
     decrease in f is required for a step to be acceptable. In (0, 0.5)."""
@@ -81,13 +72,12 @@ class LBFGSBConfig(BaseConfig):
     max_ls_iter: int = 20
     """Maximum number of function evaluations per line search call."""
 
-    fd_method: str = "central"
-    """Finite difference method when no analytical gradient is provided.
-    'central' (default, 2n evals per gradient) or 'forward' (n evals)."""
-
     fd_eps: float = 0.0
-    """Finite difference step size. 0 = auto (sqrt(machine_eps) for central,
-    machine_eps^(1/3) for forward)."""
+    """Finite-difference step size used by both the gradient strategy
+    and the optimizer's directional-derivative computation.  0 = auto
+    (``sqrt(machine_eps)`` — appropriate for the default ``CentralFD``).
+    Override per-strategy via the ``gradient_strategy`` ctor parameter
+    if a different step is needed (e.g., for ``ForwardFD``)."""
 
     # Diagnostic flags specific to L-BFGS-B
     diag_gradient_norm: bool = False
@@ -121,10 +111,7 @@ class LBFGSBConfig(BaseConfig):
     def _recalculate_derived_params(self) -> None:
         eps = np.finfo(float).eps
         if self.fd_eps <= 0:
-            if self.fd_method == "central":
-                self._fd_eps_actual = eps**0.5
-            else:
-                self._fd_eps_actual = eps ** (1.0 / 3.0)
+            self._fd_eps_actual = eps**0.5
         else:
             self._fd_eps_actual = self.fd_eps
 
@@ -142,12 +129,10 @@ class LBFGSBConfig(BaseConfig):
             raise ValueError("factr must be non-negative.")
         if self.pgtol < 0:
             raise ValueError("pgtol must be non-negative.")
-        if self.fd_method not in ("central", "forward"):
-            raise ValueError("fd_method must be 'central' or 'forward'.")
 
     def __setattr__(self, name: str, value) -> None:
         super().__setattr__(name, value)
-        if name in ("budget", "fd_eps", "fd_method") and hasattr(self, "maxit"):
+        if name in ("budget", "fd_eps") and hasattr(self, "maxit"):
             self._recalculate_derived_params()
 
     def enable_all_diagnostics(self) -> None:
@@ -161,6 +146,5 @@ class LBFGSBConfig(BaseConfig):
     def __str__(self) -> str:
         return (
             f"LBFGSBConfig(dimensions={self.dimensions}, budget={self.budget}, "
-            f"m={self.m}, factr={self.factr:.1e}, pgtol={self.pgtol:.1e}, "
-            f"line_search={self.line_search.value})"
+            f"m={self.m}, factr={self.factr:.1e}, pgtol={self.pgtol:.1e})"
         )
