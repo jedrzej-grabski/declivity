@@ -28,6 +28,7 @@ from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
 from src.algorithms.lbfgsb.line_search import perform_line_search
 from src.utils.constraint_handlers import ConstraintHandler
+from src.utils.gradient_strategies import GradientStrategy, GradientStrategyType
 from src.core.base_optimizer import BaseOptimizer, OptimizationResult
 from src.core.algorithm_factory import register_optimizer
 
@@ -57,6 +58,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
         gradient_fn: Callable[[NDArray[np.float64]], NDArray[np.float64]] | None = None,
+        gradient_strategy: GradientStrategy | None = None,
     ) -> None:
         if config is None:
             config = LBFGSBConfig(dimensions=len(initial_point))
@@ -74,7 +76,13 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         self._gradient_fn = gradient_fn
         self._finite_diff_epsilon = config._fd_eps_actual
-        self._finite_diff_method = config.fd_method
+        # Resolve the gradient strategy.  Explicit constructor argument
+        # wins; otherwise fall back to ``config.fd_method`` so existing
+        # callers (and tests) that set the string field still work.
+        if gradient_strategy is None:
+            self._gradient_strategy = GradientStrategyType(config.fd_method).build()
+        else:
+            self._gradient_strategy = gradient_strategy
         self._memory_size = config.m
         self._machine_epsilon = np.finfo(float).eps
 
@@ -106,31 +114,15 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
     ) -> NDArray[np.float64]:
         if self._gradient_fn is not None:
             return np.asarray(self._gradient_fn(x), dtype=float)
-
-        num_vars = len(x)
-        gradient = np.zeros(num_vars)
-        epsilon = self._finite_diff_epsilon
-
-        if self._finite_diff_method == "central":
-            for i in range(num_vars):
-                x_forward = x.copy()
-                x_backward = x.copy()
-                x_forward[i] += epsilon
-                x_backward[i] -= epsilon
-                gradient[i] = (
-                    self.evaluate(x_forward) - self.evaluate(x_backward)
-                ) / (2.0 * epsilon)
-        else:
-            if function_value_at_x is None:
-                function_value_at_x = self.evaluate(x)
-            for i in range(num_vars):
-                x_forward = x.copy()
-                x_forward[i] += epsilon
-                gradient[i] = (
-                    self.evaluate(x_forward) - function_value_at_x
-                ) / epsilon
-
-        return gradient
+        # The strategy routes its evaluations through ``self.evaluate`` so
+        # the evaluation budget is incremented exactly as the inline
+        # FD loops used to do.
+        return self._gradient_strategy.compute(
+            f=self.evaluate,
+            x=x,
+            eps=self._finite_diff_epsilon,
+            f_at_x=function_value_at_x,
+        )
 
     def _compute_directional_derivative(
         self, x: NDArray[np.float64], direction: NDArray[np.float64], alpha: float
@@ -846,10 +838,16 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 termination_message = "Maximum feasible step is zero"
                 break
 
-            if iteration == 1:
-                initial_step = min(1.0 / direction_norm, max_feasible_step)
-            else:
-                initial_step = min(1.0, max_feasible_step)
+            # Initial step guess matches the canonical L-BFGS-B convention
+            # (Byrd–Lu–Nocedal–Zhu 1995, scipy/Fortran v3.0): try the full
+            # Newton step ``alpha = 1`` on every iteration, capped by the
+            # largest feasible step ``alpha_max`` that keeps ``x + alpha d``
+            # inside the box.  An earlier ``min(1/||d||, alpha_max)`` heuristic
+            # on the first iteration shrank the very first step to a tiny
+            # ``alpha`` whenever ``||d||`` was large at ``x_0``, which the
+            # line search would then accept (Wolfe conditions are trivially
+            # satisfied at small alpha), wasting the first iteration.
+            initial_step = min(1.0, max_feasible_step)
 
             self._cached_gradient = None
 
