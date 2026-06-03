@@ -1,22 +1,30 @@
 """Cross-validation: framework-native CMA-ES vs the historical reference port.
 
 The framework-native :class:`~src.algorithms.cmaes.CMAESOptimizer` is a
-clean rewrite that now uses the framework's
+clean rewrite that uses the framework's
 :class:`~src.utils.repair_strategies.RepairStrategy` and
-:class:`~src.utils.population_initializers.PopulationInitializer` seams
-in place of the resampling-then-repair loop that the reference port
-inherited from the original Hansen library.  This means the two
-implementations are **no longer bit-equivalent** — the RNG-draw order at
-iteration 0 differs (``MeanSigmaPopulationInitializer`` draws a
-``(dim, λ)`` block; the reference draws ``λ`` independent ``dim``-vectors)
-and infeasible samples are repaired rather than rejected.
+:class:`~src.utils.population_initializers.PopulationInitializer` seams.
+In the *default* configuration the two implementations consume the RNG
+stream differently (the framework's
+``MeanSigmaPopulationInitializer`` draws a ``(dim, λ)`` block at
+iteration 0; the reference draws ``λ`` independent ``dim``-vectors) and
+the framework clamps infeasible candidates rather than rejecting them.
 
-This script is retained as a **convergence-equivalence oracle**: even
-without bit-identity, the framework version is expected to land in the
-same basin and reach comparable final fitness on the standard battery.
-The summary heatmap and ``summary.csv`` quantify residual state
-divergence per generation; the convergence overlay shows trajectories
-side by side.
+For this cross-validation oracle, the framework run is driven by hand
+with **reference-matched sampling**:
+
+* per-individual ``standard_normal(dim)`` calls (so the RNG sequence
+  matches the reference exactly),
+* up to ``n_max_resampling`` rejection attempts before clamping (matching
+  ``CMA.ask``).
+
+With those two adjustments the framework and the reference are
+bit-identical at every generation — the convergence overlays sit
+exactly on top of each other and the per-element max-diff heatmap is at
+or near floating-point noise.  That isolates "is the framework rewrite
+correct?" from "does the framework's default sampling/repair shape
+behave like the reference?" (the latter is what
+``experiments/cross_validation/cmaes_components.py`` covers).
 
 Output (under ``plots/cross_validation/cmaes_vs_reference/``):
 
@@ -177,6 +185,51 @@ def _run_reference(
     return record, snapshots
 
 
+def _sample_reference_matched(
+    opt: CMAESOptimizer,
+    n_max_resampling: int = 100,
+) -> NDArray[np.float64]:
+    """Sample ``λ`` candidates the way ``CMA.ask`` does it.
+
+    Each individual is drawn with its own ``standard_normal(dim)`` call
+    (matching the reference's per-individual RNG sequence) and resampled
+    up to ``n_max_resampling`` times before falling back to clamp repair
+    (matching the reference's reject-then-clamp semantics).  Reaches into
+    private optimizer state because cross-validation needs to mirror the
+    reference's sampling loop exactly.
+    """
+    n = opt.dimensions
+    lambda_ = opt.config.population_size
+    B, D = opt._eigen_decomposition()  # type: ignore[attr-defined]
+    handler = opt.constraint_handler
+
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        BD = np.dot(B, np.diag(D))
+
+    population = np.empty((lambda_, n))
+    for k in range(lambda_):
+        chosen: NDArray[np.float64] | None = None
+        for _ in range(n_max_resampling):
+            z = opt.rng.standard_normal(n)
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                y = BD.dot(z)
+            candidate = opt._mean + opt._sigma * y  # type: ignore[attr-defined]
+            if handler.is_feasible(candidate):
+                chosen = candidate
+                break
+        if chosen is None:
+            z = opt.rng.standard_normal(n)
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                y = BD.dot(z)
+            candidate = opt._mean + opt._sigma * y  # type: ignore[attr-defined]
+            # Mirror CMA._repair_infeasible_params (np.where clamp; no inf/nan handling).
+            candidate = np.where(candidate < handler.lower_bounds, handler.lower_bounds, candidate)
+            candidate = np.where(candidate > handler.upper_bounds, handler.upper_bounds, candidate)
+            chosen = candidate
+        population[k] = chosen
+    return population
+
+
 def _run_framework(
     func: BenchmarkFunction,
     initial_point: NDArray[np.float64],
@@ -210,16 +263,14 @@ def _run_framework(
 
     snapshots: list[dict] = []
 
-    # We can't easily hook into ``optimize()`` to grab snapshots after every
-    # tell without subclassing, so we drive the algorithm by hand —
-    # mirroring the body of ``CMAESOptimizer.optimize`` while logging
-    # post-tell state into ``snapshots``.  Reaching into the optimizer's
-    # private state is deliberate for cross-validation purposes.
+    # Drive the algorithm by hand with reference-matched sampling so the
+    # RNG sequence and repair semantics line up with CMA.ask.  See the
+    # module docstring for why this differs from the framework's default
+    # sampling path.
     best_fitness = math.inf
     start = time.perf_counter()
     while opt.evaluations < budget:
-        pop = opt._generate_population(population_size)  # type: ignore[attr-defined]
-        pop = opt.repair_strategy.repair_population(pop, opt.constraint_handler)
+        pop = _sample_reference_matched(opt)
 
         fit = np.empty(population_size)
         for k in range(population_size):
