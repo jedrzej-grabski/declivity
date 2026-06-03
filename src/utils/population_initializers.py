@@ -127,6 +127,39 @@ class MeanSigmaPopulationInitializer(PopulationInitializer):
         return arx.T  # (pop_size, dim)
 
 
+class UniformPopulationInitializer(PopulationInitializer):
+    """R-DES-default initializer — uniform per-individual inside a fraction of bounds.
+
+    Reproduces the R reference's inline draw::
+
+        replicate(lambda, runif(N, fraction*lower, fraction*upper))
+
+    The starting point ``x0`` is deliberately **not** used: R-DES does
+    not centre the first population on ``par``.  The default
+    ``fraction=0.8`` matches ``DES.R`` line 202.
+    """
+
+    def __init__(self, fraction: float = 0.8) -> None:
+        self.fraction = fraction
+
+    def generate_population(
+        self,
+        rng: np.random.Generator,
+        x0: NDArray[np.float64],
+        pop_size: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        del x0  # intentionally unused — R-DES draws independently of par
+        low = self.fraction * lower_bounds
+        high = self.fraction * upper_bounds
+        # R's ``replicate(lambda, runif(N, low, high))`` draws (N, lambda)
+        # column-by-column.  Preserve that draw order so a side-by-side
+        # NumPy-seeded reference port consumes the same RNG stream.
+        out = rng.uniform(low=low[:, None], high=high[:, None], size=(len(low), pop_size))
+        return out.T  # (pop_size, dim)
+
+
 class IdentityPopulationInitializer(PopulationInitializer):
     """Explicit no-op placeholder — must not be called.
 
@@ -171,6 +204,7 @@ class PopulationInitializerType(Enum):
 
     NORMAL = "normal"
     MEAN_SIGMA = "mean_sigma"
+    UNIFORM = "uniform"
     IDENTITY = "identity"
 
     def build(self) -> PopulationInitializer:
@@ -180,5 +214,7 @@ class PopulationInitializerType(Enum):
                 return NormalPopulationInitializer()
             case PopulationInitializerType.MEAN_SIGMA:
                 return MeanSigmaPopulationInitializer(sigma=1.0)
+            case PopulationInitializerType.UNIFORM:
+                return UniformPopulationInitializer()
             case PopulationInitializerType.IDENTITY:
                 return IdentityPopulationInitializer()
