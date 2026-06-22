@@ -300,20 +300,27 @@ classic "interface segregation" violation.
 
 ## Premise 9: `RunTrace` as the persistence boundary
 
-Multi-seed benchmarks can produce gigabytes of `LogData` if every seed
-keeps the full population history. The framework distinguishes:
+Multi-seed benchmarks would produce gigabytes of `LogData` if every seed kept
+the full population history. So the persisted per-seed record is a **trimmed
+`LogData`**, not a separate type:
 
-- **`OptimizationResult` (in-memory)** — full LogData, single run.
-- **`RunTrace` (persisted)** — just `evaluations` + `best_fitness` +
-  final stats + handoff metadata.
+- **`OptimizationResult` (in-memory)** — the full `LogData` for a single run.
+- **`RunTrace` (persisted)** — the convergence trace + handoff metadata +
+  retained cheap scalar-per-step series (`sigma`, `condition_number`, …) in
+  `RunTrace.series`. Heavy per-iteration matrices (population, eigenvalues, the
+  per-step solution) are dropped.
 
-`Benchmark.run()` consumes `OptimizationResult`s, throws away the
-diagnostic detail, and persists `RunTrace`s. The resulting `traces.json`
-is small enough to commit (when you want to) and lets you re-plot
-without re-running.
+Both expose the same `get_series(field)` shape, so **one** panel-driven plotter
+(`plot_panels`) renders a single run as lines and a benchmark as median + IQR
+bands — the *same* `Panel` drives both. `draw_groups` is the shared renderer
+(1 run → line, N runs → band); `plot_metrics` / `plot_comparison` /
+`plot_benchmark_convergence` are thin wrappers over it.
 
-If you ever need richer multi-seed diagnostics, **extend `RunTrace`**.
-Don't bypass it by trying to keep full LogData lists per seed.
+The boundary is therefore a **storage policy** (which fields to trim), not a
+type divide. What's retained is the knob (`BenchmarkAlgorithm.retain_series`,
+auto by default); the only inherent limit is that heavy matrices stay
+single-run-only, because a population matrix can't become a cross-seed band.
+Full write-up: [`NEW_CODE_unified_plotting.md`](NEW_CODE_unified_plotting.md).
 
 ---
 
