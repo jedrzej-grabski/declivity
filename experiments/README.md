@@ -55,6 +55,7 @@ covariance to L-BFGS-B as the initial Hessian B₀.
 | Script                          | What it does                                                                                                 | Output                                            |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------|---------------------------------------------------|
 | `covariance_transformations.py` | 6 candidate `B₀` transforms (`I`, `C`, `C⁻¹`, `(σ²C)⁻¹`, normalized `C`, normalized `C⁻¹`) on rotated Ellipsoid | `plots/handoff/covariance_transformations/`       |
+| `interleaved.py`                | **Interleaved** CMA-ES ⇆ L-BFGS-B: alternate every `N` generations, L-BFGS-B as a `C⁻¹` side-probe, on a near-corner shifted Ellipsoid/Rastrigin. Produces the staircase curve. See `docs/NEW_CODE_interleaved_handoff.md` | `plots/handoff/interleaved/`                      |
 | `multimodal.py`                 | Rastrigin and Griewank: CMA-ES vs L-BFGS-B vs `C⁻¹` handoff vs identity handoff (25 seeds default)            | `plots/handoff/multimodal/`                       |
 | `multimodal_rotated.py`         | Same comparison on `RotatedFunction(Rastrigin / Griewank)`; confirms rotation alone doesn't expose anisotropy | `plots/handoff/multimodal_rotated/`               |
 | `rippled_ellipsoid.py`          | The decisive case: `RotatedFunction(RippledEllipsoid)` with high cond + low amplitude — `C⁻¹` dominates       | `plots/handoff/rippled_ellipsoid/`                |

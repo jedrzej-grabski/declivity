@@ -34,6 +34,7 @@ from src.plotting.declarative import (
     plot_metrics,
 )
 from src.plotting.diagnostics import plot_matrix_diagonal_comparison
+from src.plotting.interleaved import plot_interleaved_convergence
 from src.plotting.landscape import (
     plot_function_landscape,
     plot_function_landscape_grid,
@@ -56,6 +57,7 @@ __all__ = [
     "plot_evaluation_bars",
     "plot_function_landscape",
     "plot_function_landscape_grid",
+    "plot_interleaved_convergence",
     "plot_matrix_diagonal_comparison",
     "plot_metrics",
 ]

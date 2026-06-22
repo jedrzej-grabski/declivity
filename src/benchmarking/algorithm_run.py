@@ -38,9 +38,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
+from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig
+from src.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from src.algorithms.lbfgsb.line_search import LineSearchStrategy
 from src.benchmarking.problem import Problem
 from src.benchmarking.run_trace import RunTrace
@@ -73,6 +74,44 @@ class HandoffTransform(StrEnum):
     """Drop the covariance and use the L-BFGS-B default (B_0 = I). Mainly a
     control experiment: isolates the value of *passing covariance information*
     from the value of *sharing a starting point* with CMA-ES."""
+
+
+def initial_hessian_from_cmaes(
+    transform: HandoffTransform | str,
+    eigenvectors: NDArray[np.float64],
+    eigenvalues_sqrt: NDArray[np.float64],
+    sigma: float,
+) -> NDArray[np.float64] | None:
+    """Turn a CMA-ES eigendecomposition ``(B, D)`` into an L-BFGS-B ``B_0``.
+
+    ``C = B @ diag(D**2) @ B.T``; the L-BFGS-B model needs ``B`` (the
+    Hessian), and the CMA-ES covariance ``C`` is proportional to
+    ``B^{-1}`` — so the useful transforms invert it. Shared by both the
+    one-shot :class:`CMAESLBFGSBHandoff` and the
+    :class:`InterleavedCMAESLBFGSB` scheme. See :class:`HandoffTransform`
+    for the meaning of each option; ``IDENTITY`` returns ``None`` (the
+    L-BFGS-B default ``B_0 = I``).
+    """
+    transform = str(transform)
+    if transform == HandoffTransform.IDENTITY:
+        return None
+
+    eigenvalues = np.maximum(eigenvalues_sqrt**2, _EIGENVALUE_FLOOR)
+
+    # Floored 1/eigenvalues can be huge (up to 1e30); the matmul values are
+    # still valid but numpy raises spurious divide/overflow warnings on the
+    # intermediates.
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        if transform == HandoffTransform.INVERSE:
+            return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
+        if transform == HandoffTransform.SIGMA_INVERSE:
+            inverse = (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
+            return inverse / (sigma * sigma)
+
+    valid = ", ".join(repr(value.value) for value in HandoffTransform)
+    raise ValueError(
+        f"Unknown handoff transform: {transform!r}. Use one of {valid}."
+    )
 
 
 @runtime_checkable
@@ -394,25 +433,8 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         eigenvalues_sqrt: NDArray[np.float64],
         sigma: float,
     ) -> NDArray[np.float64] | None:
-        transform = str(self.transform)
-        if transform == HandoffTransform.IDENTITY:
-            return None
-
-        eigenvalues = np.maximum(eigenvalues_sqrt**2, _EIGENVALUE_FLOOR)
-
-        # Floored 1/eigenvalues can be huge (up to 1e30); the matmul values
-        # are still valid but numpy raises spurious divide/overflow warnings
-        # on the intermediates.
-        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-            if transform == HandoffTransform.INVERSE:
-                return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-            if transform == HandoffTransform.SIGMA_INVERSE:
-                inverse = (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-                return inverse / (sigma * sigma)
-
-        valid = ", ".join(repr(value.value) for value in HandoffTransform)
-        raise ValueError(
-            f"Unknown handoff transform: {self.transform!r}. Use one of {valid}."
+        return initial_hessian_from_cmaes(
+            self.transform, eigenvectors, eigenvalues_sqrt, sigma
         )
 
     def run_phases(
@@ -474,3 +496,290 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         ).optimize()
 
         return cmaes_result, lbfgsb_result
+
+
+@dataclass
+class InterleaveResult:
+    """Detailed record of one :class:`InterleavedCMAESLBFGSB` run.
+
+    :attr:`trace` is the standard :class:`RunTrace` (the overall-best
+    staircase) that :class:`~src.benchmarking.Benchmark` consumes. The
+    remaining fields expose the run's internal structure for the dedicated
+    staircase plot (:func:`src.plotting.plot_interleaved_convergence`):
+
+    - the CMA-ES *backbone* — best-so-far over CMA-ES generations only,
+      ignoring the L-BFGS-B drops, so it stays above the overall best;
+    - each L-BFGS-B burst as its own ``(evaluations, best)`` segment;
+    - the cumulative evaluation counts at which bursts began.
+    """
+
+    trace: RunTrace
+    overall_evaluations: list[int]
+    overall_best: list[float]
+    cmaes_evaluations: list[int]
+    cmaes_best: list[float]
+    burst_segments: list[tuple[list[int], list[float]]]
+    burst_starts: list[int]
+    cmaes_generations: int
+    num_bursts: int
+
+
+@dataclass
+class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
+    """Alternating CMA-ES <-> L-BFGS-B with a covariance-derived ``B_0``.
+
+    Where :class:`CMAESLBFGSBHandoff` cuts over once, this cycles between
+    the two algorithms for the whole budget:
+
+    1. Advance CMA-ES for ``cmaes_interval`` generations, *resumed* from
+       its own :class:`CMAESState` each cycle. With a shared RNG this
+       reproduces a standalone CMA-ES run bit-for-bit, so the CMA-ES
+       backbone is a true reference curve.
+    2. Fire an L-BFGS-B *side-probe* from the current CMA-ES mean, with
+       ``B_0`` derived from the CMA-ES covariance (``transform``, default
+       ``C^{-1}`` — covariance only, exactly as in the one-shot handoff).
+       The probe runs until it "stops advancing rapidly" — the L-BFGS-B
+       ``factr`` relative-decrease test (``probe_factr``), capped by
+       ``probe_max_evals``.
+    3. Fold the probe's improvements into the tracked OVERALL BEST, then
+       return to step 1 with CMA-ES **untouched**. The probe never feeds
+       back into the CMA-ES distribution — it is a pure refinement of the
+       running best.
+
+    The result is the characteristic staircase: CMA-ES descends gently
+    (the backbone) while each probe drops the overall best sharply toward
+    the local minimum of the region CMA-ES currently occupies. Early
+    drops are shallow (CMA-ES's covariance is still a poor Hessian model);
+    later ones deepen as ``C^{-1}`` becomes an accurate model of the
+    landscape.
+
+    This is implemented directly on :class:`BenchmarkAlgorithm` rather
+    than :class:`HandoffAlgorithm` (which is strictly two-phase) — exactly
+    the multi-phase case ``docs/framework_design.md`` defers to a direct
+    :py:meth:`run`.
+    """
+
+    name: str
+    color: str
+    cmaes_config_factory: Callable[[int], CMAESConfig]
+    lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
+
+    cmaes_interval: int = 20
+    """CMA-ES generations to run between consecutive L-BFGS-B probes (the
+    handoff interval ``N``)."""
+
+    total_budget: int = 0
+    """Shared evaluation budget for the whole run. ``0`` -> use the CMA-ES
+    config factory's own budget."""
+
+    transform: HandoffTransform | str = HandoffTransform.INVERSE
+    """How each probe turns the CMA-ES covariance into its ``B_0``.
+    Default ``INVERSE`` (``C^{-1}``) passes covariance information only,
+    matching :class:`CMAESLBFGSBHandoff`."""
+
+    probe_factr: float = 1e7
+    """L-BFGS-B relative-decrease stop for each probe: the burst hands back
+    once ``(f_old - f_new)/max(|f_old|,|f_new|,1) <= probe_factr * eps`` —
+    i.e. once the fast plunge flattens out. Larger -> the burst bails
+    sooner (shallower steps); smaller -> it grinds closer to the local
+    minimum (deeper steps)."""
+
+    probe_pgtol: float = 1e-8
+    """Projected-gradient stop for each probe (local-minimum safety)."""
+
+    probe_max_evals: int = 1000
+    """Hard cap on evaluations per probe, so a single burst cannot consume
+    the whole remaining budget."""
+
+    cmaes_extra_diagnostics: tuple[str, ...] = ()
+    lbfgsb_extra_diagnostics: tuple[str, ...] = ()
+
+    lbfgsb_line_search: LineSearchStrategy | None = None
+    """Line-search strategy for the probes. ``None`` keeps the L-BFGS-B
+    default (``MoreThuenteLineSearch``); ``ArmijoBacktracking`` is more
+    robust on rippled / multimodal landscapes."""
+
+    lbfgsb_gradient_strategy: GradientStrategy | None = None
+
+    def run(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> RunTrace:
+        return self.run_with_detail(problem, x0, seed).trace
+
+    def run_with_detail(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> InterleaveResult:
+        """Run the interleaved scheme and return the full diagnostic record.
+
+        :py:meth:`run` is the framework entry point and returns only
+        ``.trace``; use this when you want the backbone / burst structure
+        for the staircase plot.
+        """
+        rng = np.random.default_rng(seed)
+        dimensions = problem.dimensions
+
+        reference_config = self.cmaes_config_factory(dimensions)
+        population_size = reference_config.population_size
+        total_budget = (
+            self.total_budget if self.total_budget > 0 else reference_config.budget
+        )
+        evaluations_per_generation = population_size + 1
+        interval_evaluations = max(
+            evaluations_per_generation,
+            self.cmaes_interval * evaluations_per_generation,
+        )
+
+        state: CMAESState | None = None
+        cumulative = 0
+        overall_best = float("inf")
+        cmaes_best = float("inf")
+
+        overall_evaluations: list[int] = []
+        overall_best_curve: list[float] = []
+        cmaes_evaluations: list[int] = []
+        cmaes_best_curve: list[float] = []
+        burst_segments: list[tuple[list[int], list[float]]] = []
+        burst_starts: list[int] = []
+
+        total_generations = 0
+        cmaes_converged = False
+
+        while cumulative < total_budget:
+            # ---- CMA-ES slice, resumed from its own state --------------
+            slice_budget = min(interval_evaluations, total_budget - cumulative)
+            if slice_budget < evaluations_per_generation:
+                break
+
+            cmaes_config = self.cmaes_config_factory(dimensions)
+            cmaes_config.budget = slice_budget
+            for flag in self.cmaes_extra_diagnostics:
+                if hasattr(cmaes_config, flag):
+                    setattr(cmaes_config, flag, True)
+
+            cmaes = CMAESOptimizer(
+                problem.function,
+                x0,
+                cmaes_config,
+                lower_bounds=problem.lower_bound,
+                upper_bounds=problem.upper_bound,
+                seed=rng,
+                initial_state=state,
+            )
+            cmaes_result = cmaes.optimize()
+
+            for evaluation, fitness in zip(
+                cmaes_result.diagnostic.evaluations,
+                cmaes_result.diagnostic.best_fitness,
+            ):
+                global_evaluation = cumulative + int(evaluation)
+                cmaes_best = min(cmaes_best, float(fitness))
+                overall_best = min(overall_best, float(fitness))
+                cmaes_evaluations.append(global_evaluation)
+                cmaes_best_curve.append(cmaes_best)
+                overall_evaluations.append(global_evaluation)
+                overall_best_curve.append(overall_best)
+
+            cumulative += cmaes_result.evaluations
+            total_generations += len(cmaes_result.diagnostic.iteration)
+            state = cmaes.get_state()
+
+            # A non-budget termination means CMA-ES genuinely converged or
+            # stalled; do one last probe then stop, otherwise the loop
+            # would spin re-hitting the same criterion every cycle.
+            if not cmaes_result.message.startswith("Maximum function evaluations"):
+                cmaes_converged = True
+
+            if cumulative >= total_budget:
+                break
+
+            # ---- L-BFGS-B side-probe from the current CMA-ES mean ------
+            probe_budget = min(self.probe_max_evals, total_budget - cumulative)
+            if probe_budget <= 0:
+                break
+
+            eigenvectors, eigenvalues_sqrt = cmaes.get_eigendecomposition()
+            initial_hessian = initial_hessian_from_cmaes(
+                self.transform, eigenvectors, eigenvalues_sqrt, cmaes.sigma
+            )
+
+            lbfgsb_config = self.lbfgsb_config_factory(dimensions)
+            lbfgsb_config.budget = probe_budget
+            lbfgsb_config.initial_hessian = initial_hessian
+            lbfgsb_config.factr = self.probe_factr
+            lbfgsb_config.pgtol = self.probe_pgtol
+            for flag in self.lbfgsb_extra_diagnostics:
+                if hasattr(lbfgsb_config, flag):
+                    setattr(lbfgsb_config, flag, True)
+
+            lbfgsb_kwargs: dict = {}
+            if problem.gradient is not None:
+                lbfgsb_kwargs["gradient_fn"] = problem.gradient
+            if self.lbfgsb_line_search is not None:
+                lbfgsb_kwargs["line_search"] = self.lbfgsb_line_search
+            if self.lbfgsb_gradient_strategy is not None:
+                lbfgsb_kwargs["gradient_strategy"] = self.lbfgsb_gradient_strategy
+
+            probe = LBFGSBOptimizer(
+                problem.function,
+                cmaes.mean,
+                lbfgsb_config,
+                lower_bounds=problem.lower_bound,
+                upper_bounds=problem.upper_bound,
+                **lbfgsb_kwargs,
+            )
+            probe_result = probe.optimize()
+
+            burst_starts.append(cumulative)
+            # Start the burst segment at the current overall-best level so
+            # the drop renders as a clean step; the values are the running
+            # best within the probe (monotone), which coincides with the
+            # overall-best staircase wherever the probe improves on it.
+            burst_running = overall_best
+            segment_evaluations = [cumulative]
+            segment_best = [burst_running]
+            for evaluation, fitness in zip(
+                probe_result.diagnostic.evaluations,
+                probe_result.diagnostic.best_fitness,
+            ):
+                global_evaluation = cumulative + int(evaluation)
+                burst_running = min(burst_running, float(fitness))
+                overall_best = min(overall_best, float(fitness))
+                segment_evaluations.append(global_evaluation)
+                segment_best.append(burst_running)
+                overall_evaluations.append(global_evaluation)
+                overall_best_curve.append(overall_best)
+            burst_segments.append((segment_evaluations, segment_best))
+
+            cumulative += probe_result.evaluations
+
+            if cmaes_converged:
+                break
+
+        trace = RunTrace(
+            algorithm=self.name,
+            problem=problem.name,
+            seed=seed,
+            evaluations=overall_evaluations,
+            best_fitness=overall_best_curve,
+            final_evaluations=cumulative,
+            final_fitness=overall_best,
+            handoff_eval=(burst_starts[0] if burst_starts else None),
+            handoff_iter=(self.cmaes_interval if burst_starts else None),
+        )
+        return InterleaveResult(
+            trace=trace,
+            overall_evaluations=overall_evaluations,
+            overall_best=overall_best_curve,
+            cmaes_evaluations=cmaes_evaluations,
+            cmaes_best=cmaes_best_curve,
+            burst_segments=burst_segments,
+            burst_starts=burst_starts,
+            cmaes_generations=total_generations,
+            num_bursts=len(burst_starts),
+        )
