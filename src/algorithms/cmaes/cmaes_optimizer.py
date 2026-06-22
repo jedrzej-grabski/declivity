@@ -24,6 +24,7 @@ empirical evidence that convergence behaviour is preserved.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Callable, Union, final, TYPE_CHECKING
 
 import numpy as np
@@ -49,6 +50,45 @@ if TYPE_CHECKING:
 _EPS = 1e-8
 _MEAN_MAX = 1e32
 _SIGMA_MAX = 1e32
+
+
+@dataclass(frozen=True)
+class CMAESState:
+    """Immutable snapshot of a CMA-ES optimizer's evolvable state.
+
+    Captures everything the algorithm needs to resume exactly where it
+    left off: the sampling distribution (``mean``, ``sigma``,
+    ``covariance``), both evolution paths, the generation counter, and the
+    function-value history that drives the ``tolfun`` termination test.
+
+    Obtain one with :meth:`CMAESOptimizer.get_state`; restart from it with
+    ``CMAESOptimizer(..., initial_state=state)``. Resuming with the *same*
+    RNG (pass the same ``np.random.Generator`` as ``seed``) reproduces a
+    single continuous run bit-for-bit — the property the interleaved
+    CMA-ES + L-BFGS-B scheme relies on so its CMA-ES backbone matches a
+    standalone CMA-ES run with the same seed.
+
+    Note that config-derived constants (weights, learning rates, ...) are
+    *not* part of the state: they are recomputed from the dimension and
+    population size, which must match between the snapshot and the
+    optimizer it is restored into.
+    """
+
+    mean: NDArray[np.float64]
+    sigma: float
+    covariance: NDArray[np.float64]
+    evolution_path_c: NDArray[np.float64]
+    evolution_path_sigma: NDArray[np.float64]
+    generation: int
+    funhist_values: NDArray[np.float64]
+
+    # Cached eigendecomposition of ``covariance`` (``C = B diag(D**2) B.T``).
+    # Restoring it lets a resumed run reuse the exact same ``(B, D)`` instead
+    # of re-running ``eigh`` on a reconstructed ``C`` — LAPACK would otherwise
+    # return eigenvectors that differ in the last few bits, drifting the run.
+    # ``None`` when no decomposition has been computed yet.
+    eigenvectors: NDArray[np.float64] | None = None
+    eigenvalues_sqrt: NDArray[np.float64] | None = None
 
 
 @final
@@ -80,6 +120,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
+        initial_state: CMAESState | None = None,
     ) -> None:
         if config is None:
             config = CMAESConfig(dimensions=len(initial_point))
@@ -119,9 +160,53 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         self._generation = 0
         self._funhist_values = np.full(self.config.funhist_term * 2, np.inf)
 
+        if initial_state is not None:
+            self._apply_state(initial_state)
+
     # ------------------------------------------------------------------
-    # Public state — preserved for the CMA-ES → L-BFGS-B handoff.
+    # Public state — preserved for the CMA-ES → L-BFGS-B handoff and for
+    # pausing / resuming the optimizer (interleaved memetic schemes).
     # ------------------------------------------------------------------
+
+    def get_state(self) -> CMAESState:
+        """Snapshot the evolvable state for a later :class:`CMAESState` resume."""
+        return CMAESState(
+            mean=self._mean.copy(),
+            sigma=float(self._sigma),
+            covariance=self._C.copy(),
+            evolution_path_c=self._pc.copy(),
+            evolution_path_sigma=self._p_sigma.copy(),
+            generation=int(self._generation),
+            funhist_values=self._funhist_values.copy(),
+            eigenvectors=None if self._B is None else self._B.copy(),
+            eigenvalues_sqrt=None if self._D is None else self._D.copy(),
+        )
+
+    def _apply_state(self, state: CMAESState) -> None:
+        """Restore a snapshot produced by :meth:`get_state` onto this instance."""
+        if state.mean.shape != (self.dimensions,):
+            raise ValueError(
+                f"initial_state.mean has shape {state.mean.shape}, expected "
+                f"({self.dimensions},)."
+            )
+        if state.covariance.shape != (self.dimensions, self.dimensions):
+            raise ValueError(
+                f"initial_state.covariance has shape {state.covariance.shape}, "
+                f"expected ({self.dimensions}, {self.dimensions})."
+            )
+        self._mean = state.mean.astype(float, copy=True)
+        self._sigma = float(state.sigma)
+        self._C = state.covariance.astype(float, copy=True)
+        self._pc = state.evolution_path_c.astype(float, copy=True)
+        self._p_sigma = state.evolution_path_sigma.astype(float, copy=True)
+        self._generation = int(state.generation)
+        self._funhist_values = state.funhist_values.astype(float, copy=True)
+        # Restore the cached eigendecomposition verbatim when present so the
+        # resumed run reuses the exact same (B, D) rather than re-deriving
+        # them from C (which drifts in the last bits). Falls back to a lazy
+        # rebuild from C when the snapshot predates any decomposition.
+        self._B = None if state.eigenvectors is None else state.eigenvectors.astype(float, copy=True)
+        self._D = None if state.eigenvalues_sqrt is None else state.eigenvalues_sqrt.astype(float, copy=True)
 
     @property
     def sigma(self) -> float:

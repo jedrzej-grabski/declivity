@@ -21,7 +21,10 @@ from src.benchmarking.algorithm_run import (
     CMAESLBFGSBHandoff,
     HandoffAlgorithm,
     HandoffTransform,
+    InterleaveResult,
+    InterleavedCMAESLBFGSB,
     SingleAlgorithm,
+    initial_hessian_from_cmaes,
 )
 from src.benchmarking.benchmark import Benchmark
 from src.benchmarking.persistence import (
@@ -40,9 +43,12 @@ __all__ = [
     "CMAESLBFGSBHandoff",
     "HandoffAlgorithm",
     "HandoffTransform",
+    "InterleaveResult",
+    "InterleavedCMAESLBFGSB",
     "Problem",
     "RunTrace",
     "SingleAlgorithm",
+    "initial_hessian_from_cmaes",
     "load_traces_json",
     "save_runs_csv",
     "save_summary_csv",
