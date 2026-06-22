@@ -72,21 +72,33 @@ class Problem:
         function: BenchmarkFunction,
         lower_bound: Optional[float] = None,
         upper_bound: Optional[float] = None,
+        initial_point_generator: InitialPointGenerator
+        | NDArray[np.float64]
+        | None = None,
     ) -> "Problem":
         """Build a Problem from a BenchmarkFunction.
 
         Picks up the function's bounds and ``gradient`` attribute (if any)
-        unless explicit values are passed.
+        unless explicit values are passed. ``initial_point_generator`` is
+        forwarded verbatim (``None`` → uniform sampling within the bounds).
         """
         lb_array, ub_array = function.bounds
+        # Only advertise an analytic gradient when the concrete function
+        # overrides BenchmarkFunction.gradient — the base method is a stub
+        # that raises NotImplementedError, so a bare getattr would hand
+        # L-BFGS-B a gradient that blows up on first call instead of letting
+        # it fall back to finite differences.
+        overrides_gradient = (
+            getattr(type(function), "gradient", None) is not BenchmarkFunction.gradient
+        )
         return cls(
             name=name,
             function=function,
             dimensions=function.dimensions,
             lower_bound=float(lb_array[0]) if lower_bound is None else lower_bound,
             upper_bound=float(ub_array[0]) if upper_bound is None else upper_bound,
-            gradient=getattr(function, "gradient", None),
-            # initial_point_generator defaults to None → UniformInitialPointGenerator
+            gradient=function.gradient if overrides_gradient else None,
+            initial_point_generator=initial_point_generator,
         )
 
     def starting_point(self, seed: int) -> NDArray[np.float64]:

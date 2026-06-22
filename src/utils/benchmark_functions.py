@@ -87,22 +87,97 @@ class Sphere(BenchmarkFunction):
 
 
 class Ellipsoid(BenchmarkFunction):
-    """
-    Ellipsoid function.
-    f(x) = sum(10^(6*(i-1)/(n-1)) * x_i^2)
-    Global minimum: f(0, 0, ..., 0) = 0
+    """Axis-aligned ill-conditioned Ellipsoid (the classic "elliptic" function).
+
+    ``f(x) = sum_i 10^(6 i/(d-1)) x_i^2``  for ``i = 0 .. d-1``
+
+    A convex, separable quadratic with condition number ``10^6``: the
+    per-coordinate coefficient is a power of ten ramping across six decades,
+    so the Hessian is the constant diagonal matrix ``H_ii = 2 * 10^(6 i/(d-1))``
+    and its inverse ``H^-1_ii = 1/2 * 10^(-6 i/(d-1))``. This is the function
+    on which CMA-ES's covariance ``C`` provably converges (up to scale) to
+    ``H^-1`` — the canonical test bed for the covariance-as-Hessian handoff.
+    Global minimum ``f(0) = 0``.
+
+    Bounds default to the symmetric ``[-100, 100]`` box but are
+    constructor-configurable so the optimum can be translated onto an
+    asymmetric box's corner (e.g. ``[-180, 20]``) via
+    :meth:`ShiftedFunction.near_corner`.
     """
 
+    def __init__(
+        self,
+        dimensions: int,
+        lower: float = -100.0,
+        upper: float = 100.0,
+    ):
+        super().__init__(dimensions)
+        self._lower = lower
+        self._upper = upper
+        n = dimensions
+        self._scales = 10.0 ** (6.0 * np.arange(n) / max(n - 1, 1))  # 1 .. 1e6
+
     def __call__(self, x: NDArray[np.float64]) -> float:
-        n = len(x)
-        if n == 1:
-            return float(x[0] ** 2)
-        scales = 10.0 ** (6.0 * np.arange(n) / (n - 1))
-        return float(np.sum(scales * x**2))
+        return float(np.sum(self._scales * x**2))
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d/dx_i [s_i x_i^2] = 2 s_i x_i (constant Hessian, exact)."""
+        return 2.0 * self._scales * x
 
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        return -100.0 * np.ones(self.dimensions), 100.0 * np.ones(self.dimensions)
+        return (
+            self._lower * np.ones(self.dimensions),
+            self._upper * np.ones(self.dimensions),
+        )
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        return np.zeros(self.dimensions), 0.0
+
+
+class DifferentPowers(BenchmarkFunction):
+    """Different Powers function (BBOB f14 family).
+
+    ``f(x) = sum_i |x_i|^(2 + 4 i/(d-1))``  for ``i = 0 .. d-1``
+
+    The per-coordinate exponent ramps from 2 to 6, so the function is a
+    smooth, single-basin but strongly ill-conditioned bowl — the dynamic
+    range of the gradient across coordinates makes it a stress test for
+    anisotropy-aware methods. Global minimum ``f(0) = 0``.
+
+    Bounds default to the symmetric ``[-100, 100]`` box but are
+    constructor-configurable so the optimum can be translated onto an
+    asymmetric box's corner (e.g. ``[-180, 20]``) via
+    :meth:`ShiftedFunction.near_corner`.
+    """
+
+    def __init__(
+        self,
+        dimensions: int,
+        lower: float = -100.0,
+        upper: float = 100.0,
+    ):
+        super().__init__(dimensions)
+        self._lower = lower
+        self._upper = upper
+        n = dimensions
+        self._exponents = 2.0 + 4.0 * np.arange(n) / max(n - 1, 1)  # 2 .. 6
+
+    def __call__(self, x: NDArray[np.float64]) -> float:
+        return float(np.sum(np.abs(x) ** self._exponents))
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d/dx_i |x_i|^p = p |x_i|^(p-1) sign(x_i) (0 at x_i = 0 for p > 1)."""
+        p = self._exponents
+        return p * np.abs(x) ** (p - 1.0) * np.sign(x)
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return (
+            self._lower * np.ones(self.dimensions),
+            self._upper * np.ones(self.dimensions),
+        )
 
     @property
     def global_minimum(self) -> tuple[NDArray[np.float64], float]:
@@ -527,6 +602,91 @@ class RotatedFunction(BenchmarkFunction):
         opt_z, opt_v = self.base.global_minimum
         # R is orthogonal, so x* = R^T @ z*. For z* = 0 this stays at 0.
         return self.rotation_matrix.T @ opt_z, opt_v
+
+
+class ShiftedFunction(BenchmarkFunction):
+    """Translation wrapper for any BenchmarkFunction.
+
+    ``f_shifted(x) = f_base(x - shift)``
+
+    so the base optimum at ``z*`` maps to ``x* = z* + shift``. This is the
+    translation counterpart of :class:`RotatedFunction` (which rotates the
+    input, ``f_base(R x)``); the two compose —
+    ``ShiftedFunction(RotatedFunction(base, ...), shift=...)`` gives a
+    rotated *and* off-centre problem, with the rotation applied in the
+    shifted (optimum-centred) frame.
+
+    Bounds are inherited from the base function and interpreted in
+    *x-space*, so the feasible box does not move with the optimum. That is
+    exactly what makes the :meth:`near_corner` constructor useful: it drops
+    the optimum next to (or onto) a corner of the box, turning an otherwise
+    interior problem into a bound-active one where L-BFGS-B's projected
+    gradient / Cauchy-point machinery actually has to work.
+    """
+
+    def __init__(
+        self,
+        base: BenchmarkFunction,
+        shift: NDArray[np.float64] | list[float],
+        name_suffix: str | None = None,
+    ):
+        super().__init__(base.dimensions)
+        self.base = base
+        self.shift = np.asarray(shift, dtype=float)
+        if self.shift.shape != (self.dimensions,):
+            raise ValueError(
+                f"shift shape {self.shift.shape} doesn't match dimension "
+                f"{self.dimensions}."
+            )
+        self.shift_name = name_suffix or "shifted"
+
+    @classmethod
+    def near_corner(
+        cls,
+        base: BenchmarkFunction,
+        fraction: float = 0.9,
+        corner: NDArray[np.float64] | list[float] | None = None,
+        name_suffix: str | None = None,
+    ) -> "ShiftedFunction":
+        """Place the optimum a ``fraction`` of the way from the box centre
+        towards a corner of the base function's feasible region.
+
+        ``fraction = 0`` keeps the optimum at the box centre; ``fraction =
+        1`` lands it exactly on the corner (fully bound-active); values
+        slightly above 1 push the *unconstrained* optimum outside the box
+        so the constrained optimum sits on the corner. ``corner`` is a
+        per-coordinate sign vector selecting which corner (default: the
+        all-upper corner). The shift is derived so the *base* optimum
+        (typically the origin) lands on the chosen near-corner point.
+        """
+        lower, upper = base.bounds
+        centre = 0.5 * (lower + upper)
+        half_width = 0.5 * (upper - lower)
+        if corner is None:
+            sign = np.ones(base.dimensions)
+        else:
+            sign = np.sign(np.asarray(corner, dtype=float))
+            sign[sign == 0.0] = 1.0
+        target = centre + fraction * sign * half_width  # near-corner point (x-space)
+        opt_z, _ = base.global_minimum
+        shift = target - np.asarray(opt_z, dtype=float)  # so x* = opt_z + shift = target
+        return cls(base, shift, name_suffix=name_suffix or f"corner{fraction:g}")
+
+    def __call__(self, x: NDArray[np.float64]) -> float:
+        return float(self.base(x - self.shift))
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Gradient is the base gradient evaluated at the shifted point."""
+        return np.asarray(self.base.gradient(x - self.shift), dtype=float)
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return self.base.bounds
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        opt_z, opt_v = self.base.global_minimum
+        return np.asarray(opt_z, dtype=float) + self.shift, opt_v
 
 
 class CEC17Function(BenchmarkFunction):
