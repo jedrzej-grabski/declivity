@@ -43,7 +43,7 @@ from src.algorithms.cmaes.config import CMAESConfig
 from src.algorithms.lbfgsb.config import LBFGSBConfig
 from src.algorithms.lbfgsb.line_search import LineSearchStrategy
 from src.benchmarking.problem import Problem
-from src.benchmarking.run_trace import RunTrace
+from src.benchmarking.run_trace import RunTrace, capture_scalar_series
 from src.core.algorithm_factory import AlgorithmFactory
 from src.core.base_optimizer import OptimizationResult
 from src.core.config_base import BaseConfig
@@ -129,6 +129,17 @@ class BenchmarkAlgorithm(ABC):
     name: str
     color: str
 
+    retain_series: tuple[str, ...] | None = None
+    """Which extra scalar-per-step diagnostics :meth:`trace_from_result`
+    keeps on the trace (for cross-seed bands). ``None`` (default) = "auto":
+    retain every cheap scalar field the LogData logged (``sigma``,
+    ``condition_number``, ``mean_fitness``, ...). A tuple restricts capture
+    to exactly those fields; an empty tuple keeps only ``best_fitness``
+    (the old lean behavior). Heavy vector/matrix fields are never retained.
+    This is the storage-side knob for the single-plotter design: whatever is
+    retained here becomes available to the benchmark band plotter under the
+    same panel that drew it on a single run."""
+
     @abstractmethod
     def run(
         self,
@@ -152,6 +163,14 @@ class BenchmarkAlgorithm(ABC):
         carry ``evaluations`` and ``best_fitness`` (every built-in
         LogData does).
 
+        The trace is a *trimmed* ``LogData``: ``evaluations`` /
+        ``best_fitness`` become first-class lists, and every other cheap
+        scalar-per-step field (subject to :attr:`retain_series`) is captured
+        into ``trace.series`` so the same panel that plotted it on a single
+        run can plot an aggregated band across a benchmark's seeds. Heavy
+        per-iteration fields (population, eigenvalues, best_solution) are
+        dropped — they don't persist at scale and can't be aggregated.
+
         For multi-phase runners with custom stitching rules, build the
         :class:`RunTrace` by hand instead — or use
         :class:`HandoffAlgorithm`, which handles the two-phase case.
@@ -164,6 +183,9 @@ class BenchmarkAlgorithm(ABC):
             best_fitness=list(result.diagnostic.best_fitness),
             final_evaluations=result.evaluations,
             final_fitness=float(result.best_fitness),
+            series=capture_scalar_series(
+                result.diagnostic, retain=self.retain_series
+            ),
         )
 
 

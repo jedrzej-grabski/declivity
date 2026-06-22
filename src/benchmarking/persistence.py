@@ -19,7 +19,7 @@ from src.benchmarking.run_trace import RunTrace
 
 
 def _trace_to_dict(trace: RunTrace) -> dict:
-    return {
+    payload = {
         "algorithm": trace.algorithm,
         "problem": trace.problem,
         "seed": trace.seed,
@@ -30,6 +30,14 @@ def _trace_to_dict(trace: RunTrace) -> dict:
         "handoff_eval": trace.handoff_eval,
         "handoff_iter": trace.handoff_iter,
     }
+    # Retained scalar-per-step diagnostics (sigma, condition_number, ...).
+    # Omitted from the JSON when empty so bare traces stay compact and old
+    # readers are unaffected.
+    if trace.series:
+        payload["series"] = {
+            name: [float(v) for v in values] for name, values in trace.series.items()
+        }
+    return payload
 
 
 def _trace_from_dict(payload: dict) -> RunTrace:
@@ -47,6 +55,12 @@ def _trace_from_dict(payload: dict) -> RunTrace:
         handoff_iter=(
             int(payload["handoff_iter"]) if payload.get("handoff_iter") is not None else None
         ),
+        # Backward-compatible: traces.json written before retained series
+        # existed simply have no "series" key.
+        series={
+            name: [float(v) for v in values]
+            for name, values in payload.get("series", {}).items()
+        },
     )
 
 

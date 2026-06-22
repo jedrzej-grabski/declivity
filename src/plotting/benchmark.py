@@ -1,20 +1,17 @@
-"""Multi-seed declarative plotting.
+"""Multi-seed benchmark plotting — median + IQR bands over ``RunTrace`` lists.
 
 Counterpart to :py:mod:`src.plotting.declarative` for the multi-seed,
-multi-problem case. Where ``plot_metrics`` and ``plot_comparison`` operate
-on ``OptimizationResult``s (full diagnostic logs from a single run), the
-functions here operate on ``RunTrace`` lists — the lean per-seed records
-that the benchmarking framework persists.
-
-The grid layout is one panel per problem (rather than one panel per
-metric, like the single-run plotter), because for multi-seed work the
-interesting comparison axis is the problem. Inside each panel,
-algorithms are overlaid with a median line and an IQR band.
+multi-problem case. These functions lay out the grid (one panel per problem,
+or a single overlay axes) and draw the curves through the *same*
+:func:`~src.plotting.unified.draw_groups` core the single-run plotters use —
+so a benchmark of one seed renders as a line and a benchmark of 25 renders as
+a median + IQR band, through one code path.
 
 For now only convergence (best fitness vs. evaluations) and final-fitness
-distributions are supported — those are the only quantities ``RunTrace``
-carries across seeds. If diagnostics-per-seed ever land on ``RunTrace``,
-extending the system is a matter of adding panel-aware logic here.
+distributions are first-class here, because those are the quantities every
+``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can be
+banded across seeds via :func:`~src.plotting.unified.plot_panels` with the
+matching panel key.
 """
 
 from pathlib import Path
@@ -23,28 +20,17 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from numpy.typing import NDArray
 
-from src.benchmarking.aggregation import (
-    common_evaluation_grid,
-    percentile_band,
-    stack_traces_on_grid,
-)
 from src.benchmarking.algorithm_run import AlgorithmRun
 from src.benchmarking.problem import Problem
 from src.benchmarking.run_trace import RunTrace
-
-
-def _grid_dims(num_panels: int, ncols: int) -> tuple[int, int]:
-    cols = max(1, min(ncols, num_panels))
-    rows = (num_panels + cols - 1) // cols
-    return rows, cols
-
-
-def _save_if_path(fig: Figure, save_path: Path | str | None) -> None:
-    if save_path is None:
-        return
-    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+from src.plotting.unified import (
+    RunGroup,
+    draw_groups,
+    grid_dims,
+    save_if_path,
+)
 
 
 def plot_benchmark_convergence(
@@ -67,28 +53,20 @@ def plot_benchmark_convergence(
     """One panel per problem, every algorithm overlaid with median + IQR.
 
     Args:
-        traces: ``{(problem.name, algorithm.name): [RunTrace per seed]}``.
-            Typically the return value of ``Benchmark.run()``.
-        problems: Outer iteration order — one subplot per problem in this
-            order. Provides ``dimensions`` for sub-titles.
-        algorithms: Inner iteration order — algorithms are overlaid in
-            each subplot in this order. ``color`` and ``name`` from each
-            ``AlgorithmRun`` are used directly.
+        traces: ``{(problem.name, algorithm.name): [RunTrace per seed]}`` —
+            typically the return value of ``Benchmark.run()``.
+        problems: Outer iteration order — one subplot per problem.
+        algorithms: Inner iteration order — algorithms overlaid per subplot;
+            ``color`` / ``name`` are read from each ``AlgorithmRun``.
         ncols: Subplots per row.
-        num_grid_points: Resolution of the shared evaluation grid used
-            to align step-function traces. Log-spaced by default since
-            most convergence happens early.
+        num_grid_points: Resolution of the shared evaluation grid.
         show_iqr: Draw the 25/75 percentile band beneath the median.
         iqr_alpha: Transparency of the IQR fill.
-        floor: Clip values below this before log-scaling — runs that
-            reach effectively zero would otherwise blow up.
-        annotate_handoff: Add a vertical line and label at the median
-            handoff evaluation, when any trace reports one.
-        figsize_per_panel: ``(width, height)`` in inches per subplot.
-        linewidth: Line width for the median curves.
-        legend_fontsize: Legend text size.
-        title: Optional figure-level suptitle.
-        save_path: If set, the figure is saved here.
+        floor: Clip values below this before log-scaling.
+        annotate_handoff: Add a vertical line + label at the median handoff
+            evaluation, when any trace reports one.
+        figsize_per_panel, linewidth, legend_fontsize, title, save_path:
+            cosmetics / output.
 
     Returns:
         The matplotlib :class:`Figure`.
@@ -98,7 +76,7 @@ def plot_benchmark_convergence(
     if not problems_list:
         raise ValueError("problems must be non-empty")
 
-    rows, cols = _grid_dims(len(problems_list), ncols)
+    rows, cols = grid_dims(len(problems_list), ncols)
     fig, axes = plt.subplots(
         rows,
         cols,
@@ -110,90 +88,70 @@ def plot_benchmark_convergence(
     for panel_index, problem in enumerate(problems_list):
         ax = flat_axes[panel_index]
 
-        # Shared evaluation grid spanning every trace on this problem.
-        all_traces: list[RunTrace] = []
-        for algorithm in algorithms_list:
-            all_traces.extend(traces.get((problem.name, algorithm.name), []))
-        if not all_traces:
-            ax.set_visible(False)
-            continue
-        grid = common_evaluation_grid(all_traces, num_points=num_grid_points)
-
-        # eval -> (iter | None) for handoff markers seen on this panel.
-        # Keyed by eval so multiple traces with the same handoff collapse
-        # into one annotation; the median per algorithm is what we draw.
-        handoff_markers: dict[int, int | None] = {}
+        groups: list[RunGroup] = []
         traces_count = 0
+        # eval -> (iter | None) for handoff markers seen on this panel.
+        handoff_markers: dict[int, int | None] = {}
 
         for algorithm in algorithms_list:
             algorithm_traces = traces.get((problem.name, algorithm.name), [])
             if not algorithm_traces:
                 continue
             traces_count = max(traces_count, len(algorithm_traces))
-
-            matrix = stack_traces_on_grid(algorithm_traces, grid)
-            matrix = np.maximum(matrix, floor)
-            median, low, high = percentile_band(matrix)
-
-            final_median = float(
-                np.median([trace.final_fitness for trace in algorithm_traces])
+            groups.append(
+                RunGroup.from_runs(
+                    algorithm.name, algorithm_traces, color=algorithm.color
+                )
             )
-            ax.semilogy(
-                grid,
-                median,
-                color=algorithm.color,
-                linewidth=linewidth,
-                label=f"{algorithm.name}  (median = {final_median:.2e})",
-            )
-            if show_iqr and len(algorithm_traces) > 1:
-                ax.fill_between(grid, low, high, color=algorithm.color, alpha=iqr_alpha)
 
-            handoff_traces = [
-                trace for trace in algorithm_traces if trace.handoff_eval is not None
-            ]
+            handoff_traces = [t for t in algorithm_traces if t.handoff_eval is not None]
             if handoff_traces:
                 handoff_evals = [
-                    e for trace in handoff_traces
-                    if (e := trace.handoff_eval) is not None
+                    e for t in handoff_traces if (e := t.handoff_eval) is not None
                 ]
                 median_eval = int(np.median(handoff_evals))
                 handoff_iters = [
-                    trace.handoff_iter
-                    for trace in handoff_traces
-                    if trace.handoff_iter is not None
+                    t.handoff_iter for t in handoff_traces if t.handoff_iter is not None
                 ]
                 handoff_markers[median_eval] = (
                     int(np.median(handoff_iters)) if handoff_iters else None
                 )
 
+        if not groups:
+            ax.set_visible(False)
+            continue
+
+        # The shared renderer: median + IQR per algorithm, one curve each.
+        draw_groups(
+            ax,
+            groups,
+            field="best_fitness",
+            x_field="evaluations",
+            floor=floor,
+            aggregate=True,
+            show_band=show_iqr,
+            iqr_alpha=iqr_alpha,
+            linewidth=linewidth,
+            num_grid_points=num_grid_points,
+            annotate_final="median",
+        )
+
         if annotate_handoff:
             for handoff_eval, handoff_iter in handoff_markers.items():
-                ax.axvline(
-                    handoff_eval,
-                    color="black",
-                    linestyle="--",
-                    linewidth=1.2,
-                    alpha=0.45,
-                )
+                ax.axvline(handoff_eval, color="black", linestyle="--", linewidth=1.2, alpha=0.45)
                 if handoff_iter is not None:
                     label = f"  handoff @ {handoff_iter} gen ({handoff_eval} evals)"
                 else:
                     label = f"  handoff @ {handoff_eval} evals"
                 ymax = ax.get_ylim()[1]
                 ax.text(
-                    handoff_eval,
-                    ymax,
-                    label,
-                    rotation=90,
-                    va="top",
-                    ha="left",
-                    fontsize=8,
-                    color="gray",
-                    alpha=0.7,
+                    handoff_eval, ymax, label, rotation=90, va="top", ha="left",
+                    fontsize=8, color="gray", alpha=0.7,
                 )
 
         ax.set_xlabel("Function Evaluations", fontsize=12)
         ax.set_ylabel("Best Fitness (log)", fontsize=12)
+        ax.set_yscale("log")
         ax.set_title(
             f"{problem.name}  (d={problem.dimensions}, n_seeds={traces_count})",
             fontsize=13,
@@ -209,7 +167,7 @@ def plot_benchmark_convergence(
         fig.suptitle(title, fontsize=14, y=1.01)
     fig.tight_layout()
 
-    _save_if_path(fig, save_path)
+    save_if_path(fig, save_path)
     return fig
 
 
@@ -226,26 +184,20 @@ def plot_benchmark_boxplot(
 ) -> Figure:
     """Final-fitness distribution per algorithm, one panel per problem.
 
-    Runs that reached sub-``floor`` fitness are dropped (they can't be
-    shown honestly on a log axis); the count of surviving runs is
-    annotated as ``n=X/Y`` above each box when ``X < Y``.
+    Runs that reached sub-``floor`` fitness are dropped (they can't be shown
+    honestly on a log axis); the count of surviving runs is annotated as
+    ``n=X/Y`` above each box when ``X < Y``.
 
-    Args:
-        traces: ``{(problem.name, algorithm.name): [RunTrace per seed]}``.
-        problems: One subplot per problem in this order.
-        algorithms: Algorithms appear as boxes left-to-right in this order.
-        ncols, floor, figsize_per_panel, title, save_path: As in
-            :py:func:`plot_benchmark_convergence`.
-
-    Returns:
-        The matplotlib :class:`Figure`.
+    This view is final-*scalar*, not a time series, so it doesn't go through
+    ``draw_groups`` — but it reads the same ``RunTrace`` records and the same
+    per-algorithm colours.
     """
     problems_list = list(problems)
     algorithms_list = list(algorithms)
     if not problems_list:
         raise ValueError("problems must be non-empty")
 
-    rows, cols = _grid_dims(len(problems_list), ncols)
+    rows, cols = grid_dims(len(problems_list), ncols)
     fig, axes = plt.subplots(
         rows,
         cols,
@@ -268,10 +220,7 @@ def plot_benchmark_boxplot(
                 continue
             raw = np.array([trace.final_fitness for trace in algorithm_traces])
             surviving = raw[raw > floor]
-            if surviving.size == 0:
-                boxes.append(np.array([floor]))
-            else:
-                boxes.append(surviving)
+            boxes.append(surviving if surviving.size else np.array([floor]))
             labels.append(algorithm.name)
             colors.append(algorithm.color)
             surviving_counts.append((int(surviving.size), int(raw.size)))
@@ -281,11 +230,7 @@ def plot_benchmark_boxplot(
             continue
 
         box_artists = ax.boxplot(
-            boxes,
-            labels=labels,
-            patch_artist=True,
-            showmeans=True,
-            meanline=True,
+            boxes, labels=labels, patch_artist=True, showmeans=True, meanline=True
         )
         for patch, color in zip(box_artists["boxes"], colors):
             patch.set_facecolor(color)
@@ -303,10 +248,7 @@ def plot_benchmark_boxplot(
                     f"n={kept}/{total}",
                     xy=(tick_index, 0.98),
                     xycoords=("data", "axes fraction"),
-                    ha="center",
-                    va="top",
-                    fontsize=8,
-                    color="dimgray",
+                    ha="center", va="top", fontsize=8, color="dimgray",
                 )
 
     for panel_index in range(len(problems_list), len(flat_axes)):
@@ -316,5 +258,104 @@ def plot_benchmark_boxplot(
         fig.suptitle(title, fontsize=14, y=1.01)
     fig.tight_layout()
 
-    _save_if_path(fig, save_path)
+    save_if_path(fig, save_path)
+    return fig
+
+
+def plot_convergence_overlay(
+    traces: dict[tuple[str, str], list[RunTrace]],
+    problem: Problem,
+    algorithms: Iterable[AlgorithmRun],
+    *,
+    title: str | None = None,
+    xlabel: str = "Function Evaluations",
+    ylabel: str = "Best Fitness (log)",
+    floor: float = 1e-12,
+    show_iqr: bool = True,
+    iqr_alpha: float = 0.15,
+    num_grid_points: int = 300,
+    annotate_final: bool = True,
+    secondary_iter_lambda: int | None = None,
+    secondary_label: str = "CMA-ES iterations",
+    secondary_location: float = -0.16,
+    linewidth: float = 2.2,
+    legend_loc: str = "best",
+    legend_fontsize: int = 9,
+    figsize: tuple[float, float] = (9.0, 6.2),
+    save_path: Path | str | None = None,
+) -> Figure:
+    """Single-panel overlay: one convergence curve per algorithm, on one problem.
+
+    The line-per-algorithm counterpart of :func:`plot_benchmark_convergence`
+    (which lays out one panel *per problem*). Use this when the interesting
+    axis is the *algorithm* — a multi-``k`` sweep on a single problem, or any
+    single-seed comparison — optionally with a secondary "iterations" axis.
+
+    With one seed per algorithm the raw trace is drawn; with several, the
+    median across seeds (plus an optional IQR band), via the shared
+    ``draw_groups`` core. Colours / names come from the ``AlgorithmRun``
+    objects, drawn in the given order (last on top).
+
+    Args:
+        traces: ``{(problem.name, algorithm.name): [RunTrace per seed]}``.
+        problem: The single problem to plot.
+        algorithms: Draw order; ``color`` / ``name`` read from each.
+        secondary_iter_lambda: If set, add a secondary x-axis showing
+            iterations ``= evaluations / (lambda + 1)``. ``None`` omits it.
+        annotate_final: Append the (median) final fitness to each legend label.
+        save_path: If set, the figure is written here (dpi 150).
+
+    Returns:
+        The matplotlib :class:`Figure`.
+    """
+    groups = [
+        RunGroup.from_runs(
+            algorithm.name,
+            traces.get((problem.name, algorithm.name), []),
+            color=algorithm.color,
+        )
+        for algorithm in algorithms
+    ]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    draw_groups(
+        ax,
+        groups,
+        field="best_fitness",
+        x_field="evaluations",
+        floor=floor,
+        aggregate=True,
+        show_band=show_iqr,
+        iqr_alpha=iqr_alpha,
+        linewidth=linewidth,
+        num_grid_points=num_grid_points,
+        annotate_final="median" if annotate_final else None,
+    )
+
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
+    if title:
+        ax.set_title(title, fontsize=12)
+    ax.set_yscale("log")
+    ax.grid(True, alpha=0.25, which="both")
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)
+    ax.tick_params(axis="both", labelsize=10)
+
+    if secondary_iter_lambda is not None:
+        evals_per_iter = float(secondary_iter_lambda + 1)
+
+        def evals_to_iters(evaluations: NDArray[np.float64]) -> NDArray[np.float64]:
+            return np.asarray(evaluations, dtype=float) / evals_per_iter
+
+        def iters_to_evals(iterations: NDArray[np.float64]) -> NDArray[np.float64]:
+            return np.asarray(iterations, dtype=float) * evals_per_iter
+
+        secondary = ax.secondary_xaxis(
+            secondary_location,
+            functions=(evals_to_iters, iters_to_evals),  # type: ignore[arg-type]
+        )
+        secondary.set_xlabel(secondary_label, fontsize=12)
+
+    fig.tight_layout()
+    save_if_path(fig, save_path)
     return fig
