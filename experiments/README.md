@@ -19,6 +19,11 @@ pdm run run-example      # experiments/basic/simple_optimization.py
 pdm run run-r            # experiments/cross_validation/des_vs_r.py
 ```
 
+**Writing a new experiment?** See the step-by-step guide
+[`docs/NEW_CODE_building_an_experiment.md`](../docs/NEW_CODE_building_an_experiment.md)
+— the conventions (Problem → algorithm specs → `Benchmark` → declarative
+plots), where custom code belongs, and the anti-patterns to avoid.
+
 ## `basic/` — tutorial demos and sanity checks
 
 | Script                       | What it does                                                    | Output                                  |
@@ -29,6 +34,8 @@ pdm run run-r            # experiments/cross_validation/des_vs_r.py
 | `declarative_benchmark.py`   | End-to-end demo of `plot_benchmark_convergence` and `plot_benchmark_boxplot` with a real CMA-ES → L-BFGS-B handoff | `plots/basic/declarative_benchmark/`    |
 | `custom_handoff.py`          | Builds a DES → L-BFGS-B handoff from scratch by subclassing `HandoffAlgorithm` (one `run_phases()` method) | `plots/basic/custom_handoff/`           |
 | `custom_algorithm.py`        | Multi-start CMA-ES via `BenchmarkAlgorithm` directly; shows the generic extension point | `plots/basic/custom_algorithm/`         |
+| `plotter_showcase.py`        | Three one-call figures proving the declarative plotter needs no per-algorithm code (cross-family overlay, multi-seed median+IQR, all-diagnostics grid). Write-up: `docs/NEW_CODE_Plotter_showcase.md` | `plots/basic/plotter_showcase/`         |
+| `benchmark_showcase.py`      | One `Benchmark` grid over four heterogeneous runners (every rung of the extension hierarchy) → multi-seed convergence (median + IQR); demos same-seed fairness + `traces.json` persistence. Write-up: `docs/NEW_CODE_Benchmark_showcase.md` | `plots/basic/benchmark_showcase/`       |
 | `constrained_rosenbrock.py`  | 2D Rosenbrock under box-only vs. box + custom-penalty disk inequality across DES, CMA-ES, L-BFGS-B; demos the `ConstraintHandler` API end-to-end | `plots/basic/constrained_rosenbrock/`   |
 
 ## `cross_validation/` — checks against external references
