@@ -48,6 +48,20 @@ class BaseLogData:
     best_fitness: list[float] = field(default_factory=list)
     best_solution: list[NDArray[np.float64]] = field(default_factory=list)
 
+    def get_series(self, name: str) -> list[Any] | None:
+        """Return the per-step array for ``name``, or ``None`` if absent.
+
+        This is the :class:`~src.plotting.unified.RunSeries` contract — the
+        same one a persisted :class:`~src.benchmarking.run_trace.RunTrace`
+        satisfies. A full ``LogData`` simply exposes every attribute it
+        holds (``sigma``, ``condition_number``, ... on the algorithm-specific
+        subclasses) by name, so the panel plotter can read a live single-run
+        ``LogData`` and a trimmed multi-seed ``RunTrace`` through one
+        interface. Missing fields return ``None`` (rendered as an empty
+        series), never raise.
+        """
+        return getattr(self, name, None)
+
     def clear(self) -> None:
         """Reset all log fields. Subclasses extend with ``super().clear()``."""
         self.iteration.clear()

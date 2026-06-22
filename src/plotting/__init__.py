@@ -27,6 +27,7 @@ from src.plotting import standard_panels  # noqa: F401
 from src.plotting.benchmark import (
     plot_benchmark_boxplot,
     plot_benchmark_convergence,
+    plot_convergence_overlay,
 )
 from src.plotting.declarative import (
     plot_comparison,
@@ -34,12 +35,14 @@ from src.plotting.declarative import (
     plot_metrics,
 )
 from src.plotting.diagnostics import plot_matrix_diagonal_comparison
+from src.plotting.interleaved import plot_interleaved_convergence
 from src.plotting.landscape import (
     plot_function_landscape,
     plot_function_landscape_grid,
 )
 from src.plotting.panel import Panel, PanelRegistry, Series
 from src.plotting.types import LineStyle, PanelKey, PanelSet, XAxis, YScale
+from src.plotting.unified import RunGroup, RunSeries, draw_groups, plot_panels
 
 __all__ = [
     "LineStyle",
@@ -47,15 +50,21 @@ __all__ = [
     "PanelKey",
     "PanelRegistry",
     "PanelSet",
+    "RunGroup",
+    "RunSeries",
     "Series",
     "XAxis",
     "YScale",
+    "draw_groups",
     "plot_benchmark_boxplot",
     "plot_benchmark_convergence",
     "plot_comparison",
+    "plot_convergence_overlay",
     "plot_evaluation_bars",
     "plot_function_landscape",
     "plot_function_landscape_grid",
+    "plot_interleaved_convergence",
     "plot_matrix_diagonal_comparison",
     "plot_metrics",
+    "plot_panels",
 ]
