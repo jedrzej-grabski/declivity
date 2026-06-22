@@ -66,6 +66,35 @@ class UniformInitialPointGenerator(InitialPointGenerator):
         return rng.uniform(lower_bounds, upper_bounds, size=dimensions)
 
 
+class UniformBoxInitialPointGenerator(InitialPointGenerator):
+    """Samples uniformly from a *fixed* box, ignoring the problem's bounds.
+
+    Useful when the initial-mean region must differ from the feasible box —
+    e.g. reproducing a reference that draws the starting mean from
+    ``U[-100, 100]^d`` regardless of an asymmetric feasible box such as
+    ``[-180, 20]^d``. The ``lower_bounds`` / ``upper_bounds`` passed to
+    ``generate_point`` are intentionally ignored in favour of the fixed box
+    supplied at construction.
+
+    Args:
+        lower: Lower corner of the sampling box (broadcast over dimensions).
+        upper: Upper corner of the sampling box.
+    """
+
+    def __init__(self, lower: float, upper: float) -> None:
+        self.lower = float(lower)
+        self.upper = float(upper)
+
+    def generate_point(
+        self,
+        rng: np.random.Generator,
+        dimensions: int,
+        lower_bounds: NDArray[np.float64],
+        upper_bounds: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        return rng.uniform(self.lower, self.upper, size=dimensions)
+
+
 class FixedInitialPointGenerator(InitialPointGenerator):
     """Always returns the same pre-supplied point.
 
@@ -97,19 +126,30 @@ class InitialPointGeneratorType(Enum):
     """
 
     UNIFORM = "uniform"
+    UNIFORM_BOX = "uniform_box"
     FIXED = "fixed"
 
     def build(self, **kwargs: object) -> InitialPointGenerator:
         """Construct the corresponding InitialPointGenerator.
 
         For UNIFORM no arguments are needed.
+        For UNIFORM_BOX pass ``lower=<float>`` and ``upper=<float>``.
         For FIXED pass ``point=<NDArray>``.
 
         Raises:
-            ValueError: If FIXED is requested without a ``point`` argument.
+            ValueError: If required keyword arguments are missing.
         """
         if self is InitialPointGeneratorType.UNIFORM:
             return UniformInitialPointGenerator()
+        if self is InitialPointGeneratorType.UNIFORM_BOX:
+            if "lower" not in kwargs or "upper" not in kwargs:
+                raise ValueError(
+                    "InitialPointGeneratorType.UNIFORM_BOX.build() requires "
+                    "'lower' and 'upper' keyword arguments"
+                )
+            return UniformBoxInitialPointGenerator(
+                float(kwargs["lower"]), float(kwargs["upper"])  # type: ignore[arg-type]
+            )
         if self is InitialPointGeneratorType.FIXED:
             if "point" not in kwargs:
                 raise ValueError(
