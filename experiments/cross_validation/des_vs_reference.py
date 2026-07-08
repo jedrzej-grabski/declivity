@@ -43,11 +43,11 @@ from numpy.typing import NDArray
 from scipy import stats
 
 from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.des.config import DESConfig
-from src.algorithms.des.des_reference import des_reference
-from src.core.algorithm_factory import AlgorithmFactory
-from src.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.des.config import DESConfig
+from declivity.algorithms.des.des_reference import des_reference
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 
 
 # Default problem: CEC2017 F10 in 10 dimensions, the existing parity

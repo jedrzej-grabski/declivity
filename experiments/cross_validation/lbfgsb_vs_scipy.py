@@ -46,12 +46,12 @@ from scipy import stats
 from scipy.optimize import minimize as scipy_minimize
 
 from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from src.core.algorithm_factory import AlgorithmFactory
-from src.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
-from src.utils.gradient_strategies import ForwardFD
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.utils.gradient_strategies import ForwardFD
 
 
 DEFAULT_PROBLEM = "ellipsoid_d10"

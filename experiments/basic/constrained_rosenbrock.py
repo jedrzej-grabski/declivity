@@ -23,13 +23,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.des.config import DESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.plotting import plot_comparison
-from src.utils import BoxConstraintHandler, BoxStrategy, ConstraintHandler, Rosenbrock
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.des.config import DESConfig
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.plotting import plot_comparison
+from declivity.utils import BoxConstraintHandler, BoxStrategy, ConstraintHandler, Rosenbrock
 
 plt.ioff()
 plt.switch_backend("Agg")

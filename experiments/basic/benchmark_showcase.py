@@ -35,10 +35,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.benchmarking import (
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.benchmarking import (
     Benchmark,
     BenchmarkAlgorithm,
     CMAESLBFGSBHandoff,
@@ -47,9 +47,9 @@ from src.benchmarking import (
     SingleAlgorithm,
     load_traces_json,
 )
-from src.core.algorithm_factory import AlgorithmFactory
-from src.plotting import plot_benchmark_convergence
-from src.utils.benchmark_functions import Rastrigin, Rosenbrock
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.plotting import plot_benchmark_convergence
+from declivity.utils.benchmark_functions import Rastrigin, Rosenbrock
 
 
 plt.ioff()

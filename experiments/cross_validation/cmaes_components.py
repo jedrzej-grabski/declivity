@@ -42,13 +42,13 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.benchmarking import AlgorithmRun, Benchmark, Problem, SingleAlgorithm
-from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
-from src.utils.benchmark_functions import Rastrigin, Rosenbrock, Sphere
-from src.utils.population_initializers import NormalPopulationInitializer
-from src.utils.repair_strategies import IdentityRepair
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.benchmarking import AlgorithmRun, Benchmark, Problem, SingleAlgorithm
+from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
+from declivity.utils.benchmark_functions import Rastrigin, Rosenbrock, Sphere
+from declivity.utils.population_initializers import NormalPopulationInitializer
+from declivity.utils.repair_strategies import IdentityRepair
 
 
 plt.ioff()

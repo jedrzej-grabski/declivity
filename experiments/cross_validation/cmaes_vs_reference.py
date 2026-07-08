@@ -54,10 +54,10 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from src.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
-from src.algorithms.cmaes.cmaes_reference import CMA
-from src.algorithms.cmaes.config import CMAESConfig
-from src.utils.benchmark_functions import (
+from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
+from declivity.algorithms.cmaes.cmaes_reference import CMA
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.utils.benchmark_functions import (
     Ackley,
     BenchmarkFunction,
     CEC17Function,
@@ -66,7 +66,7 @@ from src.utils.benchmark_functions import (
     Rosenbrock,
     Sphere,
 )
-from src.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 
 
 # ---------------------------------------------------------------------------

@@ -31,24 +31,24 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.benchmarking import (
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
 )
-from src.core.base_optimizer import OptimizationResult
-from src.plotting import (
+from declivity.core.base_optimizer import OptimizationResult
+from declivity.plotting import (
     PanelSet,
     plot_benchmark_convergence,
     plot_comparison,
     plot_metrics,
 )
-from src.utils.benchmark_functions import (
+from declivity.utils.benchmark_functions import (
     BenchmarkFunction,
     Ellipsoid,
     Rosenbrock,

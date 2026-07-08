@@ -47,10 +47,10 @@ Run one optimizer:
 
 ```python
 import numpy as np
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.plotting import plot_metrics
-from src.utils.benchmark_functions import Sphere
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.plotting import plot_metrics
+from declivity.utils.benchmark_functions import Sphere
 
 func = Sphere(dimensions=10)
 initial_point = np.random.uniform(-50, 50, 10)
@@ -71,7 +71,7 @@ plot_metrics(result, save_path="cmaes.png")  # every default panel for CMA-ES
 Compare two algorithms:
 
 ```python
-from src.plotting import plot_comparison
+from declivity.plotting import plot_comparison
 
 plot_comparison(
     {"CMA-ES": cmaes_result, "L-BFGS-B": lbfgsb_result},
@@ -85,8 +85,8 @@ plot_comparison(
 Multi-seed benchmark:
 
 ```python
-from src.benchmarking import Benchmark, Problem, SingleAlgorithm, CMAESLBFGSBHandoff
-from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
+from declivity.benchmarking import Benchmark, Problem, SingleAlgorithm, CMAESLBFGSBHandoff
+from declivity.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
 
 bench = Benchmark(problems=[...], algorithms=[...], seeds=range(25), output_dir=...)
 bench.run()
@@ -100,7 +100,7 @@ See [`DOCUMENTATION.md`](DOCUMENTATION.md) for the full API.
 
 ```
 declivity/
-├── src/                          Library code (algorithms, framework)
+├── declivity/                    Library code (algorithms, framework)
 │   ├── core/                     BaseOptimizer, AlgorithmFactory, BaseConfig
 │   ├── algorithms/               DES, CMA-ES, MF-CMA-ES, L-BFGS-B
 │   ├── benchmarking/             Problem, Benchmark, RunTrace

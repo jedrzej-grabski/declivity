@@ -29,18 +29,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.benchmarking import (
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.benchmarking import (
     Benchmark,
     BenchmarkAlgorithm,
     Problem,
     RunTrace,
     SingleAlgorithm,
 )
-from src.core.algorithm_factory import AlgorithmFactory
-from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
-from src.utils.benchmark_functions import Rastrigin
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
+from declivity.utils.benchmark_functions import Rastrigin
 
 
 plt.ioff()

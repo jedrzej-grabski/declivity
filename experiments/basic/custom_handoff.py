@@ -29,11 +29,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.des.config import DESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.benchmarking import (
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.des.config import DESConfig
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
     HandoffAlgorithm,
@@ -41,10 +41,10 @@ from src.benchmarking import (
     Problem,
     SingleAlgorithm,
 )
-from src.core.algorithm_factory import AlgorithmFactory
-from src.core.base_optimizer import OptimizationResult
-from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
-from src.utils.benchmark_functions import Rosenbrock
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.core.base_optimizer import OptimizationResult
+from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
+from declivity.utils.benchmark_functions import Rosenbrock
 
 
 plt.ioff()

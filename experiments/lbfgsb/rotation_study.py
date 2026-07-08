@@ -13,11 +13,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
-from src.plotting import (
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
+from declivity.plotting import (
     PanelKey,
     plot_comparison,
     plot_evaluation_bars,
