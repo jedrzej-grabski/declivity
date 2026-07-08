@@ -12,9 +12,9 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from src.benchmarking.persistence import load_traces_json
-from src.benchmarking.problem import Problem
-from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
+from declivity.benchmarking.persistence import load_traces_json
+from declivity.benchmarking.problem import Problem
+from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 
 # Algorithm-name -> display color (keep stable across all report plots)
 COLOR_MAP = {

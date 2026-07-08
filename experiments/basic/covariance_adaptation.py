@@ -12,10 +12,10 @@ from matplotlib.patches import Ellipse
 import numpy as np
 from pathlib import Path
 
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.utils.benchmark_functions import Sphere, Ellipsoid, BenchmarkFunction
-from src.utils.covariance import empirical_covariance, CovarianceMatrix
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.utils.benchmark_functions import Sphere, Ellipsoid, BenchmarkFunction
+from declivity.utils.covariance import empirical_covariance, CovarianceMatrix
 
 import warnings
 

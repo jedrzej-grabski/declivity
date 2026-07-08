@@ -31,11 +31,11 @@ from numpy.typing import NDArray
 from scipy import stats
 
 from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
-from src.algorithms.mfcmaes.mfcmaes_reference import nm_cma_es_vectorized
-from src.core.algorithm_factory import AlgorithmFactory
-from src.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
+from declivity.algorithms.mfcmaes.mfcmaes_reference import nm_cma_es_vectorized
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 
 
 DEFAULT_PROBLEM = "cec17_F10_d10"

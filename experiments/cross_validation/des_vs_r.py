@@ -3,11 +3,11 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.des.config import DESConfig
-from src.core.algorithm_factory import AlgorithmFactory
-from src.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
-from src.utils.benchmark_functions import CEC17Function
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.des.config import DESConfig
+from declivity.core.algorithm_factory import AlgorithmFactory
+from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.utils.benchmark_functions import CEC17Function
 
 import warnings
 

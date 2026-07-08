@@ -24,18 +24,18 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb import ArmijoBacktracking
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.benchmarking import (
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.lbfgsb import ArmijoBacktracking
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
     Problem,
     SingleAlgorithm,
 )
-from src.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
-from src.utils.benchmark_functions import Griewank, Rastrigin
+from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
+from declivity.utils.benchmark_functions import Griewank, Rastrigin
 
 
 plt.ioff()

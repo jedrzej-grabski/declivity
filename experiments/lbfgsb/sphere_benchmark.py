@@ -13,12 +13,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.lbfgsb import ArmijoBacktracking
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.plotting import plot_comparison, plot_metrics
-from src.utils.benchmark_functions import Sphere
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.lbfgsb import ArmijoBacktracking
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.plotting import plot_comparison, plot_metrics
+from declivity.utils.benchmark_functions import Sphere
 
 
 plt.ioff()

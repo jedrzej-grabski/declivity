@@ -5,15 +5,56 @@ description = "Unified benchmarking framework for evolutionary and quasi-Newton 
 authors = [
     {name = "Jedrzej Grabski", email = "grabski.dev@gmail.com"},
 ]
-dependencies = ["setuptools>=80.4.0", "numpy>=2.2.5", "matplotlib>=3.10.3", "scipy>=1.15.3", "opfunu>=1.0.1", "seaborn>=0.13.2", "joblib>=1.5.3"]
-requires-python = "==3.12.*"
+dependencies = [
+    "numpy>=2.2.5",
+    "matplotlib>=3.10.3",
+    "scipy>=1.15.3",
+    "opfunu>=1.0.1",
+    "seaborn>=0.13.2",
+    "joblib>=1.5.3",
+    # opfunu imports pkg_resources at runtime without declaring setuptools;
+    # setuptools 82 removed pkg_resources, so cap below it.
+    "setuptools>=80.4.0,<82",
+]
+requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}
+keywords = [
+    "optimization",
+    "benchmarking",
+    "evolutionary-algorithms",
+    "cma-es",
+    "l-bfgs-b",
+    "des",
+    "quasi-newton",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/jedrzej-grabski/declivity"
+Repository = "https://github.com/jedrzej-grabski/declivity"
+Issues = "https://github.com/jedrzej-grabski/declivity/issues"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+distribution = true
+
+[tool.pdm.build]
+includes = ["declivity/"]
 
 [tool.pdm.scripts]
 run-example = "python -m experiments.basic.simple_optimization"
 run-r = "python -m experiments.cross_validation.des_vs_r"
 pyright = {cmd = "npx pyright", env = {}}
-
-[tool.pdm]
-distribution = false

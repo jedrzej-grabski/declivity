@@ -54,10 +54,10 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig, default_population_size
-from src.algorithms.lbfgsb.config import LBFGSBConfig
-from src.benchmarking import (
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig, default_population_size
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.benchmarking import (
     AlgorithmRun,
     Benchmark,
     InterleavedCMAESLBFGSB,
@@ -65,9 +65,9 @@ from src.benchmarking import (
     SingleAlgorithm,
     load_traces_json,
 )
-from src.plotting import plot_convergence_overlay
-from src.utils.benchmark_functions import Ellipsoid, ShiftedFunction
-from src.utils.initial_point_generator import UniformBoxInitialPointGenerator
+from declivity.plotting import plot_convergence_overlay
+from declivity.utils.benchmark_functions import Ellipsoid, ShiftedFunction
+from declivity.utils.initial_point_generator import UniformBoxInitialPointGenerator
 
 
 plt.ioff()

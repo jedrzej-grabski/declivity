@@ -14,7 +14,7 @@ from typing import Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from src.utils.benchmark_functions import (
+from declivity.utils.benchmark_functions import (
     Ackley,
     BenchmarkFunction,
     CEC17Function,
