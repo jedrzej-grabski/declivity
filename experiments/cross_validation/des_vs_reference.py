@@ -48,6 +48,7 @@ from declivity.algorithms.des.config import DESConfig
 from declivity.algorithms.des.des_reference import des_reference
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 # Default problem: CEC2017 F10 in 10 dimensions, the existing parity
@@ -103,7 +104,6 @@ def _run_reference(spec: ProblemSpec, seed: int) -> RunRecord:
 def _run_framework(spec: ProblemSpec, seed: int) -> RunRecord:
     func = spec.fn_factory(spec.dim)
     cfg = DESConfig(dimensions=spec.dim)
-    cfg.budget = 10_000 * spec.dim
     cfg.population_size = 4 * spec.dim
     cfg.enable_all_diagnostics()
 
@@ -113,6 +113,7 @@ def _run_framework(spec: ProblemSpec, seed: int) -> RunRecord:
         func=func,
         initial_point=spec.x0_factory(spec.dim),
         config=cfg,
+        stopping_condition=MaxEvaluations(10_000 * spec.dim),
         lower_bounds=spec.lower,
         upper_bounds=spec.upper,
         constraint_handler=BoxConstraintHandler(

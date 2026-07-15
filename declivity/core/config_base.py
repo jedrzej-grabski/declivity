@@ -3,13 +3,19 @@
 Two-level hierarchy:
 
 * :class:`BaseConfig` — the minimum every optimizer (single-point or
-  population-based) needs: ``dimensions`` and ``budget``.
+  population-based) needs: just ``dimensions``.
 * :class:`PopulationBaseConfig` — adds the fields and diagnostic flags
   that only matter to population-based algorithms (``population_size``,
   ``diag_pop``, ``diag_eigen``).
 
 L-BFGS-B inherits directly from :class:`BaseConfig`.  DES, CMA-ES, and
 MF-CMA-ES inherit from :class:`PopulationBaseConfig`.
+
+Termination is **not** a configuration concern.  When to stop is a
+modular, injected :class:`~declivity.utils.stopping_conditions.StoppingCondition`
+(the historical ``budget: int`` field was extracted into
+:class:`~declivity.utils.stopping_conditions.MaxEvaluations`), the same
+way constraint handling and repair are injected rather than configured.
 """
 
 from dataclasses import dataclass, field
@@ -20,7 +26,6 @@ class ConfigProtocol(Protocol):
     """Protocol every optimizer configuration satisfies."""
 
     dimensions: int
-    budget: int
 
     def validate(self) -> None: ...
     def to_dict(self) -> dict[str, Any]: ...
@@ -38,19 +43,13 @@ class BaseConfig:
     dimensions: int
     """Number of dimensions in the problem"""
 
-    budget: int = field(default=0)
-    """Maximum number of function evaluations"""
-
     def validate(self) -> None:
         if self.dimensions <= 0:
             raise ValueError("Dimensions must be a positive integer.")
-        if self.budget <= 0:
-            raise ValueError("Budget must be a positive integer.")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "dimensions": self.dimensions,
-            "budget": self.budget,
         }
 
     def enable_all_diagnostics(self) -> None:

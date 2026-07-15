@@ -45,6 +45,7 @@ from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Rosenbrock
+from declivity.utils.stopping_conditions import MaxEvaluations, StoppingCondition
 
 
 plt.ioff()
@@ -76,6 +77,11 @@ class DESLBFGSBHandoff(HandoffAlgorithm):
     color: str
     des_config_factory: Callable[[int], DESConfig]
     lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
+    # When to stop is a modular, injected concern — exactly like the
+    # shipped CMAESLBFGSBHandoff. Each phase gets its own condition
+    # (default: the optimizer's own MaxEvaluations(10_000 * d)).
+    des_stopping_condition: StoppingCondition | None = None
+    lbfgsb_stopping_condition: StoppingCondition | None = None
 
     def run_phases(
         self,
@@ -89,6 +95,7 @@ class DESLBFGSBHandoff(HandoffAlgorithm):
             problem.function,
             x0,
             self.des_config_factory(problem.dimensions),
+            stopping_condition=self.des_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             seed=seed,
@@ -100,6 +107,7 @@ class DESLBFGSBHandoff(HandoffAlgorithm):
             problem.function,
             des_result.best_solution,
             self.lbfgsb_config_factory(problem.dimensions),
+            stopping_condition=self.lbfgsb_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
         ).optimize()
@@ -128,33 +136,33 @@ def main() -> None:
             name="DES",
             color="#f39c12",
             algorithm=AlgorithmChoice.DES,
-            config_factory=lambda d: DESConfig(dimensions=d, budget=total_budget),
+            config_factory=lambda d: DESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(total_budget),
         ),
         SingleAlgorithm(
             name="L-BFGS-B",
             color="#3498db",
             algorithm=AlgorithmChoice.LBFGSB,
-            config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=total_budget),
+            config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(total_budget),
         ),
         # The custom handoff.
         DESLBFGSBHandoff(
             name="DES -> L-BFGS-B",
             color="#9b59b6",
-            des_config_factory=lambda d: DESConfig(dimensions=d, budget=warmup_budget),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                dimensions=d, budget=total_budget - warmup_budget,
-            ),
+            des_config_factory=lambda d: DESConfig(dimensions=d),
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            des_stopping_condition=MaxEvaluations(warmup_budget),
+            lbfgsb_stopping_condition=MaxEvaluations(total_budget - warmup_budget),
         ),
         # Pre-built handoff for side-by-side comparison.
         CMAESLBFGSBHandoff(
             name="CMA-ES -> L-BFGS-B",
             color="#2ecc71",
-            cmaes_config_factory=lambda d: CMAESConfig(
-                dimensions=d, budget=warmup_budget,
-            ),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                dimensions=d, budget=total_budget - warmup_budget,
-            ),
+            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d),
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            cmaes_stopping_condition=MaxEvaluations(warmup_budget),
+            lbfgsb_stopping_condition=MaxEvaluations(total_budget - warmup_budget),
             transform=HandoffTransform.INVERSE,
         ),
     ]

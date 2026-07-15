@@ -41,6 +41,7 @@ from declivity.benchmarking import (
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Rastrigin
+from declivity.utils.stopping_conditions import MaxEvaluations, StoppingCondition
 
 
 plt.ioff()
@@ -77,6 +78,10 @@ class MultiStartCMAES(BenchmarkAlgorithm):
     color: str
     config_factory: Callable[[int], CMAESConfig]
     num_restarts: int = 5
+    stopping_condition: StoppingCondition | None = None
+    """Per-restart stopping condition (default: the optimizer's own
+    ``MaxEvaluations(10_000 * d)``). Each restart gets a fresh copy of
+    this budget, so the total is ``num_restarts`` times its cap."""
 
     def run(
         self,
@@ -113,6 +118,7 @@ class MultiStartCMAES(BenchmarkAlgorithm):
                 problem.function,
                 restart_x0,
                 self.config_factory(problem.dimensions),
+                stopping_condition=self.stopping_condition,
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
                 seed=int(restart_seed),
@@ -164,14 +170,14 @@ def main() -> None:
             name="CMA-ES (no restarts)",
             color="#e74c3c",
             algorithm=AlgorithmChoice.CMAES,
-            config_factory=lambda d: CMAESConfig(dimensions=d, budget=total_budget),
+            config_factory=lambda d: CMAESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(total_budget),
         ),
         MultiStartCMAES(
             name=f"CMA-ES ({num_restarts}x restart)",
             color="#9b59b6",
-            config_factory=lambda d: CMAESConfig(
-                dimensions=d, budget=per_restart_budget,
-            ),
+            config_factory=lambda d: CMAESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(per_restart_budget),
             num_restarts=num_restarts,
         ),
     ]

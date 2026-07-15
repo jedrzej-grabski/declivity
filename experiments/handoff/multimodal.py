@@ -36,6 +36,7 @@ from declivity.benchmarking import (
 )
 from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Griewank, Rastrigin
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -70,9 +71,9 @@ def build_algorithms(
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
             dimensions=d,
-            budget=total_budget,
             sigma=initial_sigma,
         ),
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     # ARMIJO (simple backtracking) handles the cosine ripples of multimodal
@@ -86,12 +87,12 @@ def build_algorithms(
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
             dimensions=d,
-            budget=total_budget,
             m=memory_size,
             pgtol=1e-10,
             factr=0,
         ),
         line_search=ArmijoBacktracking(),
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     handoff_inverse = CMAESLBFGSBHandoff(
@@ -99,18 +100,18 @@ def build_algorithms(
         color=COLORS["CMA-ES -> L-BFGS-B (C^-1)"],
         cmaes_config_factory=lambda d: CMAESConfig(
             dimensions=d,
-            budget=cmaes_warmup_budget,
             sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
             dimensions=d,
-            budget=lbfgsb_handoff_budget,
             m=memory_size,
             pgtol=1e-10,
             factr=0,
         ),
         transform="inverse",
         lbfgsb_line_search=ArmijoBacktracking(),
+        cmaes_stopping_condition=MaxEvaluations(cmaes_warmup_budget),
+        lbfgsb_stopping_condition=MaxEvaluations(lbfgsb_handoff_budget),
     )
 
     algorithms = [cmaes_only, lbfgsb_only, handoff_inverse]
@@ -121,18 +122,18 @@ def build_algorithms(
             color=COLORS["CMA-ES -> L-BFGS-B (identity)"],
             cmaes_config_factory=lambda d: CMAESConfig(
                 dimensions=d,
-                budget=cmaes_warmup_budget,
                 sigma=initial_sigma,
             ),
             lbfgsb_config_factory=lambda d: LBFGSBConfig(
                 dimensions=d,
-                budget=lbfgsb_handoff_budget,
                 m=memory_size,
                 pgtol=1e-10,
                 factr=0,
             ),
             transform="identity",
             lbfgsb_line_search=ArmijoBacktracking(),
+            cmaes_stopping_condition=MaxEvaluations(cmaes_warmup_budget),
+            lbfgsb_stopping_condition=MaxEvaluations(lbfgsb_handoff_budget),
         )
         algorithms.append(handoff_identity)
 

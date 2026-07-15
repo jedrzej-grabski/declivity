@@ -234,16 +234,26 @@ re-plotting, and statistical aggregation all hinge on it.
 
 ## Premise 8: Swappable components, structurally enforced
 
-The four moving parts inside every evolutionary optimizer — feasibility,
+The moving parts inside every optimizer — feasibility, when to stop,
 population repair, single-point initialization, population initialization
-— are pluggable via four ABCs:
+— are pluggable via ABCs:
 
 ```
 ConstraintHandler         — single-point feasibility, repair, penalty
+StoppingCondition         — when the run stops (universal)
 RepairStrategy            — population-level repair policy (evolutionary-only)
 InitialPointGenerator     — where the run starts
 PopulationInitializer     — how the initial population matrix is sampled
 ```
+
+`StoppingCondition` is the newest of these and the reason `budget` is no
+longer a config field: termination is a *policy*, not a scalar. The
+built-ins (`MaxEvaluations`, `MaxIterations`, `MaxTime`, `TargetFitness`,
+`Stagnation`) compose with `|`/`&`, and the default —
+`MaxEvaluations(10000·d)` — reproduces the historical budget exactly. It
+is universal (every optimizer takes one, like `ConstraintHandler`) and is
+orthogonal to each algorithm's *internal* convergence tests (CMA-ES
+`tolfun`, L-BFGS-B `pgtol`, …), which still fire on their own.
 
 Each ABC ships a discoverability `*Type` enum with a `.build(...)`
 factory method. Two equivalent ways to construct a component:

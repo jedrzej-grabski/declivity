@@ -25,6 +25,7 @@ from declivity.benchmarking import (
 )
 from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from declivity.utils.benchmark_functions import RippledEllipsoid, RotatedFunction
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -62,8 +63,9 @@ def build_algorithms(
         color=REFERENCE_COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, budget=total_budget, sigma=initial_sigma,
+            dimensions=d, sigma=initial_sigma,
         ),
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     lbfgsb_only = SingleAlgorithm(
@@ -71,9 +73,10 @@ def build_algorithms(
         color=REFERENCE_COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, budget=total_budget, **lbfgsb_kwargs,
+            dimensions=d, **lbfgsb_kwargs,
         ),
         line_search=armijo,
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     handoffs = []
@@ -84,14 +87,16 @@ def build_algorithms(
             CMAESLBFGSBHandoff(
                 name=f"C^-1 warmup={warmup}",
                 color=PALETTE_INVERSE[idx % len(PALETTE_INVERSE)],
-                cmaes_config_factory=lambda d, w=warmup: CMAESConfig(
-                    dimensions=d, budget=w, sigma=initial_sigma,
+                cmaes_config_factory=lambda d: CMAESConfig(
+                    dimensions=d, sigma=initial_sigma,
                 ),
-                lbfgsb_config_factory=lambda d, p=post: LBFGSBConfig(
-                    dimensions=d, budget=p, **lbfgsb_kwargs,
+                lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                    dimensions=d, **lbfgsb_kwargs,
                 ),
                 transform="inverse",
                 lbfgsb_line_search=armijo,
+                cmaes_stopping_condition=MaxEvaluations(warmup),
+                lbfgsb_stopping_condition=MaxEvaluations(post),
             )
         )
         # Identity
@@ -99,14 +104,16 @@ def build_algorithms(
             CMAESLBFGSBHandoff(
                 name=f"identity warmup={warmup}",
                 color=PALETTE_IDENTITY[idx % len(PALETTE_IDENTITY)],
-                cmaes_config_factory=lambda d, w=warmup: CMAESConfig(
-                    dimensions=d, budget=w, sigma=initial_sigma,
+                cmaes_config_factory=lambda d: CMAESConfig(
+                    dimensions=d, sigma=initial_sigma,
                 ),
-                lbfgsb_config_factory=lambda d, p=post: LBFGSBConfig(
-                    dimensions=d, budget=p, **lbfgsb_kwargs,
+                lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                    dimensions=d, **lbfgsb_kwargs,
                 ),
                 transform="identity",
                 lbfgsb_line_search=armijo,
+                cmaes_stopping_condition=MaxEvaluations(warmup),
+                lbfgsb_stopping_condition=MaxEvaluations(post),
             )
         )
     return [cmaes_only, lbfgsb_only, *handoffs]

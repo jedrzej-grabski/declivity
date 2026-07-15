@@ -17,6 +17,7 @@ from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
+from declivity.utils.stopping_conditions import MaxEvaluations
 from declivity.plotting import (
     PanelKey,
     plot_comparison,
@@ -39,13 +40,14 @@ plt.ioff()
 plt.switch_backend("Agg")
 
 
-def run_single(func, x0, config, gradient_fn, lower_bounds, upper_bounds):
+def run_single(func, x0, config, gradient_fn, lower_bounds, upper_bounds, stopping_condition):
     config.diag_gradient_norm = True
     config.diag_step_length = True
     optimizer = AlgorithmFactory.create_optimizer(
         AlgorithmChoice.LBFGSB, func, x0, config,
         lower_bounds=lower_bounds, upper_bounds=upper_bounds,
         gradient_fn=gradient_fn,
+        stopping_condition=stopping_condition,
     )
     return optimizer.optimize()
 
@@ -164,11 +166,12 @@ def run_rotation_study():
             for label, h in hessian_choices:
                 config = LBFGSBConfig(
                     dimensions=n, initial_hessian=h, m=m,
-                    pgtol=1e-8, factr=1e7, budget=budget,
+                    pgtol=1e-8, factr=1e7,
                 )
                 result = run_single(
                     func, x0, config, gradient_fn,
                     lower_bounds=-100.0, upper_bounds=100.0,
+                    stopping_condition=MaxEvaluations(budget),
                 )
                 results[label] = result
                 print(

@@ -9,6 +9,7 @@ from declivity.core.base_optimizer import BaseOptimizer
 
 from declivity.core.config_base import BaseConfig
 from declivity.utils.constraint_handlers import ConstraintHandler
+from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
     from declivity.algorithms.des.des_optimizer import DESOptimizer
@@ -49,6 +50,7 @@ class AlgorithmFactory:
         initial_point: NDArray[np.float64],
         config: "DESConfig | None" = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -65,6 +67,7 @@ class AlgorithmFactory:
         initial_point: NDArray[np.float64],
         config: BaseConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -81,6 +84,7 @@ class AlgorithmFactory:
         initial_point: NDArray[np.float64],
         config: "MFCMAESConfig | None" = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -96,6 +100,7 @@ class AlgorithmFactory:
         initial_point: NDArray[np.float64],
         config: "CMAESConfig | None" = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -111,6 +116,7 @@ class AlgorithmFactory:
         initial_point: NDArray[np.float64],
         config: "LBFGSBConfig | None" = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -125,6 +131,7 @@ class AlgorithmFactory:
         initial_point: NDArray[np.float64],
         config: BaseConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -146,6 +153,7 @@ class AlgorithmFactory:
             initial_point=initial_point,
             config=config,
             constraint_handler=constraint_handler,
+            stopping_condition=stopping_condition,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,

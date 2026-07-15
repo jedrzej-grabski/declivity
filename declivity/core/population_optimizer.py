@@ -28,6 +28,7 @@ from declivity.core.base_optimizer import BaseOptimizer, LogDataType, ConfigType
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.repair_strategies import RepairStrategy
 from declivity.utils.population_initializers import PopulationInitializer
+from declivity.utils.stopping_conditions import StoppingCondition
 
 
 class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
@@ -62,6 +63,7 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
         population_initializer: PopulationInitializer,
         algorithm: AlgorithmChoice = AlgorithmChoice.Unknown,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -107,6 +109,7 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
             config=config,
             algorithm=algorithm,
             constraint_handler=constraint_handler,
+            stopping_condition=stopping_condition,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,

@@ -33,6 +33,7 @@ from declivity.benchmarking import (
 )
 from declivity.plotting import plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Griewank, Rastrigin
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -102,8 +103,9 @@ def build_algorithms(
         color=REFERENCE_COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, budget=total_budget, sigma=initial_sigma,
+            dimensions=d, sigma=initial_sigma,
         ),
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     armijo = ArmijoBacktracking()
@@ -113,10 +115,11 @@ def build_algorithms(
         color=REFERENCE_COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, budget=total_budget, m=memory_size,
+            dimensions=d, m=memory_size,
             pgtol=1e-10, factr=0,
         ),
         line_search=armijo,
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     handoffs: list[CMAESLBFGSBHandoff] = []
@@ -127,15 +130,17 @@ def build_algorithms(
             CMAESLBFGSBHandoff(
                 name=f"Handoff {label_suffix}",
                 color=color,
-                cmaes_config_factory=lambda d, b=warmup_budget: CMAESConfig(
-                    dimensions=d, budget=b, sigma=initial_sigma,
+                cmaes_config_factory=lambda d: CMAESConfig(
+                    dimensions=d, sigma=initial_sigma,
                 ),
-                lbfgsb_config_factory=lambda d, b=post_handoff_budget: LBFGSBConfig(
-                    dimensions=d, budget=b, m=memory_size,
+                lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                    dimensions=d, m=memory_size,
                     pgtol=1e-10, factr=0,
                 ),
                 transform="inverse",
                 lbfgsb_line_search=armijo,
+                cmaes_stopping_condition=MaxEvaluations(warmup_budget),
+                lbfgsb_stopping_condition=MaxEvaluations(post_handoff_budget),
             )
         )
 

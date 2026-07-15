@@ -67,6 +67,7 @@ from declivity.utils.benchmark_functions import (
     Sphere,
 )
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +248,6 @@ def _run_framework(
     cfg = CMAESConfig(dimensions=len(initial_point))
     cfg.sigma = sigma
     cfg.population_size = population_size
-    cfg.budget = budget
 
     rng = np.random.default_rng(seed)
     handler = BoxConstraintHandler(BoxStrategy.CLAMP, lower, upper)
@@ -255,6 +255,7 @@ def _run_framework(
         func=func,
         initial_point=initial_point.copy(),
         config=cfg,
+        stopping_condition=MaxEvaluations(budget),
         constraint_handler=handler,
         lower_bounds=lower,
         upper_bounds=upper,

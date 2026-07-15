@@ -37,6 +37,7 @@ from declivity.utils.benchmark_functions import (
     RippledEllipsoid,
     RotatedFunction,
 )
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -151,8 +152,9 @@ def build_algorithms(
         color=REFERENCE_COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, budget=total_budget, sigma=initial_sigma,
+            dimensions=d, sigma=initial_sigma,
         ),
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     lbfgsb_only = SingleAlgorithm(
@@ -160,9 +162,10 @@ def build_algorithms(
         color=REFERENCE_COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, budget=total_budget, **lbfgsb_kwargs,
+            dimensions=d, **lbfgsb_kwargs,
         ),
         line_search=armijo,
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     handoffs: list[CMAESLBFGSBHandoff] = []
@@ -177,26 +180,30 @@ def build_algorithms(
         handoffs.append(CMAESLBFGSBHandoff(
             name=f"C^-1 @ {warmup_gens} gen",
             color=PALETTE_INVERSE[idx % len(PALETTE_INVERSE)],
-            cmaes_config_factory=lambda d, b=warmup_evals: CMAESConfig(
-                dimensions=d, budget=b, sigma=initial_sigma,
+            cmaes_config_factory=lambda d: CMAESConfig(
+                dimensions=d, sigma=initial_sigma,
             ),
-            lbfgsb_config_factory=lambda d, b=post: LBFGSBConfig(
-                dimensions=d, budget=b, **lbfgsb_kwargs,
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                dimensions=d, **lbfgsb_kwargs,
             ),
             transform="inverse",
             lbfgsb_line_search=armijo,
+            cmaes_stopping_condition=MaxEvaluations(warmup_evals),
+            lbfgsb_stopping_condition=MaxEvaluations(post),
         ))
         handoffs.append(CMAESLBFGSBHandoff(
             name=f"identity @ {warmup_gens} gen",
             color=PALETTE_IDENTITY[idx % len(PALETTE_IDENTITY)],
-            cmaes_config_factory=lambda d, b=warmup_evals: CMAESConfig(
-                dimensions=d, budget=b, sigma=initial_sigma,
+            cmaes_config_factory=lambda d: CMAESConfig(
+                dimensions=d, sigma=initial_sigma,
             ),
-            lbfgsb_config_factory=lambda d, b=post: LBFGSBConfig(
-                dimensions=d, budget=b, **lbfgsb_kwargs,
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                dimensions=d, **lbfgsb_kwargs,
             ),
             transform="identity",
             lbfgsb_line_search=armijo,
+            cmaes_stopping_condition=MaxEvaluations(warmup_evals),
+            lbfgsb_stopping_condition=MaxEvaluations(post),
         ))
 
     return [cmaes_only, lbfgsb_only, *handoffs]

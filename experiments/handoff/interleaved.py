@@ -61,6 +61,7 @@ from declivity.utils.benchmark_functions import (
     RotatedEllipsoid,
     ShiftedFunction,
 )
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -113,15 +114,14 @@ def build_algorithms(
     """The four algorithms, all sharing one total evaluation budget."""
 
     def cmaes_config(dimensions: int) -> CMAESConfig:
-        return CMAESConfig(dimensions=dimensions, budget=total_budget)
+        return CMAESConfig(dimensions=dimensions)
 
     def cmaes_warmup_config(dimensions: int) -> CMAESConfig:
-        return CMAESConfig(dimensions=dimensions, budget=cmaes_warmup_budget)
+        return CMAESConfig(dimensions=dimensions)
 
     def lbfgsb_config(dimensions: int) -> LBFGSBConfig:
         return LBFGSBConfig(
             dimensions=dimensions,
-            budget=total_budget,
             m=memory_size,
             pgtol=1e-10,
             factr=0,
@@ -132,6 +132,7 @@ def build_algorithms(
         color=COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=cmaes_config,
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     lbfgsb_only = SingleAlgorithm(
@@ -140,6 +141,7 @@ def build_algorithms(
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lbfgsb_config,
         line_search=line_search,
+        stopping_condition=MaxEvaluations(total_budget),
     )
 
     one_shot = CMAESLBFGSBHandoff(
@@ -148,13 +150,14 @@ def build_algorithms(
         cmaes_config_factory=cmaes_warmup_config,
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
             dimensions=d,
-            budget=total_budget - cmaes_warmup_budget,
             m=memory_size,
             pgtol=1e-10,
             factr=0,
         ),
         transform="inverse",
         lbfgsb_line_search=line_search,
+        cmaes_stopping_condition=MaxEvaluations(cmaes_warmup_budget),
+        lbfgsb_stopping_condition=MaxEvaluations(total_budget - cmaes_warmup_budget),
     )
 
     interleaved = InterleavedCMAESLBFGSB(

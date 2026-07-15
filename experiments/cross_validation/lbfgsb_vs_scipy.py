@@ -52,6 +52,7 @@ from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.gradient_strategies import ForwardFD
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 DEFAULT_PROBLEM = "ellipsoid_d10"
@@ -81,7 +82,6 @@ def _draw_x0(spec: ProblemSpec, seed: int) -> NDArray[np.float64]:
 def _run_framework(spec: ProblemSpec, seed: int, x0: NDArray[np.float64]) -> RunRecord:
     func = spec.fn_factory(spec.dim)
     cfg = LBFGSBConfig(dimensions=spec.dim)
-    cfg.budget = 10_000 * spec.dim
     cfg.enable_all_diagnostics()
 
     # Use forward-FD strategy to match scipy's default gradient method;
@@ -92,6 +92,7 @@ def _run_framework(spec: ProblemSpec, seed: int, x0: NDArray[np.float64]) -> Run
         func=func,
         initial_point=x0,
         config=cfg,
+        stopping_condition=MaxEvaluations(10_000 * spec.dim),
         lower_bounds=spec.lower,
         upper_bounds=spec.upper,
         constraint_handler=BoxConstraintHandler(
