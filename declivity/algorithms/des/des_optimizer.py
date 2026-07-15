@@ -11,6 +11,7 @@ from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.helpers import delete_inf_nan, calculate_ft
 from declivity.utils.repair_strategies import RepairStrategy, LamarckianRepair
 from declivity.utils.population_initializers import PopulationInitializer, NormalPopulationInitializer
+from declivity.utils.stopping_conditions import StoppingCondition
 
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.population_optimizer import PopulationOptimizer
@@ -30,6 +31,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         repair_strategy: RepairStrategy | None = None,
         population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -47,6 +49,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             population_initializer=population_initializer or NormalPopulationInitializer(),
             algorithm=AlgorithmChoice.DES,
             constraint_handler=constraint_handler,
+            stopping_condition=stopping_condition,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -56,14 +59,12 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         """Run the DES optimization algorithm."""
 
         N = self.dimensions
-        budget = self.config.budget
         lambda_ = self.config.population_size
         path_length = self.config.path_length
         init_ft = self.config.init_ft
         hist_size = self.config.history
         c_ft = self.config.c_ft
         cp = self.config.cp
-        max_iter = self.config.maxit
         lamarckian = self.config.lamarckian
         weights = self.config.weights
         mu = self.config.mu
@@ -74,6 +75,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         weights_pop = self.config.weights_pop
 
         self.evaluations = 0
+        self._begin_run()
         best_fitness = float("inf")
         best_solution = self.initial_point.copy()
         worst_fitness = None
@@ -132,7 +134,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         pc = np.zeros((N, hist_size))
 
         # Main optimization loop
-        while self.evaluations < budget:
+        while not self.should_stop(iter_count, best_fitness):
             iter_count += 1
             hist_head = (hist_head + 1) % hist_size
 
@@ -298,7 +300,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             best_solution=best_solution,
             best_fitness=best_fitness,
             evaluations=self.evaluations,
-            message=message if message else "Maximum function evaluations reached.",
+            message=message if message else self.stop_message,
             diagnostic=self.get_logs(),
             algorithm=AlgorithmChoice.DES,
         )

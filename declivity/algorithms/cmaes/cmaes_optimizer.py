@@ -41,6 +41,7 @@ from declivity.utils.population_initializers import (
     PopulationInitializer,
 )
 from declivity.utils.repair_strategies import LamarckianRepair, RepairStrategy
+from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
     from declivity.logging.cmaes_logger import CMAESLogData
@@ -117,6 +118,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         repair_strategy: RepairStrategy | None = None,
         population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -143,6 +145,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             ),
             algorithm=AlgorithmChoice.CMAES,
             constraint_handler=constraint_handler,
+            stopping_condition=stopping_condition,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -236,15 +239,15 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
     def optimize(self) -> OptimizationResult["CMAESLogData"]:
         self.evaluations = 0
+        self._begin_run()
         best_fitness = float("inf")
         best_solution = self._mean.copy()
         worst_fitness: float | None = None
         message: str | None = None
 
-        budget = self.config.budget
         lambda_ = self.config.population_size
 
-        while self.evaluations < budget:
+        while not self.should_stop(self._generation, best_fitness):
             # ---- Generate the λ-candidate population ----------------------
             population = self._generate_population(lambda_)
             population = self.repair_strategy.repair_population(
@@ -296,7 +299,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                 break
 
         if message is None:
-            message = "Maximum function evaluations reached."
+            message = self.stop_message
 
         return OptimizationResult(
             best_solution=best_solution,
@@ -449,10 +452,12 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
     # ------------------------------------------------------------------
 
     def _termination_reason(self) -> str | None:
-        """Return a termination message or ``None`` to continue."""
-        if self.evaluations >= self.config.budget:
-            return "Maximum function evaluations reached."
+        """Return an *algorithm-internal* convergence message, or ``None``.
 
+        The shared evaluation / time / target budget is owned by the
+        injected :class:`StoppingCondition` (tested in the main-loop
+        guard); this method only reports CMA-ES-specific convergence
+        (``tolfun`` / ``tolx`` / conditioning)."""
         B, D = self._eigen_decomposition()
         dC = np.diag(self._C)
         sigma = self._sigma

@@ -68,6 +68,7 @@ from declivity.benchmarking import (
 from declivity.plotting import plot_convergence_overlay
 from declivity.utils.benchmark_functions import Ellipsoid, ShiftedFunction
 from declivity.utils.initial_point_generator import UniformBoxInitialPointGenerator
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -137,12 +138,12 @@ def build_algorithms(
 
     def cmaes_config(d: int) -> CMAESConfig:
         return CMAESConfig(
-            dimensions=d, budget=total_budget, population_size=population_size
+            dimensions=d, population_size=population_size
         )
 
     def lbfgsb_config(d: int) -> LBFGSBConfig:
         return LBFGSBConfig(
-            dimensions=d, budget=total_budget, m=memory_size, pgtol=1e-10, factr=0
+            dimensions=d, m=memory_size, pgtol=1e-10, factr=0
         )
 
     algorithms: list[AlgorithmRun] = []
@@ -152,6 +153,7 @@ def build_algorithms(
             SingleAlgorithm(
                 name="BFGS", color=COLOR_BFGS,
                 algorithm=AlgorithmChoice.LBFGSB, config_factory=lbfgsb_config,
+                stopping_condition=MaxEvaluations(total_budget),
             )
         )
 
@@ -175,6 +177,7 @@ def build_algorithms(
         SingleAlgorithm(
             name="CMA-ES", color=COLOR_CMAES,
             algorithm=AlgorithmChoice.CMAES, config_factory=cmaes_config,
+            stopping_condition=MaxEvaluations(total_budget),
         )
     )
     return algorithms

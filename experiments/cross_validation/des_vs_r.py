@@ -8,6 +8,7 @@ from declivity.algorithms.des.config import DESConfig
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.benchmark_functions import CEC17Function
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 import warnings
 
@@ -45,7 +46,6 @@ def run_python_des_cec2017():
         initial_point = np.full(dimensions, 50.0)
 
         config = DESConfig(dimensions=dimensions)
-        config.budget = budget
         config.population_size = 4 * dimensions
         config.enable_all_diagnostics()
 
@@ -54,6 +54,7 @@ def run_python_des_cec2017():
             func=opt_func,
             initial_point=initial_point,
             config=config,
+            stopping_condition=MaxEvaluations(budget),
             lower_bounds=-100,
             upper_bounds=100,
             constraint_handler=BoxConstraintHandler(

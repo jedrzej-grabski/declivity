@@ -34,6 +34,20 @@ from declivity.utils.population_initializers import (
     IdentityPopulationInitializer,
     PopulationInitializerType,
 )
+from declivity.utils.stopping_conditions import (
+    OptimizationState,
+    StoppingCondition,
+    MaxEvaluations,
+    MaxIterations,
+    MaxTime,
+    TargetFitness,
+    Stagnation,
+    StagnationUnit,
+    AnyStoppingCondition,
+    AllStoppingCondition,
+    StoppingConditionType,
+    default_stopping_condition,
+)
 
 __all__ = [
     # Constraint handler surface
@@ -62,4 +76,17 @@ __all__ = [
     "MeanSigmaPopulationInitializer",
     "IdentityPopulationInitializer",
     "PopulationInitializerType",
+    # Stopping-condition surface
+    "OptimizationState",
+    "StoppingCondition",
+    "MaxEvaluations",
+    "MaxIterations",
+    "MaxTime",
+    "TargetFitness",
+    "Stagnation",
+    "StagnationUnit",
+    "AnyStoppingCondition",
+    "AllStoppingCondition",
+    "StoppingConditionType",
+    "default_stopping_condition",
 ]

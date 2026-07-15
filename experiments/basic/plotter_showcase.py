@@ -54,6 +54,7 @@ from declivity.utils.benchmark_functions import (
     Rosenbrock,
     Sphere,
 )
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -91,11 +92,9 @@ def run_single(
 ) -> OptimizationResult:
     """Build a config, optionally turn on every diagnostic, and optimize."""
     if algorithm is AlgorithmChoice.CMAES:
-        config: CMAESConfig | LBFGSBConfig = CMAESConfig(
-            dimensions=len(x0), budget=budget
-        )
+        config: CMAESConfig | LBFGSBConfig = CMAESConfig(dimensions=len(x0))
     elif algorithm is AlgorithmChoice.LBFGSB:
-        config = LBFGSBConfig(dimensions=len(x0), budget=budget)
+        config = LBFGSBConfig(dimensions=len(x0))
     else:
         raise ValueError(algorithm)
 
@@ -110,6 +109,7 @@ def run_single(
         config=config,
         lower_bounds=lower,
         upper_bounds=upper,
+        stopping_condition=MaxEvaluations(budget),
         seed=seed,
     )
     return optimizer.optimize()
@@ -154,19 +154,23 @@ def main() -> None:
             name="CMA-ES",
             color=COLORS["CMA-ES"],
             algorithm=AlgorithmChoice.CMAES,
-            config_factory=lambda d: CMAESConfig(dimensions=d, budget=3000),
+            config_factory=lambda d: CMAESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(3000),
         ),
         SingleAlgorithm(
             name="L-BFGS-B",
             color=COLORS["L-BFGS-B"],
             algorithm=AlgorithmChoice.LBFGSB,
-            config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=3000),
+            config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(3000),
         ),
         CMAESLBFGSBHandoff(
             name="CMA-ES -> L-BFGS-B",
             color=COLORS["CMA-ES -> L-BFGS-B"],
-            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d, budget=1200),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=1800),
+            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d),
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            cmaes_stopping_condition=MaxEvaluations(1200),
+            lbfgsb_stopping_condition=MaxEvaluations(1800),
             transform="inverse",
         ),
     ]

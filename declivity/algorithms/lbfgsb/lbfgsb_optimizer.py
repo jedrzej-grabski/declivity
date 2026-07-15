@@ -32,6 +32,7 @@ from declivity.algorithms.lbfgsb.line_search import (
 )
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.gradient_strategies import CentralFD, GradientStrategy
+from declivity.utils.stopping_conditions import StoppingCondition
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.core.algorithm_factory import register_optimizer
 
@@ -57,6 +58,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         initial_point: NDArray[np.float64],
         config: LBFGSBConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -73,6 +75,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             config=config,
             algorithm=AlgorithmChoice.LBFGSB,
             constraint_handler=constraint_handler,
+            stopping_condition=stopping_condition,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -740,6 +743,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
     def optimize(self) -> OptimizationResult["LBFGSBLogData"]:
         self.evaluations = 0
+        self._begin_run()
         num_vars = self.dimensions
         config = self.config
 
@@ -774,7 +778,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         consecutive_resets = 0
         max_consecutive_resets = 20
 
-        while self.evaluations < config.budget:
+        while not self.should_stop(iteration, best_fitness):
             iteration += 1
 
             cauchy_point, w_displacement, variable_status = (
@@ -945,12 +949,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             function_value = function_value_new
             gradient = gradient_new
 
-            if self.evaluations >= config.budget:
-                termination_message = "Maximum function evaluations reached"
-                break
-
         if termination_message is None:
-            termination_message = "Maximum function evaluations reached"
+            termination_message = self.stop_message
 
         return OptimizationResult(
             best_solution=best_solution,

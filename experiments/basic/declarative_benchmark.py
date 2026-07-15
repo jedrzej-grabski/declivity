@@ -27,6 +27,7 @@ from declivity.benchmarking import (
 )
 from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Rosenbrock, Sphere
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -60,21 +61,23 @@ def main() -> None:
             name="CMA-ES",
             color=COLORS["CMA-ES"],
             algorithm=AlgorithmChoice.CMAES,
-            config_factory=lambda d: CMAESConfig(dimensions=d, budget=total_budget),
+            config_factory=lambda d: CMAESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(total_budget),
         ),
         SingleAlgorithm(
             name="L-BFGS-B",
             color=COLORS["L-BFGS-B"],
             algorithm=AlgorithmChoice.LBFGSB,
-            config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=total_budget),
+            config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(total_budget),
         ),
         CMAESLBFGSBHandoff(
             name="CMA-ES -> L-BFGS-B",
             color=COLORS["CMA-ES -> L-BFGS-B"],
-            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d, budget=1500),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                dimensions=d, budget=total_budget - 1500
-            ),
+            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d),
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            cmaes_stopping_condition=MaxEvaluations(1500),
+            lbfgsb_stopping_condition=MaxEvaluations(total_budget - 1500),
             transform="inverse",
         ),
     ]

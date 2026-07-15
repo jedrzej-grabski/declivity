@@ -24,6 +24,7 @@ from declivity.plotting import (
     plot_evaluation_bars,
 )
 from declivity.utils.benchmark_functions import Ellipsoid
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -44,7 +45,7 @@ LBFGSB_COMPARISON_PANELS = [
 ]
 
 
-def run_single(func, x0, config, grad):
+def run_single(func, x0, config, grad, stopping_condition):
     config.diag_gradient_norm = True
     config.diag_step_length = True
     optimizer = AlgorithmFactory.create_optimizer(
@@ -55,6 +56,7 @@ def run_single(func, x0, config, grad):
         lower_bounds=-50.0,
         upper_bounds=50.0,
         gradient_fn=grad,
+        stopping_condition=stopping_condition,
     )
     return optimizer.optimize()
 
@@ -82,22 +84,22 @@ def run_hessian_benchmark():
 
     configs_1 = {
         "Identity (default)": LBFGSBConfig(
-            dimensions=dimensions, pgtol=1e-12, factr=0, budget=budget,
+            dimensions=dimensions, pgtol=1e-12, factr=0,
         ),
         "Exact Hessian diagonal": LBFGSBConfig(
             dimensions=dimensions, initial_hessian=exact_diag,
-            pgtol=1e-12, factr=0, budget=budget,
+            pgtol=1e-12, factr=0,
         ),
         "Inverse Hessian": LBFGSBConfig(
             dimensions=dimensions, initial_hessian=inverse_diag,
-            pgtol=1e-12, factr=0, budget=budget,
+            pgtol=1e-12, factr=0,
         ),
     }
     print(exact_diag)
     pprint.pprint(float(np.mean(exact_diag)))
     results_1 = {}
     for label, config in configs_1.items():
-        result = run_single(func, x0, config, ellipsoid_grad)
+        result = run_single(func, x0, config, ellipsoid_grad, MaxEvaluations(budget))
         results_1[label] = result
         print(
             f"  {label:30s}: f={result.best_fitness:.4e}  evals={result.evaluations:>6d}"
@@ -133,20 +135,20 @@ def run_hessian_benchmark():
     configs_2 = {
         "Exact diag, persist=True": LBFGSBConfig(
             dimensions=dimensions, initial_hessian=exact_diag,
-            persist_initial_hessian=True, pgtol=1e-12, factr=0, budget=budget,
+            persist_initial_hessian=True, pgtol=1e-12, factr=0,
         ),
         "Exact diag, persist=False": LBFGSBConfig(
             dimensions=dimensions, initial_hessian=exact_diag,
-            persist_initial_hessian=False, pgtol=1e-12, factr=0, budget=budget,
+            persist_initial_hessian=False, pgtol=1e-12, factr=0,
         ),
         "Identity (no Hessian info)": LBFGSBConfig(
-            dimensions=dimensions, pgtol=1e-12, factr=0, budget=budget,
+            dimensions=dimensions, pgtol=1e-12, factr=0,
         ),
     }
 
     results_2 = {}
     for label, config in configs_2.items():
-        result = run_single(func, x0, config, ellipsoid_grad)
+        result = run_single(func, x0, config, ellipsoid_grad, MaxEvaluations(budget))
         results_2[label] = result
         print(
             f"  {label:30s}: f={result.best_fitness:.4e}  evals={result.evaluations:>6d}"

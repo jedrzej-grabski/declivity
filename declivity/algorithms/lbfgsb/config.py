@@ -7,19 +7,11 @@ from declivity.core.config_base import BaseConfig
 
 __all__ = [
     "LBFGSBConfig",
-    "default_budget",
 ]
-
-
-def default_budget(dimensions: int) -> int:
-    return 10000 * dimensions
 
 
 @dataclass
 class LBFGSBConfig(BaseConfig):
-
-    budget: int = field(default=0)
-    """Maximum number of function evaluations (0 = auto: 10000 * dimensions)."""
 
     initial_hessian: Union[None, float, NDArray[np.float64]] = None
     """Initial Hessian approximation B_0. Controls the scaling of the first iteration
@@ -93,15 +85,10 @@ class LBFGSBConfig(BaseConfig):
     """Log number of line search function evaluations each iteration."""
 
     # Derived parameters
-    maxit: int = field(init=False)
-    """Maximum iterations (budget, since 1 eval per function call minimum)."""
-
     _fd_eps_actual: float = field(init=False, repr=False)
     """Actual finite difference epsilon (computed from fd_eps)."""
 
     def __post_init__(self) -> None:
-        if self.budget <= 0:
-            self.budget = default_budget(self.dimensions)
         self._recalculate_derived_params()
 
     def _recalculate_derived_params(self) -> None:
@@ -111,14 +98,11 @@ class LBFGSBConfig(BaseConfig):
         else:
             self._fd_eps_actual = self.fd_eps
 
-        self.maxit = self.budget
         self.validate()
 
     def validate(self) -> None:
         if self.dimensions <= 0:
             raise ValueError("Dimensions must be a positive integer.")
-        if self.budget <= 0:
-            raise ValueError("Budget must be a positive integer.")
         if self.m < 1:
             raise ValueError("m (memory size) must be at least 1.")
         if self.factr < 0:
@@ -128,7 +112,7 @@ class LBFGSBConfig(BaseConfig):
 
     def __setattr__(self, name: str, value) -> None:
         super().__setattr__(name, value)
-        if name in ("budget", "fd_eps") and hasattr(self, "maxit"):
+        if name == "fd_eps" and hasattr(self, "_fd_eps_actual"):
             self._recalculate_derived_params()
 
     def enable_all_diagnostics(self) -> None:
@@ -141,6 +125,6 @@ class LBFGSBConfig(BaseConfig):
 
     def __str__(self) -> str:
         return (
-            f"LBFGSBConfig(dimensions={self.dimensions}, budget={self.budget}, "
+            f"LBFGSBConfig(dimensions={self.dimensions}, "
             f"m={self.m}, factr={self.factr:.1e}, pgtol={self.pgtol:.1e})"
         )

@@ -9,6 +9,7 @@ from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.repair_strategies import RepairStrategy, LamarckianRepair
 from declivity.utils.population_initializers import PopulationInitializer, MeanSigmaPopulationInitializer
+from declivity.utils.stopping_conditions import StoppingCondition
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.population_optimizer import PopulationOptimizer
 from declivity.core.algorithm_factory import register_optimizer
@@ -30,6 +31,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         repair_strategy: RepairStrategy | None = None,
         population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
         lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
         upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
@@ -46,6 +48,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             population_initializer=population_initializer or MeanSigmaPopulationInitializer(sigma=config.sigma),
             algorithm=AlgorithmChoice.MFCMAES,
             constraint_handler=constraint_handler,
+            stopping_condition=stopping_condition,
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
@@ -72,8 +75,14 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self.constraint_violations = 0
 
     def _precompute_decay_table(self) -> None:
-        """Precompute the decay factors (1 - c_cov)^((t-τ)/2) for the archive."""
-        t = np.arange(1, self.config.maxit + 1)
+        """Precompute the decay factors (1 - c_cov)^((t-τ)/2) for the archive.
+
+        Sized by the archive ``window`` (not the total budget): the table is
+        only ever read through its first ``window`` entries — see
+        :meth:`_generate_population`, which slices
+        ``decay_table[window - 1 :: -1]`` — so ``window`` factors suffice
+        regardless of how many generations the run lasts."""
+        t = np.arange(1, self.config.window + 1)
         self.decay_table = (1 - self.config.c_cov) ** ((t - 1) / 2)
 
     def _p_index(self, t: int) -> int:
@@ -142,6 +151,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         """Run the MF-CMA-ES optimization algorithm."""
 
         self.evaluations = 0
+        self._begin_run()
         best_fitness = float("inf")
         best_solution = self.initial_point.copy()
         worst_fitness = float("inf")
@@ -210,7 +220,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self._update_sigma_ppmf_first(initial_vx, initial_fitness)
 
         generation = 1
-        while self.evaluations < self.config.budget:
+        while not self.should_stop(generation, best_fitness):
             generation += 1
 
             d = self._generate_population(generation)
@@ -275,15 +285,12 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             )
 
             # Match R: ``terminate.stopfitness`` checks the best raw
-            # fitness from this generation against ``stopfitness``.  R
-            # also terminates on max iterations, which the budget check
-            # below covers via ``self.evaluations >= self.config.budget``.
+            # fitness from this generation against ``stopfitness``.  The
+            # shared evaluation / time / target budget is owned by the
+            # injected stopping condition (the main-loop guard above); this
+            # is the algorithm-internal ``tolfun`` convergence test only.
             if float(fitness_values[0]) <= self.config.tolfun:
                 message = "Target fitness reached."
-                break
-
-            if self.evaluations >= self.config.budget:
-                message = "Maximum function evaluations reached."
                 break
 
             # R-DES-style "flatland escape": when the best and the
@@ -299,7 +306,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                     self.sigma = self.sigma * math.exp(0.2 + self.config.cs / self.config.damps)
 
         if message is None:
-            message = "Maximum function evaluations reached."
+            message = self.stop_message
 
         result: OptimizationResult["MFCMAESLogData"] = OptimizationResult(
             best_solution=best_solution,

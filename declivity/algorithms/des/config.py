@@ -11,11 +11,6 @@ def default_population_size(obj: "DESConfig") -> int:
     return 4 * obj.dimensions
 
 
-def default_budget(obj: "DESConfig") -> int:
-    """Default budget based on dimensions."""
-    return 10000 * obj.dimensions
-
-
 def default_cp(obj: "DESConfig") -> float:
     """Default evolution path decay factor based on dimensions."""
     return 1 / np.sqrt(obj.dimensions)
@@ -54,11 +49,6 @@ def default_ccum(obj: "DESConfig") -> float:
 def default_pathratio(obj: "DESConfig") -> float:
     """Default path ratio based on path length."""
     return np.sqrt(obj.path_length)
-
-
-def compute_maxit(budget: int, population_size: int) -> int:
-    """Compute maximum iterations based on budget and population size."""
-    return math.floor(budget / (population_size + 1))
 
 
 def default_ft_scale(obj: "DESConfig") -> float:
@@ -135,9 +125,6 @@ class DESConfig(PopulationBaseConfig):
     path_ratio: float = field(init=False)
     """Path length control reference value"""
 
-    maxit: int = field(init=False)
-    """Maximum iterations"""
-
     mu_eff: float = field(init=False)
     """Effective selection mass"""
 
@@ -146,8 +133,6 @@ class DESConfig(PopulationBaseConfig):
 
     def __post_init__(self) -> None:
         """Calculate derived parameters that depend on other params"""
-        if self.budget <= 0:
-            self.budget = default_budget(self)
         if self.population_size <= 0:
             self.population_size = default_population_size(self)
         self.cp = default_cp(self)
@@ -164,8 +149,6 @@ class DESConfig(PopulationBaseConfig):
 
         self.ft_scale = default_ft_scale(self)
 
-        self.maxit = compute_maxit(self.budget, self.population_size)
-
         super().validate()
 
     def enable_all_diagnostics(self) -> None:
@@ -176,7 +159,7 @@ class DESConfig(PopulationBaseConfig):
     def __str__(self) -> str:
         """String representation of the DESConfig."""
         return (
-            f"DESConfig(dimensions={self.dimensions}, budget={self.budget}, "
+            f"DESConfig(dimensions={self.dimensions}, "
             f"population_size={self.population_size}, ft={self.ft}, "
             f"init_ft={self.init_ft}, path_length={self.path_length}, "
             f"c_ft={self.c_ft}, lamarckian={self.lamarckian}, "

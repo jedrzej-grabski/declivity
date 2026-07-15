@@ -50,6 +50,7 @@ from declivity.benchmarking import (
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.plotting import plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Rastrigin, Rosenbrock
+from declivity.utils.stopping_conditions import MaxEvaluations, StoppingCondition
 
 
 plt.ioff()
@@ -95,6 +96,9 @@ class MultiStartCMAES(BenchmarkAlgorithm):
     color: str
     config_factory: Callable[[int], CMAESConfig]
     num_restarts: int = 4
+    stopping_condition: StoppingCondition | None = None
+    """Per-restart stopping condition (default: the optimizer's own
+    ``MaxEvaluations(10_000 * d)``)."""
 
     def run(
         self,
@@ -124,6 +128,7 @@ class MultiStartCMAES(BenchmarkAlgorithm):
                 problem.function,
                 restart_x0,
                 self.config_factory(problem.dimensions),
+                stopping_condition=self.stopping_condition,
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
                 seed=int(restart_seed),
@@ -159,29 +164,32 @@ def build_algorithms() -> list:
             name="CMA-ES",
             color=COLORS["CMA-ES"],
             algorithm=AlgorithmChoice.CMAES,
-            config_factory=lambda d: CMAESConfig(dimensions=d, budget=TOTAL_BUDGET),
+            config_factory=lambda d: CMAESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(TOTAL_BUDGET),
         ),
         SingleAlgorithm(
             name="L-BFGS-B",
             color=COLORS["L-BFGS-B"],
             algorithm=AlgorithmChoice.LBFGSB,
-            config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=TOTAL_BUDGET),
+            config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(TOTAL_BUDGET),
         ),
         # Rung 3: the pre-built two-phase HandoffAlgorithm.
         CMAESLBFGSBHandoff(
             name="CMA-ES -> L-BFGS-B",
             color=COLORS["CMA-ES -> L-BFGS-B"],
-            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d, budget=1600),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=2400),
+            cmaes_config_factory=lambda d: CMAESConfig(dimensions=d),
+            lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d),
+            cmaes_stopping_condition=MaxEvaluations(1600),
+            lbfgsb_stopping_condition=MaxEvaluations(2400),
             transform="inverse",
         ),
         # Rung 4: a custom BenchmarkAlgorithm from this very file.
         MultiStartCMAES(
             name="Multi-start CMA-ES",
             color=COLORS["Multi-start CMA-ES"],
-            config_factory=lambda d: CMAESConfig(
-                dimensions=d, budget=TOTAL_BUDGET // restarts
-            ),
+            config_factory=lambda d: CMAESConfig(dimensions=d),
+            stopping_condition=MaxEvaluations(TOTAL_BUDGET // restarts),
             num_restarts=restarts,
         ),
     ]

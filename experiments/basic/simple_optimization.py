@@ -40,7 +40,6 @@ def run_one(algorithm: AlgorithmChoice) -> None:
     config.enable_all_diagnostics()
 
     print(f"\nStarting {algorithm.value}...")
-    print(f"  Budget: {config.budget}")
     print(f"  Initial f(x0): {objective(initial_point):.4e}")
 
     optimizer = AlgorithmFactory.create_optimizer(
@@ -52,6 +51,9 @@ def run_one(algorithm: AlgorithmChoice) -> None:
         upper_bounds=50.12,
         seed=42,
     )
+    # Termination is now an injected StoppingCondition, not a config field;
+    # with no override the optimizer uses MaxEvaluations(10_000 * d).
+    print(f"  Stopping condition: {optimizer.stopping_condition}")
     result = optimizer.optimize()
 
     print(f"  Final f: {result.best_fitness:.4e} after {result.evaluations} evals")

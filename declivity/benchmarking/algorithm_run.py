@@ -51,6 +51,11 @@ from declivity.core.config_base import BaseConfig
 from declivity.utils.gradient_strategies import GradientStrategy
 from declivity.utils.population_initializers import PopulationInitializer
 from declivity.utils.repair_strategies import RepairStrategy
+from declivity.utils.stopping_conditions import (
+    DEFAULT_EVALUATIONS_PER_DIMENSION,
+    MaxEvaluations,
+    StoppingCondition,
+)
 
 
 _EIGENVALUE_FLOOR = 1e-30
@@ -277,6 +282,12 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     evolutionary algorithms. ``None`` keeps the optimizer's default
     (``CentralFD``)."""
 
+    stopping_condition: StoppingCondition | None = None
+    """When to stop. ``None`` keeps the optimizer default
+    (``MaxEvaluations(10_000 * dimensions)``). Pass e.g.
+    ``MaxEvaluations(5000)``, ``MaxTime(30.0)``, or a composite
+    (``MaxEvaluations(5000) | TargetFitness(1e-8)``) to override."""
+
     def run(
         self,
         problem: Problem,
@@ -289,6 +300,8 @@ class SingleAlgorithm(BenchmarkAlgorithm):
                 setattr(config, flag, True)
 
         kwargs: dict = {}
+        if self.stopping_condition is not None:
+            kwargs["stopping_condition"] = self.stopping_condition
         if self.algorithm == AlgorithmChoice.LBFGSB:
             if problem.gradient is not None:
                 kwargs["gradient_fn"] = problem.gradient
@@ -418,14 +431,15 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
 
     Steps:
 
-    1. Run CMA-ES on the problem until ``cmaes_config.budget`` evaluations
-       are consumed. Same seed and same ``x0`` as a standalone CMA-ES run
-       will produce an identical CMA-ES prefix in the convergence trace.
+    1. Run CMA-ES on the problem until :attr:`cmaes_stopping_condition`
+       fires (default: ``MaxEvaluations(10_000 * dimensions)``). Same seed
+       and same ``x0`` as a standalone CMA-ES run will produce an identical
+       CMA-ES prefix in the convergence trace.
     2. Read the cached eigendecomposition ``(B, D)`` from CMA-ES.
     3. Compose the initial Hessian for L-BFGS-B according to
        :attr:`transform` (see :class:`HandoffTransform`).
-    4. Run L-BFGS-B from the CMA-ES mean with that ``B_0`` and a separate
-       budget.
+    4. Run L-BFGS-B from the CMA-ES mean with that ``B_0`` until
+       :attr:`lbfgsb_stopping_condition` fires.
 
     Trace stitching, fitness clamping, and handoff metadata are inherited
     from :class:`HandoffAlgorithm`; this class only owns the
@@ -437,6 +451,16 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
     cmaes_config_factory: Callable[[int], CMAESConfig]
     lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
     transform: HandoffTransform | str = HandoffTransform.INVERSE
+
+    cmaes_stopping_condition: StoppingCondition | None = None
+    """Warm-up (CMA-ES) stopping condition. ``None`` keeps the optimizer
+    default (``MaxEvaluations(10_000 * dimensions)``); pass e.g.
+    ``MaxEvaluations(warmup_budget)`` to bound the warm-up phase."""
+
+    lbfgsb_stopping_condition: StoppingCondition | None = None
+    """Refinement (L-BFGS-B) stopping condition. ``None`` keeps the
+    optimizer default; pass ``MaxEvaluations(refinement_budget)`` to bound
+    the refinement phase."""
 
     cmaes_extra_diagnostics: tuple[str, ...] = ("diag_eigen",)
     lbfgsb_extra_diagnostics: tuple[str, ...] = ()
@@ -476,6 +500,7 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             problem.function,
             x0,
             cmaes_config,
+            stopping_condition=self.cmaes_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             seed=seed,
@@ -512,6 +537,7 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             problem.function,
             cmaes_optimizer.mean,  # type: ignore[union-attr]
             lbfgsb_config,
+            stopping_condition=self.lbfgsb_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             **lbfgsb_kwargs,
@@ -649,7 +675,9 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
         reference_config = self.cmaes_config_factory(dimensions)
         population_size = reference_config.population_size
         total_budget = (
-            self.total_budget if self.total_budget > 0 else reference_config.budget
+            self.total_budget
+            if self.total_budget > 0
+            else DEFAULT_EVALUATIONS_PER_DIMENSION * dimensions
         )
         evaluations_per_generation = population_size + 1
         interval_evaluations = max(
@@ -679,7 +707,6 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 break
 
             cmaes_config = self.cmaes_config_factory(dimensions)
-            cmaes_config.budget = slice_budget
             for flag in self.cmaes_extra_diagnostics:
                 if hasattr(cmaes_config, flag):
                     setattr(cmaes_config, flag, True)
@@ -688,6 +715,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 problem.function,
                 x0,
                 cmaes_config,
+                stopping_condition=MaxEvaluations(slice_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
                 seed=rng,
@@ -731,7 +759,6 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
             )
 
             lbfgsb_config = self.lbfgsb_config_factory(dimensions)
-            lbfgsb_config.budget = probe_budget
             lbfgsb_config.initial_hessian = initial_hessian
             lbfgsb_config.factr = self.probe_factr
             lbfgsb_config.pgtol = self.probe_pgtol
@@ -751,6 +778,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 problem.function,
                 cmaes.mean,
                 lbfgsb_config,
+                stopping_condition=MaxEvaluations(probe_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
                 **lbfgsb_kwargs,

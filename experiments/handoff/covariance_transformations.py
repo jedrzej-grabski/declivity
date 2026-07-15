@@ -18,6 +18,7 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
+from declivity.utils.stopping_conditions import MaxEvaluations
 from declivity.plotting import (
     PanelKey,
     plot_comparison,
@@ -123,7 +124,7 @@ def run_handoff_study(
         cmaes_budget = cmaes_generations * evals_per_generation
 
         cmaes_config = CMAESConfig(
-            dimensions=dimensions, budget=cmaes_budget, sigma=10.0,
+            dimensions=dimensions, sigma=10.0,
         )
         cmaes_config.diag_sigma = True
         cmaes_config.diag_eigen = True
@@ -136,6 +137,7 @@ def run_handoff_study(
             lower_bounds=lower_bounds,
             upper_bounds=upper_bounds,
             seed=seed,
+            stopping_condition=MaxEvaluations(cmaes_budget),
         )
         result_cmaes = optimizer_cmaes.optimize()
 
@@ -166,7 +168,6 @@ def run_handoff_study(
                 m=memory_size,
                 pgtol=1e-8,
                 factr=1e7,
-                budget=lbfgsb_budget,
             )
             config.diag_gradient_norm = True
             config.diag_step_length = True
@@ -179,6 +180,7 @@ def run_handoff_study(
                 lower_bounds=lower_bounds,
                 upper_bounds=upper_bounds,
                 gradient_fn=gradient_fn,
+                stopping_condition=MaxEvaluations(lbfgsb_budget),
             )
             result = optimizer.optimize()
 

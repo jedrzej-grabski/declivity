@@ -49,6 +49,7 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import Rastrigin, Rosenbrock, Sphere
 from declivity.utils.population_initializers import NormalPopulationInitializer
 from declivity.utils.repair_strategies import IdentityRepair
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 plt.ioff()
@@ -70,7 +71,7 @@ def main() -> None:
         Problem.from_benchmark("Rastrigin",  Rastrigin(dimensions=dimensions)),
     ]
 
-    config_factory = lambda d: CMAESConfig(dimensions=d, budget=budget)
+    config_factory = lambda d: CMAESConfig(dimensions=d)
 
     algorithms: list[AlgorithmRun] = [
         SingleAlgorithm(
@@ -78,12 +79,14 @@ def main() -> None:
             color="#e74c3c",
             algorithm=AlgorithmChoice.CMAES,
             config_factory=config_factory,
+            stopping_condition=MaxEvaluations(budget),
         ),
         SingleAlgorithm(
             name="IdentityRepair",
             color="#3498db",
             algorithm=AlgorithmChoice.CMAES,
             config_factory=config_factory,
+            stopping_condition=MaxEvaluations(budget),
             repair_strategy=IdentityRepair(),
         ),
         SingleAlgorithm(
@@ -91,6 +94,7 @@ def main() -> None:
             color="#2ecc71",
             algorithm=AlgorithmChoice.CMAES,
             config_factory=config_factory,
+            stopping_condition=MaxEvaluations(budget),
             population_initializer=NormalPopulationInitializer(),
         ),
     ]

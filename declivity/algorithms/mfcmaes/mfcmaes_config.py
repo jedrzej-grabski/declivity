@@ -17,11 +17,6 @@ def default_population_size(dimensions: int) -> int:
     return 4 * dimensions
 
 
-def default_budget(dimensions: int) -> int:
-    """Default budget based on dimensions."""
-    return 10000 * dimensions
-
-
 def default_mu(population_size: int) -> int:
     """Default number of parents based on population size."""
     return population_size // 2
@@ -57,9 +52,6 @@ class MFCMAESConfig(PopulationBaseConfig):
 
     sigma: float = 1.0
     """Initial step size (standard deviation)"""
-
-    budget: int = field(default=0)
-    """Maximum number of function evaluations (0 means use default)"""
 
     window: int = field(default=0)
     """Archive window size h (0 means use default: 20 + 1.4*n)"""
@@ -112,17 +104,12 @@ class MFCMAESConfig(PopulationBaseConfig):
     damps: float = field(init=False)
     """Damping factor used by the flatland-escape sigma bump."""
 
-    maxit: int = field(init=False)
-    """Maximum iterations"""
-
     do_flatland_escape: bool = True
     """Whether to bump ``sigma`` when the population collapses onto a
     flat fitness plateau.  Matches R's ``do_flatland_escape`` default."""
 
     def __post_init__(self) -> None:
         """Calculate derived parameters that depend on other params"""
-        if self.budget <= 0:
-            self.budget = default_budget(self.dimensions)
         if self.population_size <= 0:
             self.population_size = default_population_size(self.dimensions)
         if self.window <= 0:
@@ -163,15 +150,13 @@ class MFCMAESConfig(PopulationBaseConfig):
             0.0, math.sqrt((self.mu_eff - 1.0) / (n_dim + 1.0)) - 1.0
         ) + self.cs
 
-        self.maxit = math.floor(self.budget / self.population_size)
-
         self.validate()
 
     def __setattr__(self, name: str, value) -> None:
         """Override setattr to recalculate derived params when key params change."""
         super().__setattr__(name, value)
 
-        if name in ("population_size", "budget", "window") and hasattr(self, "mu"):
+        if name in ("population_size", "window") and hasattr(self, "mu"):
             self._recalculate_derived_params()
 
     # MF-CMA-ES has no algorithm-specific diag flags — sigma, p_succ,
@@ -181,7 +166,7 @@ class MFCMAESConfig(PopulationBaseConfig):
 
     def __str__(self) -> str:
         return (
-            f"MFCMAESConfig(dimensions={self.dimensions}, budget={self.budget}, "
+            f"MFCMAESConfig(dimensions={self.dimensions}, "
             f"population_size={self.population_size}, window={self.window}, "
             f"sigma={self.sigma}, mu={self.mu}, mu_eff={self.mu_eff:.2f})"
         )

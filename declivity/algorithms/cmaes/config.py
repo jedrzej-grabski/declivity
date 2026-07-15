@@ -22,11 +22,6 @@ def default_population_size(dimensions: int) -> int:
     return 4 + math.floor(3 * math.log(dimensions))
 
 
-def default_budget(dimensions: int) -> int:
-    """Default budget (10000·d)."""
-    return 10000 * dimensions
-
-
 def compute_weights_and_rates(
     population_size: int, dimensions: int
 ) -> tuple[NDArray[np.float64], int, float, float, float, float, float, float]:
@@ -103,9 +98,6 @@ class CMAESConfig(PopulationBaseConfig):
     population_size: int = field(default=0)
     """Population size λ (``0`` → default ``4 + ⌊3 ln d⌋``)."""
 
-    budget: int = field(default=0)
-    """Maximum number of function evaluations (``0`` → ``10000·d``)."""
-
     diag_sigma: bool = False
     """Log σ every generation."""
 
@@ -134,11 +126,8 @@ class CMAESConfig(PopulationBaseConfig):
     cc: float = field(init=False)
     chi_n: float = field(init=False)
     funhist_term: int = field(init=False)
-    maxit: int = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.budget <= 0:
-            self.budget = default_budget(self.dimensions)
         if self.population_size <= 0:
             self.population_size = default_population_size(self.dimensions)
         self._recalculate_derived_params()
@@ -156,13 +145,12 @@ class CMAESConfig(PopulationBaseConfig):
         ) = compute_weights_and_rates(self.population_size, self.dimensions)
         self.chi_n = chi_n_expected(self.dimensions)
         self.tolx = 1e-12 * self.sigma
-        self.maxit = max(1, self.budget // self.population_size)
         self.funhist_term = 10 + math.ceil(30 * self.dimensions / self.population_size)
         self.validate()
 
     def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
-        if name in ("population_size", "budget", "sigma", "dimensions") and "mu" in self.__dict__:
+        if name in ("population_size", "sigma", "dimensions") and "mu" in self.__dict__:
             self._recalculate_derived_params()
 
     def enable_all_diagnostics(self) -> None:
@@ -172,7 +160,7 @@ class CMAESConfig(PopulationBaseConfig):
 
     def __str__(self) -> str:
         return (
-            f"CMAESConfig(dimensions={self.dimensions}, budget={self.budget}, "
+            f"CMAESConfig(dimensions={self.dimensions}, "
             f"population_size={self.population_size}, sigma={self.sigma}, "
             f"mu={self.mu}, mu_eff={self.mu_eff:.2f})"
         )

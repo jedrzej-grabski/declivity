@@ -36,6 +36,7 @@ from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 from declivity.algorithms.mfcmaes.mfcmaes_reference import nm_cma_es_vectorized
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 
 DEFAULT_PROBLEM = "cec17_F10_d10"
@@ -88,7 +89,6 @@ def _run_reference(spec: ProblemSpec, seed: int) -> RunRecord:
 def _run_framework(spec: ProblemSpec, seed: int) -> RunRecord:
     func = spec.fn_factory(spec.dim)
     cfg = MFCMAESConfig(dimensions=spec.dim)
-    cfg.budget = 10_000 * spec.dim
     cfg.sigma = spec.sigma
     cfg.enable_all_diagnostics()
 
@@ -98,6 +98,7 @@ def _run_framework(spec: ProblemSpec, seed: int) -> RunRecord:
         func=func,
         initial_point=spec.x0_factory(spec.dim),
         config=cfg,
+        stopping_condition=MaxEvaluations(10_000 * spec.dim),
         lower_bounds=spec.lower,
         upper_bounds=spec.upper,
         constraint_handler=BoxConstraintHandler(
