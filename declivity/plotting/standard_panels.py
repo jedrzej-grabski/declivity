@@ -421,3 +421,83 @@ PanelRegistry.register(
         default=False,
     ),
 )
+# ===========================================================================
+# Powell
+#
+# Single-point and derivative-free — no population, no gradients. One
+# record per outer iteration (one sweep over the direction set), logged
+# at the same boundary as scipy's per-iteration callback. Diagnostic
+# flags gate most fields (delta, step_norm, direction-set geometry), so
+# empty panels signal an off flag, as with L-BFGS-B.
+# ===========================================================================
+
+PanelRegistry.register(
+    AlgorithmChoice.POWELL,
+    Panel(
+        key=PanelKey.CONVERGENCE,
+        title="Convergence",
+        ylabel="Fitness (log)",
+        series=(
+            Series("best_fitness",   "Best", color="tab:blue"),
+            Series("function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"),
+        ),
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+    ),
+    Panel(
+        key=PanelKey.STEP_SIZE,
+        title="Sweep Displacement",
+        ylabel="||x_k - x_{k-1}||",
+        field="step_norm",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.DELTA,
+        title="Largest Single-Direction Decrease",
+        ylabel="delta",
+        field="delta",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.CONDITION_NUMBER,
+        title="Direction-Set Condition Number",
+        ylabel="kappa(D)",
+        field="direc_condition_number",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.DIRECTION_SET_DET,
+        title="Direction-Set |det|",
+        ylabel="|det D|",
+        field="direc_determinant",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.LINE_SEARCH_ITERS,
+        title="Line Search Evaluations",
+        ylabel="evals/iter",
+        field="line_search_evals",
+        yscale=YScale.LINEAR,
+    ),
+    # Non-default — function_value is subsumed by the convergence panel.
+    Panel(
+        key=PanelKey.FUNCTION_VALUE,
+        title="Function Value",
+        ylabel="f(x)",
+        field="function_value",
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.CONVERGENCE_BY_ITER,
+        title="Convergence (by iteration)",
+        ylabel="Best Fitness (log)",
+        field="best_fitness",
+        x_field=XAxis.ITERATION,
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+        default=False,
+    ),
+)
+
