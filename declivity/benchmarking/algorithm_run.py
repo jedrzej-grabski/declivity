@@ -31,7 +31,6 @@ inherit                         :class:`Protocol` — just expose ``name``,
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Callable, Protocol, cast, runtime_checkable
 
 import numpy as np
@@ -41,6 +40,10 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.utils.initial_geometry import (
+    HandoffTransform,
+    covariance_to_hessian_matrix,
+)
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.utils.line_search import LineSearchStrategy
 from declivity.benchmarking.problem import Problem
@@ -58,29 +61,6 @@ from declivity.utils.stopping_conditions import (
 )
 
 
-_EIGENVALUE_FLOOR = 1e-30
-
-
-class HandoffTransform(StrEnum):
-    """How to turn the CMA-ES covariance into an L-BFGS-B initial Hessian.
-
-    Used by :class:`CMAESLBFGSBHandoff`.
-    """
-
-    INVERSE = "inverse"
-    """Use ``C^{-1}`` directly. The L-BFGS-B model becomes a true quadratic
-    approximation of the CMA-ES posterior around the warm-up mean."""
-
-    SIGMA_INVERSE = "sigma_inverse"
-    """Use ``(sigma^2 C)^{-1}`` — accounts for the CMA-ES global step-size
-    scaling. Sometimes more conservative than the bare inverse."""
-
-    IDENTITY = "identity"
-    """Drop the covariance and use the L-BFGS-B default (B_0 = I). Mainly a
-    control experiment: isolates the value of *passing covariance information*
-    from the value of *sharing a starting point* with CMA-ES."""
-
-
 def initial_hessian_from_cmaes(
     transform: HandoffTransform | str,
     eigenvectors: NDArray[np.float64],
@@ -89,33 +69,19 @@ def initial_hessian_from_cmaes(
 ) -> NDArray[np.float64] | None:
     """Turn a CMA-ES eigendecomposition ``(B, D)`` into an L-BFGS-B ``B_0``.
 
-    ``C = B @ diag(D**2) @ B.T``; the L-BFGS-B model needs ``B`` (the
-    Hessian), and the CMA-ES covariance ``C`` is proportional to
-    ``B^{-1}`` — so the useful transforms invert it. Shared by both the
-    one-shot :class:`CMAESLBFGSBHandoff` and the
-    :class:`InterleavedCMAESLBFGSB` scheme. See :class:`HandoffTransform`
-    for the meaning of each option; ``IDENTITY`` returns ``None`` (the
-    L-BFGS-B default ``B_0 = I``).
+    ``C = B @ diag(D**2) @ B.T``; the L-BFGS-B model needs ``B`` (the Hessian),
+    and the CMA-ES covariance ``C`` is proportional to ``B^{-1}`` — so the useful
+    transforms invert it. See :class:`HandoffTransform` for the meaning of each
+    option; ``IDENTITY`` returns ``None`` (the L-BFGS-B default ``B_0 = I``).
+
+    Thin delegate to
+    :func:`~declivity.algorithms.lbfgsb.initial_hessian.covariance_to_hessian_matrix`
+    (the single source of truth, in the geometry module); retained here so the
+    config-based handoffs (:class:`CMAESLBFGSBHandoff`,
+    :class:`InterleavedCMAESLBFGSB`) keep their exact numeric contract.
     """
-    transform = str(transform)
-    if transform == HandoffTransform.IDENTITY:
-        return None
-
-    eigenvalues = np.maximum(eigenvalues_sqrt**2, _EIGENVALUE_FLOOR)
-
-    # Floored 1/eigenvalues can be huge (up to 1e30); the matmul values are
-    # still valid but numpy raises spurious divide/overflow warnings on the
-    # intermediates.
-    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-        if transform == HandoffTransform.INVERSE:
-            return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-        if transform == HandoffTransform.SIGMA_INVERSE:
-            inverse = (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-            return inverse / (sigma * sigma)
-
-    valid = ", ".join(repr(value.value) for value in HandoffTransform)
-    raise ValueError(
-        f"Unknown handoff transform: {transform!r}. Use one of {valid}."
+    return covariance_to_hessian_matrix(
+        transform, eigenvectors, eigenvalues_sqrt, sigma
     )
 
 

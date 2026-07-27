@@ -45,6 +45,14 @@ from declivity.utils.line_search import (
     BrentLineSearch,
     GoldenSectionLineSearch,
 )
+from declivity.utils.initial_geometry import (
+    InitialGeometry,
+    InitialHessian,
+    InitialHessianMode,
+    GeometryMode,
+    HandoffTransform,
+    covariance_to_hessian_matrix,
+)
 from declivity.utils.stopping_conditions import (
     OptimizationState,
     StoppingCondition,
@@ -97,6 +105,13 @@ __all__ = [
     "ScalarSearchResult",
     "BrentLineSearch",
     "GoldenSectionLineSearch",
+    # Initial geometry surface (shared learned-curvature object)
+    "InitialGeometry",
+    "InitialHessian",
+    "InitialHessianMode",
+    "GeometryMode",
+    "HandoffTransform",
+    "covariance_to_hessian_matrix",
     # Stopping-condition surface
     "OptimizationState",
     "StoppingCondition",
