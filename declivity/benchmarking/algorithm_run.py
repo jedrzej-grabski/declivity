@@ -42,6 +42,7 @@ from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.utils.initial_geometry import (
     HandoffTransform,
+    InitialGeometry,
     covariance_to_hessian_matrix,
 )
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
@@ -510,6 +511,133 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         ).optimize()
 
         return cmaes_result, lbfgsb_result
+
+
+@dataclass
+class CMAESLocalHandoff(HandoffAlgorithm):
+    """CMA-ES warm-up followed by a local optimizer seeded from the covariance.
+
+    The generalization of :class:`CMAESLBFGSBHandoff` to any single-point
+    local optimizer. After a CMA-ES warm-up it builds **one**
+    :class:`~declivity.algorithms.lbfgsb.initial_hessian.InitialGeometry` from
+    the learned covariance and hands it to the chosen ``local_algorithm`` through
+    the uniform ``initial_geometry=`` seam:
+
+    - ``LBFGSB`` — the geometry is the initial Hessian ``B_0`` (``= C^{-1}``).
+    - ``POWELL`` — its eigenvectors become the initial search-direction set.
+
+    ``transform=INVERSE`` (curvature ``C^{-1}``) is the correct default for both:
+    L-BFGS-B needs the inverse, while Powell reads only the eigenvectors
+    (invariant to the inversion).  ``IDENTITY`` is the control — an isotropic
+    geometry (identity ``B_0`` / coordinate directions) that still flows through
+    the same seam, so it isolates "covariance information" from "shared warm-up
+    ``x0``".
+
+    Same seed and ``x0`` as a standalone CMA-ES run produce an identical CMA-ES
+    prefix in the trace. Trace stitching, fitness clamping, and handoff metadata
+    are inherited from :class:`HandoffAlgorithm`; this class only owns the
+    covariance transform and the per-target seam wiring.
+    """
+
+    name: str
+    color: str
+    local_algorithm: AlgorithmChoice
+    cmaes_config_factory: Callable[[int], CMAESConfig]
+    local_config_factory: Callable[[int], BaseConfig]
+    transform: HandoffTransform | str = HandoffTransform.INVERSE
+
+    cmaes_stopping_condition: StoppingCondition | None = None
+    """Warm-up (CMA-ES) stopping condition. ``None`` keeps the optimizer default
+    (``MaxEvaluations(10_000 * dimensions)``); pass e.g.
+    ``MaxEvaluations(warmup_budget)`` to bound the warm-up phase."""
+
+    local_stopping_condition: StoppingCondition | None = None
+    """Refinement (local optimizer) stopping condition. ``None`` keeps the
+    optimizer default; pass ``MaxEvaluations(refinement_budget)`` to bound it."""
+
+    cmaes_extra_diagnostics: tuple[str, ...] = ("diag_eigen",)
+    local_extra_diagnostics: tuple[str, ...] = ()
+
+    local_line_search: LineSearchStrategy | None = None
+    """L-BFGS-B only: line-search strategy for the refinement phase. ``None``
+    keeps the optimizer default (``MoreThuenteLineSearch``)."""
+
+    local_gradient_strategy: GradientStrategy | None = None
+    """L-BFGS-B only: gradient-approximation strategy for the refinement phase.
+    ``None`` keeps the optimizer default (``CentralFD``)."""
+
+    def run_phases(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> tuple[OptimizationResult, OptimizationResult]:
+        valid_targets = (
+            AlgorithmChoice.LBFGSB,
+            AlgorithmChoice.POWELL,
+        )
+        if self.local_algorithm not in valid_targets:
+            names = ", ".join(str(a) for a in valid_targets)
+            raise ValueError(
+                f"CMAESLocalHandoff.local_algorithm must be one of {names}; "
+                f"got {self.local_algorithm!r}."
+            )
+
+        # Phase 1: CMA-ES warm-up.
+        cmaes_config = self.cmaes_config_factory(problem.dimensions)
+        for flag in self.cmaes_extra_diagnostics:
+            if hasattr(cmaes_config, flag):
+                setattr(cmaes_config, flag, True)
+
+        _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
+            AlgorithmChoice.CMAES,
+            problem.function,
+            x0,
+            cmaes_config,
+            stopping_condition=self.cmaes_stopping_condition,
+            lower_bounds=problem.lower_bound,
+            upper_bounds=problem.upper_bound,
+            seed=seed,
+        )
+        assert isinstance(_raw_cmaes_optimizer, CMAESOptimizer)
+        cmaes_optimizer = _raw_cmaes_optimizer
+        cmaes_result = cmaes_optimizer.optimize()
+
+        # Build one geometry object from the learned covariance. INVERSE gives
+        # the curvature B_0 = C^{-1}; Powell takes only its eigenvectors,
+        # L-BFGS-B the matrix itself.
+        eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
+        geometry = InitialGeometry.from_covariance(
+            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma, self.transform
+        )
+
+        # Phase 2: local optimizer from the CMA-ES mean, seeded by the geometry.
+        local_config = self.local_config_factory(problem.dimensions)
+        for flag in self.local_extra_diagnostics:
+            if hasattr(local_config, flag):
+                setattr(local_config, flag, True)
+
+        local_kwargs: dict = {"initial_geometry": geometry}
+        if self.local_algorithm == AlgorithmChoice.LBFGSB:
+            if problem.gradient is not None:
+                local_kwargs["gradient_fn"] = problem.gradient
+            if self.local_line_search is not None:
+                local_kwargs["line_search"] = self.local_line_search
+            if self.local_gradient_strategy is not None:
+                local_kwargs["gradient_strategy"] = self.local_gradient_strategy
+
+        local_result = AlgorithmFactory.create_optimizer(
+            self.local_algorithm,
+            problem.function,
+            cmaes_optimizer.mean,
+            local_config,
+            stopping_condition=self.local_stopping_condition,
+            lower_bounds=problem.lower_bound,
+            upper_bounds=problem.upper_bound,
+            **local_kwargs,
+        ).optimize()
+
+        return cmaes_result, local_result
 
 
 @dataclass
