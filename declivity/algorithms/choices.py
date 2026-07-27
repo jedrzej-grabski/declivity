@@ -7,3 +7,4 @@ class AlgorithmChoice(Enum):
     MFCMAES = "MFCMAES"
     CMAES = "CMAES"
     LBFGSB = "LBFGSB"
+    POWELL = "POWELL"
