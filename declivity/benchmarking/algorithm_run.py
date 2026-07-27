@@ -31,7 +31,6 @@ inherit                         :class:`Protocol` — just expose ``name``,
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Callable, Protocol, cast, runtime_checkable
 
 import numpy as np
@@ -41,8 +40,13 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.utils.initial_geometry import (
+    HandoffTransform,
+    InitialGeometry,
+    covariance_to_hessian_matrix,
+)
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from declivity.algorithms.lbfgsb.line_search import LineSearchStrategy
+from declivity.utils.line_search import LineSearchStrategy
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace, capture_scalar_series
 from declivity.core.algorithm_factory import AlgorithmFactory
@@ -58,29 +62,6 @@ from declivity.utils.stopping_conditions import (
 )
 
 
-_EIGENVALUE_FLOOR = 1e-30
-
-
-class HandoffTransform(StrEnum):
-    """How to turn the CMA-ES covariance into an L-BFGS-B initial Hessian.
-
-    Used by :class:`CMAESLBFGSBHandoff`.
-    """
-
-    INVERSE = "inverse"
-    """Use ``C^{-1}`` directly. The L-BFGS-B model becomes a true quadratic
-    approximation of the CMA-ES posterior around the warm-up mean."""
-
-    SIGMA_INVERSE = "sigma_inverse"
-    """Use ``(sigma^2 C)^{-1}`` — accounts for the CMA-ES global step-size
-    scaling. Sometimes more conservative than the bare inverse."""
-
-    IDENTITY = "identity"
-    """Drop the covariance and use the L-BFGS-B default (B_0 = I). Mainly a
-    control experiment: isolates the value of *passing covariance information*
-    from the value of *sharing a starting point* with CMA-ES."""
-
-
 def initial_hessian_from_cmaes(
     transform: HandoffTransform | str,
     eigenvectors: NDArray[np.float64],
@@ -89,33 +70,19 @@ def initial_hessian_from_cmaes(
 ) -> NDArray[np.float64] | None:
     """Turn a CMA-ES eigendecomposition ``(B, D)`` into an L-BFGS-B ``B_0``.
 
-    ``C = B @ diag(D**2) @ B.T``; the L-BFGS-B model needs ``B`` (the
-    Hessian), and the CMA-ES covariance ``C`` is proportional to
-    ``B^{-1}`` — so the useful transforms invert it. Shared by both the
-    one-shot :class:`CMAESLBFGSBHandoff` and the
-    :class:`InterleavedCMAESLBFGSB` scheme. See :class:`HandoffTransform`
-    for the meaning of each option; ``IDENTITY`` returns ``None`` (the
-    L-BFGS-B default ``B_0 = I``).
+    ``C = B @ diag(D**2) @ B.T``; the L-BFGS-B model needs ``B`` (the Hessian),
+    and the CMA-ES covariance ``C`` is proportional to ``B^{-1}`` — so the useful
+    transforms invert it. See :class:`HandoffTransform` for the meaning of each
+    option; ``IDENTITY`` returns ``None`` (the L-BFGS-B default ``B_0 = I``).
+
+    Thin delegate to
+    :func:`~declivity.algorithms.lbfgsb.initial_hessian.covariance_to_hessian_matrix`
+    (the single source of truth, in the geometry module); retained here so the
+    config-based handoffs (:class:`CMAESLBFGSBHandoff`,
+    :class:`InterleavedCMAESLBFGSB`) keep their exact numeric contract.
     """
-    transform = str(transform)
-    if transform == HandoffTransform.IDENTITY:
-        return None
-
-    eigenvalues = np.maximum(eigenvalues_sqrt**2, _EIGENVALUE_FLOOR)
-
-    # Floored 1/eigenvalues can be huge (up to 1e30); the matmul values are
-    # still valid but numpy raises spurious divide/overflow warnings on the
-    # intermediates.
-    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-        if transform == HandoffTransform.INVERSE:
-            return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-        if transform == HandoffTransform.SIGMA_INVERSE:
-            inverse = (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-            return inverse / (sigma * sigma)
-
-    valid = ", ".join(repr(value.value) for value in HandoffTransform)
-    raise ValueError(
-        f"Unknown handoff transform: {transform!r}. Use one of {valid}."
+    return covariance_to_hessian_matrix(
+        transform, eigenvectors, eigenvalues_sqrt, sigma
     )
 
 
@@ -544,6 +511,133 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         ).optimize()
 
         return cmaes_result, lbfgsb_result
+
+
+@dataclass
+class CMAESLocalHandoff(HandoffAlgorithm):
+    """CMA-ES warm-up followed by a local optimizer seeded from the covariance.
+
+    The generalization of :class:`CMAESLBFGSBHandoff` to any single-point
+    local optimizer. After a CMA-ES warm-up it builds **one**
+    :class:`~declivity.algorithms.lbfgsb.initial_hessian.InitialGeometry` from
+    the learned covariance and hands it to the chosen ``local_algorithm`` through
+    the uniform ``initial_geometry=`` seam:
+
+    - ``LBFGSB`` — the geometry is the initial Hessian ``B_0`` (``= C^{-1}``).
+    - ``POWELL`` — its eigenvectors become the initial search-direction set.
+
+    ``transform=INVERSE`` (curvature ``C^{-1}``) is the correct default for both:
+    L-BFGS-B needs the inverse, while Powell reads only the eigenvectors
+    (invariant to the inversion).  ``IDENTITY`` is the control — an isotropic
+    geometry (identity ``B_0`` / coordinate directions) that still flows through
+    the same seam, so it isolates "covariance information" from "shared warm-up
+    ``x0``".
+
+    Same seed and ``x0`` as a standalone CMA-ES run produce an identical CMA-ES
+    prefix in the trace. Trace stitching, fitness clamping, and handoff metadata
+    are inherited from :class:`HandoffAlgorithm`; this class only owns the
+    covariance transform and the per-target seam wiring.
+    """
+
+    name: str
+    color: str
+    local_algorithm: AlgorithmChoice
+    cmaes_config_factory: Callable[[int], CMAESConfig]
+    local_config_factory: Callable[[int], BaseConfig]
+    transform: HandoffTransform | str = HandoffTransform.INVERSE
+
+    cmaes_stopping_condition: StoppingCondition | None = None
+    """Warm-up (CMA-ES) stopping condition. ``None`` keeps the optimizer default
+    (``MaxEvaluations(10_000 * dimensions)``); pass e.g.
+    ``MaxEvaluations(warmup_budget)`` to bound the warm-up phase."""
+
+    local_stopping_condition: StoppingCondition | None = None
+    """Refinement (local optimizer) stopping condition. ``None`` keeps the
+    optimizer default; pass ``MaxEvaluations(refinement_budget)`` to bound it."""
+
+    cmaes_extra_diagnostics: tuple[str, ...] = ("diag_eigen",)
+    local_extra_diagnostics: tuple[str, ...] = ()
+
+    local_line_search: LineSearchStrategy | None = None
+    """L-BFGS-B only: line-search strategy for the refinement phase. ``None``
+    keeps the optimizer default (``MoreThuenteLineSearch``)."""
+
+    local_gradient_strategy: GradientStrategy | None = None
+    """L-BFGS-B only: gradient-approximation strategy for the refinement phase.
+    ``None`` keeps the optimizer default (``CentralFD``)."""
+
+    def run_phases(
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
+    ) -> tuple[OptimizationResult, OptimizationResult]:
+        valid_targets = (
+            AlgorithmChoice.LBFGSB,
+            AlgorithmChoice.POWELL,
+        )
+        if self.local_algorithm not in valid_targets:
+            names = ", ".join(str(a) for a in valid_targets)
+            raise ValueError(
+                f"CMAESLocalHandoff.local_algorithm must be one of {names}; "
+                f"got {self.local_algorithm!r}."
+            )
+
+        # Phase 1: CMA-ES warm-up.
+        cmaes_config = self.cmaes_config_factory(problem.dimensions)
+        for flag in self.cmaes_extra_diagnostics:
+            if hasattr(cmaes_config, flag):
+                setattr(cmaes_config, flag, True)
+
+        _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
+            AlgorithmChoice.CMAES,
+            problem.function,
+            x0,
+            cmaes_config,
+            stopping_condition=self.cmaes_stopping_condition,
+            lower_bounds=problem.lower_bound,
+            upper_bounds=problem.upper_bound,
+            seed=seed,
+        )
+        assert isinstance(_raw_cmaes_optimizer, CMAESOptimizer)
+        cmaes_optimizer = _raw_cmaes_optimizer
+        cmaes_result = cmaes_optimizer.optimize()
+
+        # Build one geometry object from the learned covariance. INVERSE gives
+        # the curvature B_0 = C^{-1}; Powell takes only its eigenvectors,
+        # L-BFGS-B the matrix itself.
+        eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
+        geometry = InitialGeometry.from_covariance(
+            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma, self.transform
+        )
+
+        # Phase 2: local optimizer from the CMA-ES mean, seeded by the geometry.
+        local_config = self.local_config_factory(problem.dimensions)
+        for flag in self.local_extra_diagnostics:
+            if hasattr(local_config, flag):
+                setattr(local_config, flag, True)
+
+        local_kwargs: dict = {"initial_geometry": geometry}
+        if self.local_algorithm == AlgorithmChoice.LBFGSB:
+            if problem.gradient is not None:
+                local_kwargs["gradient_fn"] = problem.gradient
+            if self.local_line_search is not None:
+                local_kwargs["line_search"] = self.local_line_search
+            if self.local_gradient_strategy is not None:
+                local_kwargs["gradient_strategy"] = self.local_gradient_strategy
+
+        local_result = AlgorithmFactory.create_optimizer(
+            self.local_algorithm,
+            problem.function,
+            cmaes_optimizer.mean,
+            local_config,
+            stopping_condition=self.local_stopping_condition,
+            lower_bounds=problem.lower_bound,
+            upper_bounds=problem.upper_bound,
+            **local_kwargs,
+        ).optimize()
+
+        return cmaes_result, local_result
 
 
 @dataclass

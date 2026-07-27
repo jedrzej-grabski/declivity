@@ -34,6 +34,25 @@ from declivity.utils.population_initializers import (
     IdentityPopulationInitializer,
     PopulationInitializerType,
 )
+from declivity.utils.line_search import (
+    GradientLineSearch,
+    LineSearchStrategy,
+    LineSearchResult,
+    MoreThuenteLineSearch,
+    ArmijoBacktracking,
+    DerivativeFreeLineSearch,
+    ScalarSearchResult,
+    BrentLineSearch,
+    GoldenSectionLineSearch,
+)
+from declivity.utils.initial_geometry import (
+    InitialGeometry,
+    InitialHessian,
+    InitialHessianMode,
+    GeometryMode,
+    HandoffTransform,
+    covariance_to_hessian_matrix,
+)
 from declivity.utils.stopping_conditions import (
     OptimizationState,
     StoppingCondition,
@@ -76,6 +95,23 @@ __all__ = [
     "MeanSigmaPopulationInitializer",
     "IdentityPopulationInitializer",
     "PopulationInitializerType",
+    # Line-search surface
+    "GradientLineSearch",
+    "LineSearchStrategy",
+    "LineSearchResult",
+    "MoreThuenteLineSearch",
+    "ArmijoBacktracking",
+    "DerivativeFreeLineSearch",
+    "ScalarSearchResult",
+    "BrentLineSearch",
+    "GoldenSectionLineSearch",
+    # Initial geometry surface (shared learned-curvature object)
+    "InitialGeometry",
+    "InitialHessian",
+    "InitialHessianMode",
+    "GeometryMode",
+    "HandoffTransform",
+    "covariance_to_hessian_matrix",
     # Stopping-condition surface
     "OptimizationState",
     "StoppingCondition",

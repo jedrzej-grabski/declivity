@@ -65,6 +65,10 @@ class PanelKey(StrEnum):
     SUCCESS_PROBABILITY = "success_probability"
     CONSTRAINT_VIOLATIONS = "constraint_violations"
 
+    # Powell specific
+    DELTA = "delta"
+    DIRECTION_SET_DET = "direction_set_det"
+
 
 class YScale(StrEnum):
     """Y-axis scaling mode for a :class:`Panel`."""

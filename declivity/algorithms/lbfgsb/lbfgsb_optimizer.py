@@ -25,8 +25,8 @@ from scipy.linalg import cho_factor, cho_solve
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
-from declivity.algorithms.lbfgsb.line_search import (
+from declivity.utils.initial_geometry import InitialHessian, InitialHessianMode
+from declivity.utils.line_search import (
     LineSearchStrategy,
     MoreThuenteLineSearch,
 )
@@ -65,6 +65,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         gradient_fn: Callable[[NDArray[np.float64]], NDArray[np.float64]] | None = None,
         gradient_strategy: GradientStrategy | None = None,
         line_search: LineSearchStrategy | None = None,
+        initial_geometry: "InitialHessian | None" = None,
     ) -> None:
         if config is None:
             config = LBFGSBConfig(dimensions=len(initial_point))
@@ -88,9 +89,15 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self._memory_size = config.m
         self._machine_epsilon = np.finfo(float).eps
 
-        self._initial_hessian = InitialHessian(
-            config.initial_hessian, len(initial_point)
-        )
+        # A supplied InitialGeometry (e.g. a CMA-ES-derived B_0 from a handoff)
+        # is used directly and overrides ``config.initial_hessian``; otherwise
+        # build one from the config's raw curvature as before.
+        if initial_geometry is not None:
+            self._initial_hessian = initial_geometry
+        else:
+            self._initial_hessian = InitialHessian(
+                config.initial_hessian, len(initial_point)
+            )
 
         self._step_vectors: list[NDArray[np.float64]] = []
         self._gradient_diff_vectors: list[NDArray[np.float64]] = []
