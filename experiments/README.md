@@ -45,6 +45,8 @@ plots), where custom code belongs, and the anti-patterns to avoid.
 | `des_vs_r.py`           | Runs DES on CEC2017 F10 (10D, 10 seeds, fixed `x0=50·1`); writes convergence + summary CSVs that can be diffed against output from `reference/cmaes.r` / `reference/mf_cmaes.r` | `reference/outputs/python_*_f10_d10.csv`            |
 | `cmaes_vs_reference.py` | Convergence-equivalence oracle between framework CMA-ES and the historical reference port across Sphere / Ellipsoid / Rosenbrock / Rastrigin / Ackley / CEC17 F10; produces convergence overlays, state trajectories, and a max-diff heatmap | `plots/cross_validation/cmaes_vs_reference/`        |
 | `cmaes_components.py`   | Framework CMA-ES under different `RepairStrategy` / `PopulationInitializer` injections (default `LamarckianRepair` vs `IdentityRepair` vs `NormalPopulationInitializer`) — confirms both seams are live and the default is non-regressing | `plots/cross_validation/cmaes_components/`          |
+| `powell_vs_scipy.py`    | Framework Powell vs unmodified `scipy.optimize.minimize(method='Powell')` on Sphere / Rosenbrock / Ellipsoid; a frame-introspection callback reads scipy's internal state (`direc`, `delta`, eval counters) each iteration, so the comparison covers state *trajectories*, not just final results. Empirically bit-identical (eval counts and direction matrices match exactly at every iteration) | `plots/cross_validation/powell_vs_scipy/`           |
+| `geometry_seed_identity.py`| Regression guard for the shared `InitialGeometry` seam: an identity geometry seed reproduces the native Powell / L-BFGS-B trajectories *exactly*, so `initial_geometry=` cannot silently perturb the scipy-identical defaults. Self-checking; exits non-zero on any deviation | `stdout` (pass/fail summary)                         |
 
 ## `lbfgsb/` — L-BFGS-B feature studies
 
@@ -54,13 +56,17 @@ plots), where custom code belongs, and the anti-patterns to avoid.
 | `initial_hessian.py` | Effect of `initial_hessian` and `persist_initial_hessian` on 10D Ellipsoid (cond 10⁶)     | `plots/lbfgsb/initial_hessian/`     |
 | `rotation_study.py`  | Full-Hessian vs diagonal vs identity B₀ across 4 rotations × {n=10,m=10}, {n=50,m=5}; also produces landscape grids | `plots/lbfgsb/rotation_study/`      |
 
-## `handoff/` — CMA-ES → L-BFGS-B handoff studies
+## `handoff/` — CMA-ES → local-optimizer handoff studies
 
-The headline contribution of the thesis: hand the CMA-ES learned
-covariance to L-BFGS-B as the initial Hessian B₀.
+The headline contribution of the thesis: hand the CMA-ES learned covariance to a
+local optimizer as its starting geometry. Originally L-BFGS-B (as the initial
+Hessian `B₀ = C⁻¹`); now **generalized** through one shared `InitialGeometry`
+object to Powell (initial directions = eigenvectors of `C`) via the uniform
+`CMAESLocalHandoff`.
 
 | Script                          | What it does                                                                                                 | Output                                            |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------|---------------------------------------------------|
+| `local_geometry_seed.py`        | **Generalized** covariance seeding: CMA-ES → {L-BFGS-B, Powell} through one `InitialGeometry` + `CMAESLocalHandoff`. Per optimizer: covariance-seeded vs identity control vs standalone on a rotated ellipsoid | `plots/handoff/local_geometry_seed/{lbfgsb,powell}/` |
 | `covariance_transformations.py` | 6 candidate `B₀` transforms (`I`, `C`, `C⁻¹`, `(σ²C)⁻¹`, normalized `C`, normalized `C⁻¹`) on rotated Ellipsoid | `plots/handoff/covariance_transformations/`       |
 | `cmabfgs_replication.py`        | Replicates `notes/test_bfgs.png` with our CMA-ES⇆L-BFGS-B: d=100 Shifted Different Powers (SDP), optimum near the `[-180,20]` corner, handoff interval `N=k·d` for `k∈{0.5,1,2,4,8}`, evals + CMA-ES-iterations axes. `--popsize 400` (4·d) or `0` (default). | `plots/handoff/cmabfgs_replication/`              |
 | `interleaved.py`                | **Interleaved** CMA-ES ⇆ L-BFGS-B: alternate every `N` generations, L-BFGS-B as a `C⁻¹` side-probe, on a near-corner shifted Ellipsoid/Rastrigin. Produces the staircase curve. See `docs/NEW_CODE_interleaved_handoff.md` | `plots/handoff/interleaved/`                      |
