@@ -421,6 +421,8 @@ PanelRegistry.register(
         default=False,
     ),
 )
+
+
 # ===========================================================================
 # Powell
 #
@@ -501,3 +503,83 @@ PanelRegistry.register(
     ),
 )
 
+
+# ===========================================================================
+# Nelder-Mead
+#
+# The simplex is the population, so the population panels (worst/mean/
+# std fitness) apply. STEP_SIZE maps to the simplex extent — the
+# quantity tested against xatol and the natural "search scale" of the
+# method — so cross-algorithm STEP_SIZE overlays stay meaningful.
+# CONDITION_NUMBER reads the vertex-covariance spectrum (diag_eigen).
+# ===========================================================================
+
+PanelRegistry.register(
+    AlgorithmChoice.NELDERMEAD,
+    Panel(
+        key=PanelKey.CONVERGENCE,
+        title="Convergence",
+        ylabel="Fitness (log)",
+        series=(
+            Series("best_fitness",  "Best",  color="tab:blue"),
+            Series("mean_fitness",  "Mean",  linestyle=LineStyle.DASHED, color="tab:green"),
+            Series("worst_fitness", "Worst", linestyle=LineStyle.DOTTED, color="tab:red"),
+        ),
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+    ),
+    Panel(
+        key=PanelKey.STEP_SIZE,
+        title="Simplex Extent",
+        ylabel="max |sim - sim_0|",
+        field="simplex_diameter",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.FITNESS_SPREAD,
+        title="Fitness Spread",
+        ylabel="max |f_0 - f_i|",
+        field="fitness_spread",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.STD_FITNESS,
+        title="Fitness Std Dev",
+        ylabel="Std Dev",
+        field="std_fitness",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.CONDITION_NUMBER,
+        title="Simplex Condition Number",
+        ylabel="kappa(cov)",
+        field="condition_number",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.SIMPLEX_VOLUME,
+        title="Simplex Volume",
+        ylabel="vol (log)",
+        field="simplex_volume",
+        yscale=YScale.LOG,
+    ),
+    # Non-default — the operation timeline is a dissection tool, and
+    # worst fitness is already in the convergence overlay.
+    Panel(
+        key=PanelKey.SIMPLEX_OPERATION,
+        title="Simplex Operation",
+        ylabel="op code",
+        field="operation",
+        yscale=YScale.LINEAR,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.WORST_FITNESS,
+        title="Worst Fitness",
+        ylabel="Worst Fitness",
+        field="worst_fitness",
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+        default=False,
+    ),
+)
