@@ -69,6 +69,11 @@ class PanelKey(StrEnum):
     DELTA = "delta"
     DIRECTION_SET_DET = "direction_set_det"
 
+    # Nelder-Mead specific
+    FITNESS_SPREAD = "fitness_spread"
+    SIMPLEX_VOLUME = "simplex_volume"
+    SIMPLEX_OPERATION = "simplex_operation"
+
 
 class YScale(StrEnum):
     """Y-axis scaling mode for a :class:`Panel`."""

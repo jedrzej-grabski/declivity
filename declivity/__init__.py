@@ -16,11 +16,13 @@ import declivity.algorithms.cmaes.cmaes_optimizer  # noqa: F401
 import declivity.algorithms.mfcmaes.mfcmaes_optimizer  # noqa: F401
 import declivity.algorithms.lbfgsb.lbfgsb_optimizer  # noqa: F401
 import declivity.algorithms.powell.powell_optimizer  # noqa: F401
+import declivity.algorithms.neldermead.neldermead_optimizer  # noqa: F401
 import declivity.logging.des_logger  # noqa: F401
 import declivity.logging.cmaes_logger  # noqa: F401
 import declivity.logging.mfcmaes_logger  # noqa: F401
 import declivity.logging.lbfgsb_logger  # noqa: F401
 import declivity.logging.powell_logger  # noqa: F401
+import declivity.logging.neldermead_logger  # noqa: F401
 
 __all__ = [
     "AlgorithmFactory",

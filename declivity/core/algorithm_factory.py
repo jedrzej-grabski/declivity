@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from declivity.algorithms.lbfgsb.config import LBFGSBConfig
     from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
     from declivity.algorithms.powell.config import PowellConfig
+    from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
+    from declivity.algorithms.neldermead.config import NelderMeadConfig
 
 
 class AlgorithmFactory:
@@ -140,6 +142,22 @@ class AlgorithmFactory:
         seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> "PowellOptimizer": ...
+
+    @overload
+    @classmethod
+    def create_optimizer(
+        cls,
+        algorithm: Literal[AlgorithmChoice.NELDERMEAD],
+        func: Callable[[NDArray[np.float64]], float],
+        initial_point: NDArray[np.float64],
+        config: "NelderMeadConfig | None" = None,
+        constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
+        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
+        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        seed: int | np.random.Generator | None = None,
+        **kwargs,
+    ) -> "NelderMeadOptimizer": ...
 
     @classmethod
     def create_optimizer(
