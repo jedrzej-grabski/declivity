@@ -5,7 +5,9 @@ Provides the More-Thuente line search (port of the Fortran dcsrch/dcstep
 subroutines by More and Thuente, 1994) and a simple Armijo backtracking
 search.  Both operate on ``phi(alpha) = f(x + alpha*d)`` *and its
 directional derivative* ``phi'(alpha)`` — they are the branch of the
-line-search family that requires gradient information.
+line-search family that requires gradient information.  Derivative-free
+searches (Brent, golden section — used by Powell) live in
+:mod:`declivity.utils.line_search.derivative_free`.
 
 Historically this module lived at ``declivity/algorithms/lbfgsb/line_search.py``;
 it moved here when the line search became a shared framework component

@@ -40,6 +40,10 @@ from declivity.utils.line_search import (
     LineSearchResult,
     MoreThuenteLineSearch,
     ArmijoBacktracking,
+    DerivativeFreeLineSearch,
+    ScalarSearchResult,
+    BrentLineSearch,
+    GoldenSectionLineSearch,
 )
 from declivity.utils.stopping_conditions import (
     OptimizationState,
@@ -89,6 +93,10 @@ __all__ = [
     "LineSearchResult",
     "MoreThuenteLineSearch",
     "ArmijoBacktracking",
+    "DerivativeFreeLineSearch",
+    "ScalarSearchResult",
+    "BrentLineSearch",
+    "GoldenSectionLineSearch",
     # Stopping-condition surface
     "OptimizationState",
     "StoppingCondition",

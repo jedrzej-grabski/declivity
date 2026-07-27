@@ -1,7 +1,8 @@
 """
 Compatibility shim — the line-search implementations moved to
 :mod:`declivity.utils.line_search` when the line search became a shared
-framework component rather than an L-BFGS-B internal.
+framework component (gradient-based branch used by L-BFGS-B,
+derivative-free branch used by Powell).
 
 Import from ``declivity.utils.line_search`` in new code.
 """
