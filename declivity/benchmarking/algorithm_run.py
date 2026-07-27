@@ -42,7 +42,7 @@ from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESStat
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from declivity.algorithms.lbfgsb.line_search import LineSearchStrategy
+from declivity.utils.line_search import LineSearchStrategy
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace, capture_scalar_series
 from declivity.core.algorithm_factory import AlgorithmFactory

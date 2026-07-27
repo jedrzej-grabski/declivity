@@ -34,6 +34,13 @@ from declivity.utils.population_initializers import (
     IdentityPopulationInitializer,
     PopulationInitializerType,
 )
+from declivity.utils.line_search import (
+    GradientLineSearch,
+    LineSearchStrategy,
+    LineSearchResult,
+    MoreThuenteLineSearch,
+    ArmijoBacktracking,
+)
 from declivity.utils.stopping_conditions import (
     OptimizationState,
     StoppingCondition,
@@ -76,6 +83,12 @@ __all__ = [
     "MeanSigmaPopulationInitializer",
     "IdentityPopulationInitializer",
     "PopulationInitializerType",
+    # Line-search surface
+    "GradientLineSearch",
+    "LineSearchStrategy",
+    "LineSearchResult",
+    "MoreThuenteLineSearch",
+    "ArmijoBacktracking",
     # Stopping-condition surface
     "OptimizationState",
     "StoppingCondition",

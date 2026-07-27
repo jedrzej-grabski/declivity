@@ -26,7 +26,7 @@ from scipy.linalg import cho_factor, cho_solve
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.algorithms.lbfgsb.initial_hessian import InitialHessian, InitialHessianMode
-from declivity.algorithms.lbfgsb.line_search import (
+from declivity.utils.line_search import (
     LineSearchStrategy,
     MoreThuenteLineSearch,
 )
