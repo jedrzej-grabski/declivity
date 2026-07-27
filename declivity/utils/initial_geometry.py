@@ -2,20 +2,23 @@
 Shared "learned local geometry" object for the local optimizers.
 
 Originally the L-BFGS-B initial Hessian ``B_0``; now generalized into a single
-curvature/quadratic model that seeds the single-point local optimizers from the
-same learned geometry (typically a CMA-ES covariance):
+curvature/quadratic model that seeds **all three** single-point local
+optimizers from the same learned geometry (typically a CMA-ES covariance):
 
 - **L-BFGS-B** consumes it as the initial Hessian ``B_0`` (curvature ops
   ``multiply`` / ``solve`` / ``quadratic_form`` / ...), exactly as before.
 - **Powell** consumes :meth:`InitialGeometry.principal_directions` — the
   eigenvectors of the covariance — as its initial search-direction set.
+- **Nelder-Mead** consumes :meth:`InitialGeometry.axis_steps` /
+  :meth:`InitialGeometry.principal_scales` to shape its initial simplex along
+  the covariance's principal axes.
 
 Canonical stored quantity is **curvature** ``B_0`` (large eigenvalue = steep),
 so the ~15 L-BFGS-B call sites stay byte-identical.  The covariance -> curvature
 inversion happens **once**, in :meth:`InitialGeometry.from_covariance`.  When
 built from a covariance the object *also* stores the forward eigendecomposition
-``(B, D, sigma)`` as first-class fields, so the direction accessors are exact
-and cheap (no re-``eigh``) and do not double-invert.
+``(B, D, sigma)`` as first-class fields, so the direction / simplex accessors are
+exact and cheap (no re-``eigh``) and do not double-invert.
 
 ``InitialHessian`` is kept as an alias of ``InitialGeometry`` for backwards
 compatibility (L-BFGS-B and its exports import the old name).
@@ -29,7 +32,9 @@ from scipy.linalg import cho_factor, cho_solve
 
 
 # Numeric floor applied to (squared) eigenvalues before inversion, so a
-# collapsed covariance direction does not blow the reciprocal up to inf.
+# collapsed covariance direction does not blow the reciprocal up to inf. This is
+# the *numeric* floor for the matrix math — distinct from the *practical* simplex
+# edge floor (``min_step``) used by ``CovarianceSimplexInitializer``.
 _EIGENVALUE_FLOOR = 1e-30
 
 
@@ -117,10 +122,11 @@ class InitialGeometry:
     - scale_columns(S): B_0 * S
     - weighted_dot(d): d' * B_0 * d
 
-    and the geometry accessors consumed by the derivative-free methods:
+    and the geometry accessors consumed by Powell / Nelder-Mead:
 
     - principal_directions(): eigenvectors of the geometry (Powell directions)
-    - principal_scales(): per-axis forward std-devs
+    - principal_scales(): per-axis forward std-devs (Nelder-Mead simplex extent)
+    - axis_steps(...): ready-to-use simplex edge vectors
 
     Use :meth:`identity`, :meth:`from_curvature`, or :meth:`from_covariance` to
     construct from a source covariance; the plain constructor accepts a raw
@@ -204,7 +210,7 @@ class InitialGeometry:
         """Isotropic geometry — ``B_0 = I``, unit directions, uniform scales.
 
         The neutral control: L-BFGS-B behaves as ``config.initial_hessian=None``,
-        and Powell gets the coordinate directions.
+        Powell gets the coordinate directions, Nelder-Mead an isotropic simplex.
         """
         return cls(None, num_dimensions)
 
@@ -332,7 +338,7 @@ class InitialGeometry:
         return float(self._diagonal[i])
 
     # ------------------------------------------------------------------
-    # Geometry accessors — consumed by the derivative-free methods.
+    # Geometry accessors — consumed by Powell / Nelder-Mead.
     # ------------------------------------------------------------------
 
     def _forward_geometry(
@@ -402,6 +408,43 @@ class InitialGeometry:
         """
         _, scales = self._forward_geometry()
         return 1.0 / np.maximum(scales, np.sqrt(_EIGENVALUE_FLOOR)) ** 2
+
+    def axis_steps(
+        self,
+        base_size: float,
+        normalize: bool = True,
+        ratio_floor: float = 1e-3,
+        min_step: float = 0.0,
+        absolute: bool = False,
+    ) -> NDArray[np.float64]:
+        """Simplex edge vectors as columns ``(n, n)``: column ``k`` = edge ``k``.
+
+        Each column is a principal direction scaled to a length:
+
+        - ``absolute=True``: ``length_k = sigma * D_k`` — the true CMA-ES
+          search-distribution extent (collapses as CMA-ES converges; use only to
+          study that collapse).
+        - ``normalize=True`` (default): ``length_k = base_size * clip(D_k/max(D),
+          ratio_floor, 1)`` — relative anisotropy shape, absolute size decoupled
+          into ``base_size``.  This is the collapse-robust default.
+        - otherwise: ``length_k = base_size * D_k``.
+
+        Every length is then floored at ``min_step`` so no edge starts below the
+        convergence tolerance.
+        """
+        directions, scales = self._forward_geometry()
+        if absolute:
+            lengths = self._sigma * scales
+        elif normalize:
+            scale_max = float(np.max(scales)) if scales.size else 1.0
+            if scale_max <= 0:
+                scale_max = 1.0
+            shape = np.clip(scales / scale_max, ratio_floor, 1.0)
+            lengths = base_size * shape
+        else:
+            lengths = base_size * scales
+        lengths = np.maximum(lengths, min_step)
+        return directions * lengths
 
 
 # Backwards-compatible aliases: the object was previously named after its
