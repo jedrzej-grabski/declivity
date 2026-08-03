@@ -14,8 +14,8 @@ banded across seeds via :func:`~src.plotting.unified.plot_panels` with the
 matching panel key.
 """
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -138,15 +138,28 @@ def plot_benchmark_convergence(
 
         if annotate_handoff:
             for handoff_eval, handoff_iter in handoff_markers.items():
-                ax.axvline(handoff_eval, color="black", linestyle="--", linewidth=1.2, alpha=0.45)
+                ax.axvline(
+                    handoff_eval,
+                    color="black",
+                    linestyle="--",
+                    linewidth=1.2,
+                    alpha=0.45,
+                )
                 if handoff_iter is not None:
                     label = f"  handoff @ {handoff_iter} gen ({handoff_eval} evals)"
                 else:
                     label = f"  handoff @ {handoff_eval} evals"
                 ymax = ax.get_ylim()[1]
                 ax.text(
-                    handoff_eval, ymax, label, rotation=90, va="top", ha="left",
-                    fontsize=8, color="gray", alpha=0.7,
+                    handoff_eval,
+                    ymax,
+                    label,
+                    rotation=90,
+                    va="top",
+                    ha="left",
+                    fontsize=8,
+                    color="gray",
+                    alpha=0.7,
                 )
 
         ax.set_xlabel("Function Evaluations", fontsize=12)
@@ -248,7 +261,10 @@ def plot_benchmark_boxplot(
                     f"n={kept}/{total}",
                     xy=(tick_index, 0.98),
                     xycoords=("data", "axes fraction"),
-                    ha="center", va="top", fontsize=8, color="dimgray",
+                    ha="center",
+                    va="top",
+                    fontsize=8,
+                    color="dimgray",
                 )
 
     for panel_index in range(len(problems_list), len(flat_axes)):

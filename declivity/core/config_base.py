@@ -56,12 +56,10 @@ class BaseConfig:
         """No-op base hook.  Subclasses override to enable their flags;
         chain with ``super().enable_all_diagnostics()`` so the whole
         diagnostic surface flips on with a single call."""
-        pass
 
     def disable_all_diagnostics(self) -> None:
         """No-op base hook — symmetric counterpart to
         :meth:`enable_all_diagnostics`."""
-        pass
 
 
 @dataclass

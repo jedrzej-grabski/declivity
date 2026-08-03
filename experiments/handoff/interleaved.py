@@ -63,14 +63,13 @@ from declivity.utils.benchmark_functions import (
 )
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 COLORS = {
-    "CMA-ES":                       "#c0392b",
-    "L-BFGS-B":                     "#2980b9",
+    "CMA-ES": "#c0392b",
+    "L-BFGS-B": "#2980b9",
     "CMA-ES -> L-BFGS-B (one-shot)": "#8e44ad",
     "Interleaved CMA-ES + L-BFGS-B": "#e67e22",
 }
@@ -99,7 +98,9 @@ def build_problem(
         func = ShiftedFunction.near_corner(base, fraction=corner_fraction)
         return Problem.from_benchmark("ShiftedRastrigin", func), ArmijoBacktracking()
 
-    raise ValueError(f"Unknown problem {problem_name!r}; use 'ellipsoid' or 'rastrigin'.")
+    raise ValueError(
+        f"Unknown problem {problem_name!r}; use 'ellipsoid' or 'rastrigin'."
+    )
 
 
 def build_algorithms(
@@ -197,8 +198,13 @@ def run_experiment(
         problem_name, dimensions, corner_fraction, rotation
     )
     algorithms = build_algorithms(
-        total_budget, cmaes_warmup_budget, cmaes_interval, memory_size,
-        probe_max_evals, probe_factr, line_search,
+        total_budget,
+        cmaes_warmup_budget,
+        cmaes_interval,
+        memory_size,
+        probe_max_evals,
+        probe_factr,
+        line_search,
     )
     cmaes_only, _lbfgsb_only, _one_shot, interleaved = algorithms
 
@@ -268,33 +274,45 @@ def main() -> None:
     parser.add_argument("--dimensions", type=int, default=10)
     parser.add_argument("--total-budget", type=int, default=8000)
     parser.add_argument(
-        "--cmaes-warmup-budget", type=int, default=2000,
+        "--cmaes-warmup-budget",
+        type=int,
+        default=2000,
         help="Warm-up budget for the one-shot handoff baseline only.",
     )
     parser.add_argument(
-        "--cmaes-interval", type=int, default=20,
+        "--cmaes-interval",
+        type=int,
+        default=20,
         help="CMA-ES generations between consecutive L-BFGS-B probes (the handoff interval N).",
     )
     parser.add_argument("--num-seeds", type=int, default=15)
     parser.add_argument("--memory-size", type=int, default=10)
     parser.add_argument(
-        "--probe-max-evals", type=int, default=80,
+        "--probe-max-evals",
+        type=int,
+        default=80,
         help="Hard cap on evaluations per L-BFGS-B probe. Short, frequent "
-             "bursts (small cap) track CMA-ES's improving covariance and give "
-             "the cleanest staircase; a large cap lets one early burst stall "
-             "on a stale C^-1.",
+        "bursts (small cap) track CMA-ES's improving covariance and give "
+        "the cleanest staircase; a large cap lets one early burst stall "
+        "on a stale C^-1.",
     )
     parser.add_argument(
-        "--probe-factr", type=float, default=1e7,
+        "--probe-factr",
+        type=float,
+        default=1e7,
         help="Relative-decrease stop for each probe (larger -> bails sooner).",
     )
     parser.add_argument(
-        "--corner-fraction", type=float, default=0.9,
+        "--corner-fraction",
+        type=float,
+        default=0.9,
         help="How far the optimum sits from the box centre toward a corner "
-             "(0 = centre, 1 = exactly on the corner).",
+        "(0 = centre, 1 = exactly on the corner).",
     )
     parser.add_argument(
-        "--rotation", choices=["random", "uniform_45", "golden"], default="random",
+        "--rotation",
+        choices=["random", "uniform_45", "golden"],
+        default="random",
         help="Rotation applied to the Ellipsoid (ignored for Rastrigin).",
     )
     parser.add_argument("--headline-seed", type=int, default=0)

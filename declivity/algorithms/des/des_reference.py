@@ -27,13 +27,12 @@ by the cross-validation harness.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
 from scipy.special import gamma as gamma_fn
-
 
 _DBL_MAX = float(np.finfo(np.float64).max)
 
@@ -111,8 +110,16 @@ def des_reference(
     par = np.asarray(par, dtype=np.float64).copy()
     N = par.size
 
-    lower = np.full(N, lower, dtype=np.float64) if np.isscalar(lower) else np.asarray(lower, dtype=np.float64)
-    upper = np.full(N, upper, dtype=np.float64) if np.isscalar(upper) else np.asarray(upper, dtype=np.float64)
+    lower = (
+        np.full(N, lower, dtype=np.float64)
+        if np.isscalar(lower)
+        else np.asarray(lower, dtype=np.float64)
+    )
+    upper = (
+        np.full(N, upper, dtype=np.float64)
+        if np.isscalar(upper)
+        else np.asarray(upper, dtype=np.float64)
+    )
 
     if budget is None:
         budget = 10_000 * N
@@ -131,8 +138,8 @@ def des_reference(
     weights = weights / weights.sum()
     weightsPop = np.log(lambda_ + 1) - np.log(np.arange(1, lambda_ + 1))
     weightsPop = weightsPop / weightsPop.sum()
-    mu_eff = weights.sum() ** 2 / (weights ** 2).sum()
-    cc = mu / (mu + 2)   # DES.R line 61: 'ccum'
+    mu_eff = weights.sum() ** 2 / (weights**2).sum()
+    cc = mu / (mu + 2)  # DES.R line 61: 'ccum'
     sqrt_N = math.sqrt(N)
 
     counteval = 0
@@ -180,14 +187,18 @@ def des_reference(
             out[repaired_mask] = worst_fit + vecDist[repaired_mask]
             return _delete_inf_nan(out)
         if np.any(P != P_repaired):
-            return _delete_inf_nan(np.array([worst_fit + np.sum((P - P_repaired) ** 2)]))
+            return _delete_inf_nan(
+                np.array([worst_fit + np.sum((P - P_repaired) ** 2)])
+            )
         return fitness.copy()
 
     # Outer restart loop (DES.R line 188).  ``stoptol`` is never set in
     # the current R source (the trigger is commented out), so the outer
     # loop executes exactly once until the budget is exhausted.  Kept
     # here for literal correspondence.
-    result = DESReferenceResult(best_par=best_par, best_fit=best_fit, counteval=0, iter_count=0)
+    result = DESReferenceResult(
+        best_par=best_par, best_fit=best_fit, counteval=0, iter_count=0
+    )
     while counteval < budget:
         Ft = initFt
 
@@ -203,7 +214,10 @@ def des_reference(
 
         # Repair (column-wise bounce-back, DES.R line 205).
         populationRepaired = np.column_stack(
-            [_bounce_back_boundary2(population[:, k], lower, upper) for k in range(lambda_)]
+            [
+                _bounce_back_boundary2(population[:, k], lower, upper)
+                for k in range(lambda_)
+            ]
         )
         if lamarckian:
             population = populationRepaired
@@ -264,9 +278,13 @@ def des_reference(
 
             # Evolution path update (DES.R lines 276–279).
             if histHead == 0:
-                pc[:, histHead] = (1 - cp) * np.zeros(N) / sqrt_N + math.sqrt(mu * cp * (2 - cp)) * step
+                pc[:, histHead] = (1 - cp) * np.zeros(N) / sqrt_N + math.sqrt(
+                    mu * cp * (2 - cp)
+                ) * step
             else:
-                pc[:, histHead] = (1 - cp) * pc[:, histHead - 1] + math.sqrt(mu * cp * (2 - cp)) * step
+                pc[:, histHead] = (1 - cp) * pc[:, histHead - 1] + math.sqrt(
+                    mu * cp * (2 - cp)
+                ) * step
 
             # Sample from history (DES.R lines 282–287).
             limit = histHead + 1 if iter_count < history_size else history_size
@@ -275,10 +293,20 @@ def des_reference(
             historySample2 = rng.integers(0, limit, size=lambda_)
             # ``sampleFromHistory`` (DES.R lines 406–411): for each i,
             # sample(1:ncol(history[[historySample[i]]]), 1).  ncol == mu.
-            x1sample = np.array([rng.integers(0, history[historySample[i]].shape[1]) for i in range(lambda_)])
+            x1sample = np.array(
+                [
+                    rng.integers(0, history[historySample[i]].shape[1])
+                    for i in range(lambda_)
+                ]
+            )
             # Note: R uses ``historySample`` (not ``historySample2``) as
             # the slot index for the second draw too (DES.R line 287).
-            x2sample = np.array([rng.integers(0, history[historySample[i]].shape[1]) for i in range(lambda_)])
+            x2sample = np.array(
+                [
+                    rng.integers(0, history[historySample[i]].shape[1])
+                    for i in range(lambda_)
+                ]
+            )
 
             # Diff construction (DES.R lines 290–296).
             for i in range(lambda_):
@@ -287,7 +315,8 @@ def des_reference(
                 x1 = history[slot1][:, x1sample[i]]
                 x2 = history[slot1][:, x2sample[i]]
                 diffs[:, i] = (
-                    math.sqrt(cc) * ((x1 - x2) + rng.standard_normal() * dMean[:, slot1])
+                    math.sqrt(cc)
+                    * ((x1 - x2) + rng.standard_normal() * dMean[:, slot1])
                     + math.sqrt(1 - cc) * rng.standard_normal() * pc[:, slot2]
                 )
 
@@ -296,17 +325,25 @@ def des_reference(
             population = (
                 newMean[:, None]
                 + Ft * diffs
-                + tol * (1 - 2 / (N ** 2)) ** (iter_count / 2) * noise / chiN
+                + tol * (1 - 2 / (N**2)) ** (iter_count / 2) * noise / chiN
             )
             population = _delete_inf_nan(population)
 
             # Repair + count (DES.R lines 304–311).
             populationTemp = population
             populationRepaired = np.column_stack(
-                [_bounce_back_boundary2(population[:, k], lower, upper) for k in range(lambda_)]
+                [
+                    _bounce_back_boundary2(population[:, k], lower, upper)
+                    for k in range(lambda_)
+                ]
             )
             counterRepaired = int(
-                np.sum([np.any(populationTemp[:, t] != populationRepaired[:, t]) for t in range(lambda_)])
+                np.sum(
+                    [
+                        np.any(populationTemp[:, t] != populationRepaired[:, t])
+                        for t in range(lambda_)
+                    ]
+                )
             )
 
             if lamarckian:
@@ -314,9 +351,13 @@ def des_reference(
 
             popMean = population @ weightsPop  # DES.R line 317
 
-            fitness = fn_l(population)  # DES.R line 320; on the original pop in nonLamarckian
+            fitness = fn_l(
+                population
+            )  # DES.R line 320; on the original pop in nonLamarckian
             if not lamarckian:
-                fitnessNonLamarckian = fn_d(population, populationRepaired, fitness, worst_fit)
+                fitnessNonLamarckian = fn_d(
+                    population, populationRepaired, fitness, worst_fit
+                )
             else:
                 fitnessNonLamarckian = fitness
 
@@ -324,7 +365,9 @@ def des_reference(
             wb = int(np.argmin(fitness))
             if fitness[wb] < best_fit:
                 best_fit = float(fitness[wb])
-                best_par = (population[:, wb] if lamarckian else populationRepaired[:, wb]).copy()
+                best_par = (
+                    population[:, wb] if lamarckian else populationRepaired[:, wb]
+                ).copy()
 
             # Track worst (DES.R lines 336–339).
             ww = int(np.argmax(fitness))

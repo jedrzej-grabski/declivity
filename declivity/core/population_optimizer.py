@@ -18,16 +18,16 @@ and ``PopulationOptimizer`` is paired with ``PopulationLogData``
 """
 
 from abc import ABC
-from typing import Callable, Union
+from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
 
 from declivity.algorithms.choices import AlgorithmChoice
-from declivity.core.base_optimizer import BaseOptimizer, LogDataType, ConfigType
+from declivity.core.base_optimizer import BaseOptimizer, ConfigType, LogDataType
 from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.repair_strategies import RepairStrategy
 from declivity.utils.population_initializers import PopulationInitializer
+from declivity.utils.repair_strategies import RepairStrategy
 from declivity.utils.stopping_conditions import StoppingCondition
 
 
@@ -64,8 +64,8 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
         algorithm: AlgorithmChoice = AlgorithmChoice.Unknown,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
     ) -> None:
         """Initialise the population optimiser.

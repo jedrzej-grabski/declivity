@@ -216,10 +216,10 @@ Generalizing this is genuinely research-scale work. Sketch:
 
 ```python
 class CMAESOptimizer(BaseOptimizer):
-    sampler: Sampler            # default: NormalSampler(mean, cov)
+    sampler: Sampler  # default: NormalSampler(mean, cov)
     recombinator: Recombinator  # default: WeightedRecombinator(weights)
-    selector: Selector          # default: TopMuSelector(mu)
-    sigma_adapter: SigmaAdapter # default: PathLengthControl
+    selector: Selector  # default: TopMuSelector(mu)
+    sigma_adapter: SigmaAdapter  # default: PathLengthControl
     ...
 ```
 

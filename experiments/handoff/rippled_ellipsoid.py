@@ -34,15 +34,14 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import RippledEllipsoid, RotatedFunction
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 COLORS = {
-    "CMA-ES":             "#e74c3c",
-    "L-BFGS-B":           "#3498db",
-    "Handoff (C^-1)":     "#2ecc71",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
+    "Handoff (C^-1)": "#2ecc71",
     "Handoff (identity)": "#9b59b6",
 }
 
@@ -80,7 +79,8 @@ def build_algorithms(
         color=COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         stopping_condition=MaxEvaluations(total_budget),
     )
@@ -90,7 +90,8 @@ def build_algorithms(
         color=COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, **common_lbfgsb_kwargs,
+            dimensions=d,
+            **common_lbfgsb_kwargs,
         ),
         line_search=armijo,
         stopping_condition=MaxEvaluations(total_budget),
@@ -100,10 +101,12 @@ def build_algorithms(
         name="Handoff (C^-1)",
         color=COLORS["Handoff (C^-1)"],
         cmaes_config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, **common_lbfgsb_kwargs,
+            dimensions=d,
+            **common_lbfgsb_kwargs,
         ),
         transform="inverse",
         lbfgsb_line_search=armijo,
@@ -115,10 +118,12 @@ def build_algorithms(
         name="Handoff (identity)",
         color=COLORS["Handoff (identity)"],
         cmaes_config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, **common_lbfgsb_kwargs,
+            dimensions=d,
+            **common_lbfgsb_kwargs,
         ),
         transform="identity",
         lbfgsb_line_search=armijo,
@@ -210,11 +215,15 @@ def main() -> None:
     parser.add_argument("--conditions", type=float, nargs="+", default=[1000.0])
     parser.add_argument("--memory", type=int, nargs="+", default=[5])
     parser.add_argument(
-        "--amplitude", type=float, default=10.0,
+        "--amplitude",
+        type=float,
+        default=10.0,
         help="Ripple amplitude. Lower = less multimodal but better conditioned for L-BFGS-B; default 10 (Rastrigin-like).",
     )
     parser.add_argument(
-        "--rotated", action="store_true", default=True,
+        "--rotated",
+        action="store_true",
+        default=True,
         help="Use rotated functions (default true; pass --no-rotated to disable).",
     )
     parser.add_argument("--no-rotated", dest="rotated", action="store_false")
@@ -224,19 +233,26 @@ def main() -> None:
     parser.add_argument("--rotation-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument(
-        "--pgtol", type=float, default=1e-10,
+        "--pgtol",
+        type=float,
+        default=1e-10,
         help="L-BFGS-B projected gradient tolerance (looser = earlier stop).",
     )
     parser.add_argument(
-        "--factr", type=float, default=0.0,
+        "--factr",
+        type=float,
+        default=0.0,
         help="L-BFGS-B f-value relative tolerance factor (0 disables).",
     )
     parser.add_argument(
-        "--initial-sigma", type=float, default=2.0,
+        "--initial-sigma",
+        type=float,
+        default=2.0,
         help="Initial sigma for CMA-ES.",
     )
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/rippled_ellipsoid"),
     )
     args = parser.parse_args()

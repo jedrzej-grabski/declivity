@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
-import numpy as np
 import math
+from dataclasses import dataclass, field
+
+import numpy as np
 from numpy.typing import NDArray
 
 from declivity.core.config_base import PopulationBaseConfig

@@ -89,16 +89,18 @@ class BenchmarkFunction:
     def __init__(self, dimensions: int):
         self.dimensions = dimensions
 
-    def __call__(self, x: NDArray) -> float: ...           # the objective       (required)
+    def __call__(self, x: NDArray) -> float: ...  # the objective       (required)
 
     @property
-    def bounds(self) -> tuple[NDArray, NDArray]: ...        # (lower, upper) arrays (required)
+    def bounds(self) -> tuple[NDArray, NDArray]: ...  # (lower, upper) arrays (required)
 
     @property
-    def global_minimum(self) -> tuple[NDArray, float]: ...  # (x*, f*)             (required)
+    def global_minimum(
+        self,
+    ) -> tuple[NDArray, float]: ...  # (x*, f*)             (required)
 
-    def gradient(self, x: NDArray) -> NDArray:              # analytic gradient    (optional)
-        raise NotImplementedError                            # base raises → FD fallback
+    def gradient(self, x: NDArray) -> NDArray:  # analytic gradient    (optional)
+        raise NotImplementedError  # base raises → FD fallback
 ```
 
 `gradient` is special: the base method *raises*, and `Problem.from_benchmark`
@@ -129,12 +131,12 @@ class DifferentPowers(BenchmarkFunction):
     def __call__(self, x):
         return float(np.sum(np.abs(x) ** self._exponents))
 
-    def gradient(self, x):                       # d/dx_i |x_i|^p = p|x_i|^(p-1) sign(x_i)
+    def gradient(self, x):  # d/dx_i |x_i|^p = p|x_i|^(p-1) sign(x_i)
         p = self._exponents
         return p * np.abs(x) ** (p - 1.0) * np.sign(x)
 
     @property
-    def bounds(self):                            # constructor-configurable box
+    def bounds(self):  # constructor-configurable box
         n = self.dimensions
         return self._lower * np.ones(n), self._upper * np.ones(n)
 
@@ -159,10 +161,13 @@ We just compose it:
 from src.benchmarking import Problem
 from src.utils.benchmark_functions import DifferentPowers, ShiftedFunction
 
-base = DifferentPowers(100, lower=-180.0, upper=20.0)            # NEW code (2b)
-func = ShiftedFunction.near_corner(base, fraction=0.9,           # REUSED wrapper
-                                   name_suffix="SDP-corner")
-problem = Problem.from_benchmark("SDP", func)                    # bounds + gradient picked up
+base = DifferentPowers(100, lower=-180.0, upper=20.0)  # NEW code (2b)
+func = ShiftedFunction.near_corner(
+    base,
+    fraction=0.9,  # REUSED wrapper
+    name_suffix="SDP-corner",
+)
+problem = Problem.from_benchmark("SDP", func)  # bounds + gradient picked up
 ```
 
 Two things the *existing* wrapper gives us for free:
@@ -217,20 +222,25 @@ from src.benchmarking import SingleAlgorithm, CMAESLBFGSBHandoff
 TOTAL = 1_000_000
 
 cmaes = SingleAlgorithm(
-    name="CMA-ES", color=COLORS["CMA-ES"],
+    name="CMA-ES",
+    color=COLORS["CMA-ES"],
     algorithm=AlgorithmChoice.CMAES,
     config_factory=lambda d: CMAESConfig(dimensions=d, budget=TOTAL),
 )
 lbfgsb = SingleAlgorithm(
-    name="L-BFGS-B", color=COLORS["L-BFGS-B"],
+    name="L-BFGS-B",
+    color=COLORS["L-BFGS-B"],
     algorithm=AlgorithmChoice.LBFGSB,
-    config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=TOTAL, pgtol=1e-10, factr=0),
+    config_factory=lambda d: LBFGSBConfig(
+        dimensions=d, budget=TOTAL, pgtol=1e-10, factr=0
+    ),
 )
-one_shot = CMAESLBFGSBHandoff(                 # pre-built two-phase rung
-    name="CMA-ES -> L-BFGS-B (one-shot)", color=COLORS["one-shot"],
+one_shot = CMAESLBFGSBHandoff(  # pre-built two-phase rung
+    name="CMA-ES -> L-BFGS-B (one-shot)",
+    color=COLORS["one-shot"],
     cmaes_config_factory=lambda d: CMAESConfig(dimensions=d, budget=2000),
     lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=TOTAL - 2000),
-    transform="inverse",                       # B₀ = C⁻¹
+    transform="inverse",  # B₀ = C⁻¹
 )
 ```
 
@@ -310,10 +320,15 @@ Now the experiment can instantiate the fourth spec with no new code:
 from src.benchmarking import InterleavedCMAESLBFGSB
 
 interleaved = InterleavedCMAESLBFGSB(
-    name="Interleaved CMA-ES + L-BFGS-B", color=COLORS["interleaved"],
+    name="Interleaved CMA-ES + L-BFGS-B",
+    color=COLORS["interleaved"],
     cmaes_config_factory=lambda d: CMAESConfig(dimensions=d, budget=TOTAL),
-    lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=TOTAL, pgtol=1e-10, factr=0),
-    cmaes_interval=20, total_budget=TOTAL, transform="inverse",
+    lbfgsb_config_factory=lambda d: LBFGSBConfig(
+        dimensions=d, budget=TOTAL, pgtol=1e-10, factr=0
+    ),
+    cmaes_interval=20,
+    total_budget=TOTAL,
+    transform="inverse",
     probe_max_evals=80,
 )
 ```
@@ -332,7 +347,7 @@ bench = Benchmark(
     output_dir="plots/handoff/interleaved/sdp",
     num_workers=1,
 )
-bench.run(verbose=True)        # runs every (problem × algo × seed)
+bench.run(verbose=True)  # runs every (problem × algo × seed)
 bench.print_summary()
 ```
 
@@ -461,10 +476,18 @@ and names flow from the algorithm objects (Premise 1), never re-specified:
 ```python
 from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
 
-plot_benchmark_convergence(bench.traces, problems=[problem], algorithms=algorithms,
-                           save_path=out / "convergence.png")
-plot_benchmark_boxplot(bench.traces, problems=[problem], algorithms=algorithms,
-                       save_path=out / "final_fitness.png")
+plot_benchmark_convergence(
+    bench.traces,
+    problems=[problem],
+    algorithms=algorithms,
+    save_path=out / "convergence.png",
+)
+plot_benchmark_boxplot(
+    bench.traces,
+    problems=[problem],
+    algorithms=algorithms,
+    save_path=out / "final_fitness.png",
+)
 ```
 
 The CMABFGS overlay is the single-panel `RunTrace`-layer sibling, with its
@@ -474,8 +497,10 @@ secondary axis:
 from src.plotting import plot_convergence_overlay
 
 plot_convergence_overlay(
-    traces, problem, algorithms,                 # colours/names read off `algorithms`
-    secondary_iter_lambda=effective_lambda,      # adds iterations = evals/(λ+1) axis
+    traces,
+    problem,
+    algorithms,  # colours/names read off `algorithms`
+    secondary_iter_lambda=effective_lambda,  # adds iterations = evals/(λ+1) axis
     secondary_label=f"CMA-ES iterations (λ={effective_lambda})",
     save_path=save_path,
 )
@@ -490,11 +515,15 @@ the runner exposes:
 ```python
 @dataclass
 class InterleaveResult:
-    trace: RunTrace                 # the standard staircase Benchmark consumes
-    overall_evaluations: list[int]; overall_best: list[float]
-    cmaes_evaluations: list[int];   cmaes_best: list[float]     # the backbone
-    burst_segments: list[tuple[list[int], list[float]]]         # each L-BFGS-B drop
-    burst_starts: list[int]; cmaes_generations: int; num_bursts: int
+    trace: RunTrace  # the standard staircase Benchmark consumes
+    overall_evaluations: list[int]
+    overall_best: list[float]
+    cmaes_evaluations: list[int]
+    cmaes_best: list[float]  # the backbone
+    burst_segments: list[tuple[list[int], list[float]]]  # each L-BFGS-B drop
+    burst_starts: list[int]
+    cmaes_generations: int
+    num_bursts: int
 ```
 
 …and the experiment runs one headline seed directly (the multi-seed comparison
@@ -504,10 +533,11 @@ still goes through `Benchmark`) to feed it:
 from src.plotting import plot_interleaved_convergence
 
 x0 = problem.starting_point(headline_seed)
-detail = interleaved.run_with_detail(problem, x0, headline_seed)   # -> InterleaveResult
-baseline = cmaes.run(problem, x0, headline_seed)                   # standalone reference
-plot_interleaved_convergence(detail, baseline_trace=baseline,
-                             save_path=out / "staircase.png")
+detail = interleaved.run_with_detail(problem, x0, headline_seed)  # -> InterleaveResult
+baseline = cmaes.run(problem, x0, headline_seed)  # standalone reference
+plot_interleaved_convergence(
+    detail, baseline_trace=baseline, save_path=out / "staircase.png"
+)
 ```
 
 The trade-off is explicit: this figure is *not* re-plottable from
@@ -525,7 +555,7 @@ re-running the optimizers, reload and re-plot:
 from src.benchmarking import load_traces_json
 
 traces = load_traces_json(out / "traces.json")
-plot_convergence_overlay(traces, problem, algorithms, ...)   # instant
+plot_convergence_overlay(traces, problem, algorithms, ...)  # instant
 ```
 
 The CMABFGS replication wires this in as a `--replot-from` flag: it rebuilds

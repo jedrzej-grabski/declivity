@@ -51,7 +51,10 @@ Declarative plots     read traces, render        (src/plotting/*)
 ```python
 from src.benchmarking import Problem
 from src.utils.benchmark_functions import Rastrigin
-problem = Problem.from_benchmark("Rastrigin", Rastrigin(10))   # picks up bounds + gradient
+
+problem = Problem.from_benchmark(
+    "Rastrigin", Rastrigin(10)
+)  # picks up bounds + gradient
 ```
 
 **Custom objective** → add it to `src/utils/benchmark_functions.py` as a
@@ -66,8 +69,8 @@ wrappers instead of writing a new class when you can:
 Example from the replication (`f = SDP`):
 
 ```python
-base = DifferentPowers(100, lower=-180.0, upper=20.0)          # new BenchmarkFunction
-func = ShiftedFunction.near_corner(base, fraction=0.9)         # optimum near the corner
+base = DifferentPowers(100, lower=-180.0, upper=20.0)  # new BenchmarkFunction
+func = ShiftedFunction.near_corner(base, fraction=0.9)  # optimum near the corner
 problem = Problem.from_benchmark("SDP", func)
 ```
 
@@ -133,9 +136,14 @@ to extend `src/`, not to hack around it in `experiments/`.
 ## Step 4 — Run with `Benchmark` (do not hand-roll the loop)
 
 ```python
-bench = Benchmark(problems=[problem], algorithms=algorithms,
-                  seeds=list(range(num_seeds)), output_dir=out, num_workers=1)
-bench.run(verbose=True)        # runs every (problem × algo × seed)
+bench = Benchmark(
+    problems=[problem],
+    algorithms=algorithms,
+    seeds=list(range(num_seeds)),
+    output_dir=out,
+    num_workers=1,
+)
+bench.run(verbose=True)  # runs every (problem × algo × seed)
 bench.print_summary()
 ```
 
@@ -177,10 +185,18 @@ answering:
 | `plot_matrix_diagonal_comparison` | sorted-diagonal vs a reference matrix |
 
 ```python
-plot_benchmark_convergence(bench.traces, problems=[problem], algorithms=algorithms,
-                           save_path=out / "convergence.png")
-plot_benchmark_boxplot(bench.traces, problems=[problem], algorithms=algorithms,
-                       save_path=out / "final_fitness.png")
+plot_benchmark_convergence(
+    bench.traces,
+    problems=[problem],
+    algorithms=algorithms,
+    save_path=out / "convergence.png",
+)
+plot_benchmark_boxplot(
+    bench.traces,
+    problems=[problem],
+    algorithms=algorithms,
+    save_path=out / "final_fitness.png",
+)
 ```
 
 Colours and names flow from the **algorithm objects** — you pass the

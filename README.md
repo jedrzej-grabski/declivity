@@ -85,13 +85,18 @@ plot_comparison(
 Multi-seed benchmark:
 
 ```python
-from declivity.benchmarking import Benchmark, Problem, SingleAlgorithm, CMAESLBFGSBHandoff
+from declivity.benchmarking import (
+    Benchmark,
+    Problem,
+    SingleAlgorithm,
+    CMAESLBFGSBHandoff,
+)
 from declivity.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
 
 bench = Benchmark(problems=[...], algorithms=[...], seeds=range(25), output_dir=...)
 bench.run()
 plot_benchmark_convergence(bench.traces, problems, algorithms, save_path="conv.png")
-plot_benchmark_boxplot   (bench.traces, problems, algorithms, save_path="box.png")
+plot_benchmark_boxplot(bench.traces, problems, algorithms, save_path="box.png")
 ```
 
 See [`DOCUMENTATION.md`](DOCUMENTATION.md) for the full API.

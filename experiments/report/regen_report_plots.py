@@ -18,12 +18,12 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 
 # Algorithm-name -> display color (keep stable across all report plots)
 COLOR_MAP = {
-    "CMA-ES":                          "#e74c3c",
-    "L-BFGS-B":                        "#3498db",
-    "CMA-ES -> L-BFGS-B (C^-1)":       "#2ecc71",
-    "CMA-ES -> L-BFGS-B (identity)":   "#9b59b6",
-    "Handoff (C^-1)":                  "#2ecc71",
-    "Handoff (identity)":              "#9b59b6",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
+    "CMA-ES -> L-BFGS-B (C^-1)": "#2ecc71",
+    "CMA-ES -> L-BFGS-B (identity)": "#9b59b6",
+    "Handoff (C^-1)": "#2ecc71",
+    "Handoff (identity)": "#9b59b6",
 }
 
 
@@ -34,6 +34,7 @@ class StubAlgorithm:
     Plotter only needs ``name`` and ``color`` from each algorithm spec, so
     we don't need to reconstruct the actual config_factory closures.
     """
+
     name: str
     color: str
 
@@ -89,6 +90,7 @@ def regen_panel(
         "CMA-ES": 0,
         "L-BFGS-B": 1,
     }
+
     def name_key(name: str) -> tuple[int, str]:
         if name in priority:
             return (priority[name], name)
@@ -97,11 +99,11 @@ def regen_panel(
         if "identity" in name:
             return (11, name)
         return (20, name)
+
     seen_names.sort(key=name_key)
 
     algorithms = [
-        StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d"))
-        for n in seen_names
+        StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d")) for n in seen_names
     ]
 
     problems = [
@@ -131,17 +133,20 @@ def regen_panel(
         )
 
     plt.close("all")
-    print(f"  Wrote {save_dir}/convergence.png" + (
-        f" + {save_dir}/final_fitness.png" if boxplot_title else ""
-    ))
+    print(
+        f"  Wrote {save_dir}/convergence.png"
+        + (f" + {save_dir}/final_fitness.png" if boxplot_title else "")
+    )
 
 
 def main() -> None:
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-    })
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+        }
+    )
 
     base = Path("plots/report")
 
@@ -202,16 +207,23 @@ def regen_combined_baseline(base: Path) -> None:
             problem_dims[p] = runs[0].evaluations and 10 or 10  # known d=10
 
     def name_key(name: str) -> tuple[int, str]:
-        if name == "CMA-ES":           return (0, name)
-        if name == "L-BFGS-B":         return (1, name)
-        if "C^-1" in name:             return (10, name)
-        if "identity" in name:         return (11, name)
+        if name == "CMA-ES":
+            return (0, name)
+        if name == "L-BFGS-B":
+            return (1, name)
+        if "C^-1" in name:
+            return (10, name)
+        if "identity" in name:
+            return (11, name)
         return (20, name)
+
     seen_names.sort(key=name_key)
 
-    algorithms = [StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d")) for n in seen_names]
+    algorithms = [
+        StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d")) for n in seen_names
+    ]
 
-    problem_names = sorted(set(p for p, _ in combined.keys()))
+    problem_names = sorted(set(p for p, _ in combined))
     problems = [stub_problem(p, problem_dims.get(p, 10)) for p in problem_names]
 
     plot_benchmark_convergence(
@@ -231,7 +243,7 @@ def regen_combined_baseline(base: Path) -> None:
         title="Final fitness (baseline, unrotated)",
     )
     plt.close("all")
-    print(f"  Wrote {base/'00_baseline_unrotated'}/convergence.png + boxplot")
+    print(f"  Wrote {base / '00_baseline_unrotated'}/convergence.png + boxplot")
 
 
 def regen_combined_low_amp(base: Path) -> None:
@@ -258,17 +270,25 @@ def regen_combined_low_amp(base: Path) -> None:
             problem_dims[p] = d
 
     def name_key(name: str) -> tuple[int, str]:
-        if name == "CMA-ES":           return (0, name)
-        if name == "L-BFGS-B":         return (1, name)
-        if "C^-1" in name:             return (10, name)
-        if "identity" in name:         return (11, name)
+        if name == "CMA-ES":
+            return (0, name)
+        if name == "L-BFGS-B":
+            return (1, name)
+        if "C^-1" in name:
+            return (10, name)
+        if "identity" in name:
+            return (11, name)
         return (20, name)
+
     seen_names.sort(key=name_key)
 
-    algorithms = [StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d")) for n in seen_names]
+    algorithms = [
+        StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d")) for n in seen_names
+    ]
 
-    problem_names = sorted(set(p for p, _ in combined.keys()),
-                          key=lambda n: problem_dims.get(n, 0))
+    problem_names = sorted(
+        set(p for p, _ in combined), key=lambda n: problem_dims.get(n, 0)
+    )
     problems = [stub_problem(p, problem_dims.get(p, 0)) for p in problem_names]
 
     plot_benchmark_convergence(
@@ -282,7 +302,7 @@ def regen_combined_low_amp(base: Path) -> None:
         floor=1e-22,  # values reach 1e-20 here; default 1e-12 would clip C^-1
     )
     plt.close("all")
-    print(f"  Wrote {base/'01_rippled_low_amp'}/convergence.png")
+    print(f"  Wrote {base / '01_rippled_low_amp'}/convergence.png")
 
 
 if __name__ == "__main__":

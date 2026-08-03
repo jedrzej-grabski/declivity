@@ -28,7 +28,7 @@ from src.plotting import plot_comparison
 
 plot_comparison(
     {"CMA-ES": cmaes_result, "L-BFGS-B": lbfgsb_result},
-    panels=["convergence"],          # one panel → both algorithms overlaid on it
+    panels=["convergence"],  # one panel → both algorithms overlaid on it
     colors=COLORS,
     save_path="01_two_convergences.png",
 )
@@ -67,7 +67,9 @@ from src.plotting import plot_benchmark_convergence
 # bench.run() has already populated bench.traces:
 #   {(problem.name, algorithm.name): [RunTrace per seed]}
 plot_benchmark_convergence(
-    bench.traces, problems=problems, algorithms=algorithms,
+    bench.traces,
+    problems=problems,
+    algorithms=algorithms,
     save_path="02_benchmark_average.png",
 )
 ```
@@ -105,7 +107,7 @@ from src.plotting import plot_metrics, PanelSet
 
 plot_metrics(
     cmaes_result,
-    panels=PanelSet.ALL,             # every registered panel (12 for CMA-ES)
+    panels=PanelSet.ALL,  # every registered panel (12 for CMA-ES)
     ncols=3,
     save_path="03_all_diagnostics.png",
 )

@@ -21,9 +21,9 @@ Rosenbrock so you can see the new algorithm side-by-side with the
 existing ones.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -47,7 +47,6 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import Rosenbrock
 from declivity.utils.stopping_conditions import MaxEvaluations, StoppingCondition
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -62,6 +61,7 @@ OUTPUT_DIR = Path("plots/basic/custom_handoff")
 # @dataclass, and implement ``run_phases``. The base class handles
 # everything else.
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DESLBFGSBHandoff(HandoffAlgorithm):
@@ -119,6 +119,7 @@ class DESLBFGSBHandoff(HandoffAlgorithm):
 # Benchmark wiring — the custom class slots in beside SingleAlgorithm
 # and CMAESLBFGSBHandoff with no special handling.
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

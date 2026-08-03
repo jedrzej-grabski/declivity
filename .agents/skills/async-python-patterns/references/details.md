@@ -8,6 +8,7 @@
 import asyncio
 from typing import Optional
 
+
 class AsyncDatabaseConnection:
     """Async database connection context manager."""
 
@@ -26,12 +27,14 @@ class AsyncDatabaseConnection:
         await asyncio.sleep(0.1)  # Simulate cleanup
         self.connection = None
 
+
 async def query_database():
     """Use async context manager."""
     async with AsyncDatabaseConnection("postgresql://localhost") as conn:
         print(f"Using connection: {conn}")
         await asyncio.sleep(0.2)  # Simulate query
         return {"rows": 10}
+
 
 asyncio.run(query_database())
 ```
@@ -42,11 +45,13 @@ asyncio.run(query_database())
 import asyncio
 from typing import AsyncIterator
 
+
 async def async_range(start: int, end: int, delay: float = 0.1) -> AsyncIterator[int]:
     """Async generator that yields numbers with delay."""
     for i in range(start, end):
         await asyncio.sleep(delay)
         yield i
+
 
 async def fetch_pages(url: str, max_pages: int) -> AsyncIterator[dict]:
     """Fetch paginated data asynchronously."""
@@ -55,8 +60,9 @@ async def fetch_pages(url: str, max_pages: int) -> AsyncIterator[dict]:
         yield {
             "page": page,
             "url": f"{url}?page={page}",
-            "data": [f"item_{page}_{i}" for i in range(5)]
+            "data": [f"item_{page}_{i}" for i in range(5)],
         }
+
 
 async def consume_async_iterator():
     """Consume async iterator."""
@@ -66,6 +72,7 @@ async def consume_async_iterator():
     print("\nFetching pages:")
     async for page_data in fetch_pages("https://api.example.com/items", 3):
         print(f"Page {page_data['page']}: {len(page_data['data'])} items")
+
 
 asyncio.run(consume_async_iterator())
 ```
@@ -77,6 +84,7 @@ import asyncio
 from asyncio import Queue
 from typing import Optional
 
+
 async def producer(queue: Queue, producer_id: int, num_items: int):
     """Produce items and put them in queue."""
     for i in range(num_items):
@@ -85,6 +93,7 @@ async def producer(queue: Queue, producer_id: int, num_items: int):
         print(f"Producer {producer_id} produced: {item}")
         await asyncio.sleep(0.1)
     await queue.put(None)  # Signal completion
+
 
 async def consumer(queue: Queue, consumer_id: int):
     """Consume items from queue."""
@@ -98,20 +107,15 @@ async def consumer(queue: Queue, consumer_id: int):
         await asyncio.sleep(0.2)  # Simulate work
         queue.task_done()
 
+
 async def producer_consumer_example():
     """Run producer-consumer pattern."""
     queue = Queue(maxsize=10)
 
     # Create tasks
-    producers = [
-        asyncio.create_task(producer(queue, i, 5))
-        for i in range(2)
-    ]
+    producers = [asyncio.create_task(producer(queue, i, 5)) for i in range(2)]
 
-    consumers = [
-        asyncio.create_task(consumer(queue, i))
-        for i in range(3)
-    ]
+    consumers = [asyncio.create_task(consumer(queue, i)) for i in range(3)]
 
     # Wait for producers
     await asyncio.gather(*producers)
@@ -123,6 +127,7 @@ async def producer_consumer_example():
     for c in consumers:
         c.cancel()
 
+
 asyncio.run(producer_consumer_example())
 ```
 
@@ -132,12 +137,14 @@ asyncio.run(producer_consumer_example())
 import asyncio
 from typing import List
 
+
 async def api_call(url: str, semaphore: asyncio.Semaphore) -> dict:
     """Make API call with rate limiting."""
     async with semaphore:
         print(f"Calling {url}")
         await asyncio.sleep(0.5)  # Simulate API call
         return {"url": url, "status": 200}
+
 
 async def rate_limited_requests(urls: List[str], max_concurrent: int = 5):
     """Make multiple requests with rate limiting."""
@@ -146,10 +153,12 @@ async def rate_limited_requests(urls: List[str], max_concurrent: int = 5):
     results = await asyncio.gather(*tasks)
     return results
 
+
 async def main():
     urls = [f"https://api.example.com/item/{i}" for i in range(20)]
     results = await rate_limited_requests(urls, max_concurrent=3)
     print(f"Completed {len(results)} requests")
+
 
 asyncio.run(main())
 ```
@@ -158,6 +167,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+
 
 class AsyncCounter:
     """Thread-safe async counter."""
@@ -178,11 +188,13 @@ class AsyncCounter:
         async with self.lock:
             return self.value
 
+
 async def worker(counter: AsyncCounter, worker_id: int):
     """Worker that increments counter."""
     for _ in range(10):
         await counter.increment()
         print(f"Worker {worker_id} incremented")
+
 
 async def test_counter():
     """Test concurrent counter."""
@@ -193,6 +205,7 @@ async def test_counter():
 
     final_value = await counter.get_value()
     print(f"Final counter value: {final_value}")
+
 
 asyncio.run(test_counter())
 ```
@@ -206,18 +219,18 @@ import asyncio
 import aiohttp
 from typing import List, Dict
 
+
 async def fetch_url(session: aiohttp.ClientSession, url: str) -> Dict:
     """Fetch single URL."""
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=10)
+        ) as response:
             text = await response.text()
-            return {
-                "url": url,
-                "status": response.status,
-                "length": len(text)
-            }
+            return {"url": url, "status": response.status, "length": len(text)}
     except Exception as e:
         return {"url": url, "error": str(e)}
+
 
 async def scrape_urls(urls: List[str]) -> List[Dict]:
     """Scrape multiple URLs concurrently."""
@@ -225,6 +238,7 @@ async def scrape_urls(urls: List[str]) -> List[Dict]:
         tasks = [fetch_url(session, url) for url in urls]
         results = await asyncio.gather(*tasks)
         return results
+
 
 async def main():
     urls = [
@@ -237,6 +251,7 @@ async def main():
     for result in results:
         print(result)
 
+
 asyncio.run(main())
 ```
 
@@ -245,6 +260,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from typing import List, Optional
+
 
 # Simulated async database client
 class AsyncDB:
@@ -260,6 +276,7 @@ class AsyncDB:
         await asyncio.sleep(0.1)
         return {"id": 1, "name": "Example"}
 
+
 async def get_user_data(db: AsyncDB, user_id: int) -> dict:
     """Fetch user and related data concurrently."""
     user_task = db.fetch_one(f"SELECT * FROM users WHERE id = {user_id}")
@@ -268,16 +285,14 @@ async def get_user_data(db: AsyncDB, user_id: int) -> dict:
 
     user, orders, profile = await asyncio.gather(user_task, orders_task, profile_task)
 
-    return {
-        "user": user,
-        "orders": orders,
-        "profile": profile
-    }
+    return {"user": user, "orders": orders, "profile": profile}
+
 
 async def main():
     db = AsyncDB()
     user_data = await get_user_data(db, 1)
     print(user_data)
+
 
 asyncio.run(main())
 ```
@@ -287,6 +302,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from typing import Set
+
 
 # Simulated WebSocket connection
 class WebSocket:
@@ -304,6 +320,7 @@ class WebSocket:
         """Receive message."""
         await asyncio.sleep(1)
         return f"Message from {self.client_id}"
+
 
 class WebSocketServer:
     """Simple WebSocket server."""
@@ -350,6 +367,7 @@ class WebSocketServer:
 import asyncio
 import aiohttp
 
+
 async def with_connection_pool():
     """Use connection pool for efficiency."""
     connector = aiohttp.TCPConnector(limit=100, limit_per_host=10)
@@ -366,10 +384,11 @@ async def with_connection_pool():
 async def batch_process(items: List[str], batch_size: int = 10):
     """Process items in batches."""
     for i in range(0, len(items), batch_size):
-        batch = items[i:i + batch_size]
+        batch = items[i : i + batch_size]
         tasks = [process_item(item) for item in batch]
         await asyncio.gather(*tasks)
         print(f"Processed batch {i // batch_size + 1}")
+
 
 async def process_item(item: str):
     """Process single item."""
@@ -386,11 +405,14 @@ Never block the event loop with synchronous operations. A single blocking call s
 async def fetch_data_bad():
     import time
     import requests
+
     time.sleep(1)  # Blocks!
     response = requests.get(url)  # Also blocks!
 
+
 # GOOD - use async-native libraries (e.g., httpx for async HTTP)
 import httpx
+
 
 async def fetch_data_good(url: str):
     await asyncio.sleep(1)
@@ -406,10 +428,12 @@ When you must use synchronous libraries, offload to a thread pool:
 import asyncio
 from pathlib import Path
 
+
 async def read_file_async(path: str) -> str:
     """Read file without blocking event loop."""
     # asyncio.to_thread() runs sync code in a thread pool
     return await asyncio.to_thread(Path(path).read_text)
+
 
 async def call_sync_library(data: dict) -> dict:
     """Wrap a synchronous library call."""
@@ -424,11 +448,14 @@ import asyncio
 import concurrent.futures
 from typing import Any
 
+
 def blocking_operation(data: Any) -> Any:
     """CPU-intensive blocking operation."""
     import time
+
     time.sleep(1)
     return data * 2
+
 
 async def run_in_executor(data: Any) -> Any:
     """Run blocking operation in thread pool."""
@@ -437,9 +464,11 @@ async def run_in_executor(data: Any) -> Any:
         result = await loop.run_in_executor(pool, blocking_operation, data)
         return result
 
+
 async def main():
     results = await asyncio.gather(*[run_in_executor(i) for i in range(5)])
     print(results)
+
 
 asyncio.run(main())
 ```

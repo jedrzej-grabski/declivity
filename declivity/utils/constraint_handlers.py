@@ -61,9 +61,7 @@ class ConstraintHandler(ABC):
         """
         return x
 
-    def repair_batch(
-        self, population: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+    def repair_batch(self, population: NDArray[np.float64]) -> NDArray[np.float64]:
         """
         Repair every row of *population* and return the result.
 
@@ -139,9 +137,7 @@ class BoxConstraintHandler(ConstraintHandler):
             return self._repair_bounce_back(x)
 
     @override
-    def repair_batch(
-        self, population: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+    def repair_batch(self, population: NDArray[np.float64]) -> NDArray[np.float64]:
         """Vectorised box repair.
 
         For ``CLAMP``, a single ``np.clip`` over the whole matrix
@@ -180,18 +176,18 @@ class BoxConstraintHandler(ConstraintHandler):
         if np.any(lower_violations):
             indices = np.where(lower_violations)[0]
             for i in indices:
-                x_repaired[i] = self.lower_bounds[i] + (
-                    self.lower_bounds[i] - x[i]
-                ) % (self.upper_bounds[i] - self.lower_bounds[i])
+                x_repaired[i] = self.lower_bounds[i] + (self.lower_bounds[i] - x[i]) % (
+                    self.upper_bounds[i] - self.lower_bounds[i]
+                )
 
         # Fix upper bound violations
         upper_violations = x > self.upper_bounds
         if np.any(upper_violations):
             indices = np.where(upper_violations)[0]
             for i in indices:
-                x_repaired[i] = self.upper_bounds[i] - (
-                    x[i] - self.upper_bounds[i]
-                ) % (self.upper_bounds[i] - self.lower_bounds[i])
+                x_repaired[i] = self.upper_bounds[i] - (x[i] - self.upper_bounds[i]) % (
+                    self.upper_bounds[i] - self.lower_bounds[i]
+                )
 
         # Handle any NaN or Inf values
         x_repaired = self._remove_inf_nan(x_repaired)

@@ -19,8 +19,9 @@ References:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, final, override
+from typing import final, override
 
 import numpy as np
 
@@ -157,8 +158,6 @@ class ArmijoBacktracking(GradientLineSearch):
         return armijo_search(phi_dphi, stp0, phi0, dphi0, stpmax, ftol, maxiter)
 
 
-
-
 def more_thuente_search(
     phi_dphi: Callable[[float], tuple[float, float]],
     step: float,
@@ -223,29 +222,46 @@ def more_thuente_search(
         sufficient_decrease_threshold = phi0 + step * ftol * dphi0
 
         # Strong Wolfe convergence test
-        if (
-            trial_f <= sufficient_decrease_threshold
-            and abs(trial_deriv) <= gtol * abs(dphi0)
+        if trial_f <= sufficient_decrease_threshold and abs(trial_deriv) <= gtol * abs(
+            dphi0
         ):
             return LineSearchResult(
-                step=step, f_new=trial_f, dphi_new=trial_deriv,
-                num_evals=num_evals, converged=True,
+                step=step,
+                f_new=trial_f,
+                dphi_new=trial_deriv,
+                num_evals=num_evals,
+                converged=True,
             )
 
         if is_bracketed and trial_upper - trial_lower <= xtol * trial_upper:
             return LineSearchResult(
-                step=step, f_new=trial_f, dphi_new=trial_deriv,
-                num_evals=num_evals, converged=False,
+                step=step,
+                f_new=trial_f,
+                dphi_new=trial_deriv,
+                num_evals=num_evals,
+                converged=False,
             )
-        if step == step_max and trial_f <= sufficient_decrease_threshold and trial_deriv <= dphi0:
+        if (
+            step == step_max
+            and trial_f <= sufficient_decrease_threshold
+            and trial_deriv <= dphi0
+        ):
             return LineSearchResult(
-                step=step, f_new=trial_f, dphi_new=trial_deriv,
-                num_evals=num_evals, converged=False,
+                step=step,
+                f_new=trial_f,
+                dphi_new=trial_deriv,
+                num_evals=num_evals,
+                converged=False,
             )
-        if step == step_min and (trial_f > sufficient_decrease_threshold or trial_deriv >= dphi0):
+        if step == step_min and (
+            trial_f > sufficient_decrease_threshold or trial_deriv >= dphi0
+        ):
             return LineSearchResult(
-                step=step, f_new=trial_f, dphi_new=trial_deriv,
-                num_evals=num_evals, converged=False,
+                step=step,
+                f_new=trial_f,
+                dphi_new=trial_deriv,
+                num_evals=num_evals,
+                converged=False,
             )
 
         # Stage transition: switch from modified function to direct minimization
@@ -266,14 +282,27 @@ def more_thuente_search(
             modified_trial_deriv = trial_deriv - ftol * dphi0
 
             (
-                best_step, modified_best_f, modified_best_deriv,
-                other_step, modified_other_f, modified_other_deriv,
-                step, is_bracketed,
+                best_step,
+                modified_best_f,
+                modified_best_deriv,
+                other_step,
+                modified_other_f,
+                modified_other_deriv,
+                step,
+                is_bracketed,
             ) = _safeguarded_step(
-                best_step, modified_best_f, modified_best_deriv,
-                other_step, modified_other_f, modified_other_deriv,
-                step, modified_trial_f, modified_trial_deriv,
-                is_bracketed, trial_lower, trial_upper,
+                best_step,
+                modified_best_f,
+                modified_best_deriv,
+                other_step,
+                modified_other_f,
+                modified_other_deriv,
+                step,
+                modified_trial_f,
+                modified_trial_deriv,
+                is_bracketed,
+                trial_lower,
+                trial_upper,
             )
 
             best_f = modified_best_f + best_step * ftol * dphi0
@@ -282,34 +311,61 @@ def more_thuente_search(
             other_deriv = modified_other_deriv + ftol * dphi0
         else:
             (
-                best_step, best_f, best_deriv,
-                other_step, other_f, other_deriv,
-                step, is_bracketed,
+                best_step,
+                best_f,
+                best_deriv,
+                other_step,
+                other_f,
+                other_deriv,
+                step,
+                is_bracketed,
             ) = _safeguarded_step(
-                best_step, best_f, best_deriv,
-                other_step, other_f, other_deriv,
-                step, trial_f, trial_deriv,
-                is_bracketed, trial_lower, trial_upper,
+                best_step,
+                best_f,
+                best_deriv,
+                other_step,
+                other_f,
+                other_deriv,
+                step,
+                trial_f,
+                trial_deriv,
+                is_bracketed,
+                trial_lower,
+                trial_upper,
             )
 
         # Bisection safeguard: force contraction if interval stalls
         if is_bracketed:
-            if abs(other_step - best_step) >= bisection_threshold * previous_interval_width:
+            if (
+                abs(other_step - best_step)
+                >= bisection_threshold * previous_interval_width
+            ):
                 step = best_step + 0.5 * (other_step - best_step)
             previous_interval_width = interval_width
             interval_width = abs(other_step - best_step)
 
     return LineSearchResult(
-        step=step, f_new=trial_f, dphi_new=trial_deriv,
-        num_evals=num_evals, converged=False,
+        step=step,
+        f_new=trial_f,
+        dphi_new=trial_deriv,
+        num_evals=num_evals,
+        converged=False,
     )
 
 
 def _safeguarded_step(
-    best_step: float, best_f: float, best_deriv: float,
-    other_step: float, other_f: float, other_deriv: float,
-    trial_step: float, trial_f: float, trial_deriv: float,
-    is_bracketed: bool, step_lower: float, step_upper: float,
+    best_step: float,
+    best_f: float,
+    best_deriv: float,
+    other_step: float,
+    other_f: float,
+    other_deriv: float,
+    trial_step: float,
+    trial_f: float,
+    trial_deriv: float,
+    is_bracketed: bool,
+    step_lower: float,
+    step_upper: float,
 ) -> tuple[float, float, float, float, float, float, float, bool]:
     """Compute a safeguarded trial step and update the interval of uncertainty.
 
@@ -320,19 +376,32 @@ def _safeguarded_step(
     Four cases based on function values and derivative signs at the trial point
     relative to the best point.
     """
-    signed_derivative = trial_deriv * (best_deriv / abs(best_deriv)) if best_deriv != 0 else trial_deriv
+    signed_derivative = (
+        trial_deriv * (best_deriv / abs(best_deriv)) if best_deriv != 0 else trial_deriv
+    )
 
     if trial_f > best_f:
         # Case 1: trial has higher function value, minimum is bracketed
-        theta = 3.0 * (best_f - trial_f) / (trial_step - best_step) + best_deriv + trial_deriv
+        theta = (
+            3.0 * (best_f - trial_f) / (trial_step - best_step)
+            + best_deriv
+            + trial_deriv
+        )
         scale = max(abs(theta), abs(best_deriv), abs(trial_deriv))
-        gamma_squared = (theta / scale) ** 2 - (best_deriv / scale) * (trial_deriv / scale)
+        gamma_squared = (theta / scale) ** 2 - (best_deriv / scale) * (
+            trial_deriv / scale
+        )
         gamma = scale * np.sqrt(max(0.0, gamma_squared))
         if trial_step < best_step:
             gamma = -gamma
 
-        cubic_step = best_step + ((gamma - best_deriv) + theta) / (((gamma - best_deriv) + gamma) + trial_deriv) * (trial_step - best_step)
-        quadratic_step = best_step + ((best_deriv / ((best_f - trial_f) / (trial_step - best_step) + best_deriv)) / 2.0) * (trial_step - best_step)
+        cubic_step = best_step + ((gamma - best_deriv) + theta) / (
+            ((gamma - best_deriv) + gamma) + trial_deriv
+        ) * (trial_step - best_step)
+        quadratic_step = best_step + (
+            (best_deriv / ((best_f - trial_f) / (trial_step - best_step) + best_deriv))
+            / 2.0
+        ) * (trial_step - best_step)
 
         if abs(cubic_step - best_step) < abs(quadratic_step - best_step):
             new_step = cubic_step
@@ -345,15 +414,25 @@ def _safeguarded_step(
 
     elif signed_derivative < 0:
         # Case 2: lower function value, opposite derivative sign, minimum is bracketed
-        theta = 3.0 * (best_f - trial_f) / (trial_step - best_step) + best_deriv + trial_deriv
+        theta = (
+            3.0 * (best_f - trial_f) / (trial_step - best_step)
+            + best_deriv
+            + trial_deriv
+        )
         scale = max(abs(theta), abs(best_deriv), abs(trial_deriv))
-        gamma_squared = (theta / scale) ** 2 - (best_deriv / scale) * (trial_deriv / scale)
+        gamma_squared = (theta / scale) ** 2 - (best_deriv / scale) * (
+            trial_deriv / scale
+        )
         gamma = scale * np.sqrt(max(0.0, gamma_squared))
         if trial_step > best_step:
             gamma = -gamma
 
-        cubic_step = trial_step + ((gamma - trial_deriv) + theta) / (((gamma - trial_deriv) + gamma) + best_deriv) * (best_step - trial_step)
-        secant_step = trial_step + (trial_deriv / (trial_deriv - best_deriv)) * (best_step - trial_step)
+        cubic_step = trial_step + ((gamma - trial_deriv) + theta) / (
+            ((gamma - trial_deriv) + gamma) + best_deriv
+        ) * (best_step - trial_step)
+        secant_step = trial_step + (trial_deriv / (trial_deriv - best_deriv)) * (
+            best_step - trial_step
+        )
 
         if abs(cubic_step - trial_step) > abs(secant_step - trial_step):
             new_step = cubic_step
@@ -366,9 +445,15 @@ def _safeguarded_step(
 
     elif abs(trial_deriv) < abs(best_deriv):
         # Case 3: lower function value, same derivative sign, magnitude decreased
-        theta = 3.0 * (best_f - trial_f) / (trial_step - best_step) + best_deriv + trial_deriv
+        theta = (
+            3.0 * (best_f - trial_f) / (trial_step - best_step)
+            + best_deriv
+            + trial_deriv
+        )
         scale = max(abs(theta), abs(best_deriv), abs(trial_deriv))
-        gamma_squared = (theta / scale) ** 2 - (best_deriv / scale) * (trial_deriv / scale)
+        gamma_squared = (theta / scale) ** 2 - (best_deriv / scale) * (
+            trial_deriv / scale
+        )
         gamma = scale * np.sqrt(max(0.0, gamma_squared))
         if trial_step > best_step:
             gamma = -gamma
@@ -384,7 +469,9 @@ def _safeguarded_step(
         else:
             cubic_step = step_lower
 
-        secant_step = trial_step + (trial_deriv / (trial_deriv - best_deriv)) * (best_step - trial_step)
+        secant_step = trial_step + (trial_deriv / (trial_deriv - best_deriv)) * (
+            best_step - trial_step
+        )
 
         if is_bracketed:
             if abs(cubic_step - trial_step) < abs(secant_step - trial_step):
@@ -409,13 +496,21 @@ def _safeguarded_step(
     else:
         # Case 4: lower function value, same derivative sign, magnitude not decreased
         if is_bracketed:
-            theta = 3.0 * (trial_f - other_f) / (other_step - trial_step) + other_deriv + trial_deriv
+            theta = (
+                3.0 * (trial_f - other_f) / (other_step - trial_step)
+                + other_deriv
+                + trial_deriv
+            )
             scale = max(abs(theta), abs(other_deriv), abs(trial_deriv))
-            gamma_squared = (theta / scale) ** 2 - (other_deriv / scale) * (trial_deriv / scale)
+            gamma_squared = (theta / scale) ** 2 - (other_deriv / scale) * (
+                trial_deriv / scale
+            )
             gamma = scale * np.sqrt(max(0.0, gamma_squared))
             if trial_step > other_step:
                 gamma = -gamma
-            new_step = trial_step + ((gamma - trial_deriv) + theta) / (((gamma - trial_deriv) + gamma) + other_deriv) * (other_step - trial_step)
+            new_step = trial_step + ((gamma - trial_deriv) + theta) / (
+                ((gamma - trial_deriv) + gamma) + other_deriv
+            ) * (other_step - trial_step)
         elif trial_step > best_step:
             new_step = step_upper
         else:
@@ -425,9 +520,14 @@ def _safeguarded_step(
         new_best_step, new_best_f, new_best_deriv = trial_step, trial_f, trial_deriv
 
     return (
-        new_best_step, new_best_f, new_best_deriv,
-        new_other_step, new_other_f, new_other_deriv,
-        new_step, is_bracketed,
+        new_best_step,
+        new_best_f,
+        new_best_deriv,
+        new_other_step,
+        new_other_f,
+        new_other_deriv,
+        new_step,
+        is_bracketed,
     )
 
 
@@ -457,19 +557,28 @@ def armijo_search(
 
         if trial_f <= phi0 + ftol * step * dphi0:
             return LineSearchResult(
-                step=step, f_new=trial_f, dphi_new=trial_deriv,
-                num_evals=num_evals, converged=True,
+                step=step,
+                f_new=trial_f,
+                dphi_new=trial_deriv,
+                num_evals=num_evals,
+                converged=True,
             )
 
         step *= contraction_factor
 
         if step < 1e-20:
             return LineSearchResult(
-                step=step, f_new=trial_f, dphi_new=trial_deriv,
-                num_evals=num_evals, converged=False,
+                step=step,
+                f_new=trial_f,
+                dphi_new=trial_deriv,
+                num_evals=num_evals,
+                converged=False,
             )
 
     return LineSearchResult(
-        step=step, f_new=trial_f, dphi_new=trial_deriv,
-        num_evals=num_evals, converged=False,
+        step=step,
+        f_new=trial_f,
+        dphi_new=trial_deriv,
+        num_evals=num_evals,
+        converged=False,
     )

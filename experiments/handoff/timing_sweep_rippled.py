@@ -27,7 +27,6 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import RippledEllipsoid, RotatedFunction
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -36,7 +35,7 @@ PALETTE_INVERSE = ["#a8e6c9", "#74c69d", "#40916c", "#2d6a4f", "#1b4332"]
 PALETTE_IDENTITY = ["#dcd0ff", "#b39ddb", "#9575cd", "#7e57c2", "#5e35b1"]
 
 REFERENCE_COLORS = {
-    "CMA-ES":   "#e74c3c",
+    "CMA-ES": "#e74c3c",
     "L-BFGS-B": "#3498db",
 }
 
@@ -63,7 +62,8 @@ def build_algorithms(
         color=REFERENCE_COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         stopping_condition=MaxEvaluations(total_budget),
     )
@@ -73,7 +73,8 @@ def build_algorithms(
         color=REFERENCE_COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, **lbfgsb_kwargs,
+            dimensions=d,
+            **lbfgsb_kwargs,
         ),
         line_search=armijo,
         stopping_condition=MaxEvaluations(total_budget),
@@ -88,10 +89,12 @@ def build_algorithms(
                 name=f"C^-1 warmup={warmup}",
                 color=PALETTE_INVERSE[idx % len(PALETTE_INVERSE)],
                 cmaes_config_factory=lambda d: CMAESConfig(
-                    dimensions=d, sigma=initial_sigma,
+                    dimensions=d,
+                    sigma=initial_sigma,
                 ),
                 lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                    dimensions=d, **lbfgsb_kwargs,
+                    dimensions=d,
+                    **lbfgsb_kwargs,
                 ),
                 transform="inverse",
                 lbfgsb_line_search=armijo,
@@ -105,10 +108,12 @@ def build_algorithms(
                 name=f"identity warmup={warmup}",
                 color=PALETTE_IDENTITY[idx % len(PALETTE_IDENTITY)],
                 cmaes_config_factory=lambda d: CMAESConfig(
-                    dimensions=d, sigma=initial_sigma,
+                    dimensions=d,
+                    sigma=initial_sigma,
                 ),
                 lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                    dimensions=d, **lbfgsb_kwargs,
+                    dimensions=d,
+                    **lbfgsb_kwargs,
                 ),
                 transform="identity",
                 lbfgsb_line_search=armijo,
@@ -127,14 +132,17 @@ def main() -> None:
     parser.add_argument("--memory-size", type=int, default=5)
     parser.add_argument("--total-budget", type=int, default=10000)
     parser.add_argument(
-        "--warmup-budgets", type=int, nargs="+",
+        "--warmup-budgets",
+        type=int,
+        nargs="+",
         default=[500, 1500, 3000, 5000, 7500],
     )
     parser.add_argument("--num-seeds", type=int, default=15)
     parser.add_argument("--num-workers", type=int, default=6)
     parser.add_argument("--rotation-seed", type=int, default=42)
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/timing_sweep_rippled"),
     )
     args = parser.parse_args()
@@ -177,7 +185,7 @@ def main() -> None:
         problems=[problem],
         algorithms=algorithms,
         save_path=args.output_dir / "final_fitness.png",
-        title=f"Final fitness vs warmup timing",
+        title="Final fitness vs warmup timing",
     )
 
     print(f"\nPlots saved to {args.output_dir.absolute()}/")

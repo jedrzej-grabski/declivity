@@ -39,7 +39,6 @@ from declivity.utils.benchmark_functions import (
 )
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -48,7 +47,7 @@ PALETTE_INVERSE = ["#a8e6c9", "#74c69d", "#40916c", "#2d6a4f", "#1b4332"]
 PALETTE_IDENTITY = ["#e9d8fd", "#c5a3f5", "#9b59b6", "#7e3aa6", "#5b2785"]
 
 REFERENCE_COLORS = {
-    "CMA-ES":   "#e74c3c",
+    "CMA-ES": "#e74c3c",
     "L-BFGS-B": "#3498db",
 }
 
@@ -64,6 +63,7 @@ def gens_to_evals(gens: int, dimensions: int) -> int:
 
 # ---------- family definitions ----------
 
+
 def build_family(family: str, rotation_seed: int = 42):
     """Return (problems, dimensions, sigma, total_budget, memory, ls_settings).
 
@@ -73,7 +73,7 @@ def build_family(family: str, rotation_seed: int = 42):
         return {
             "problems": [
                 ("Rastrigin", Rastrigin(10), 2.0),
-                ("Griewank",  Griewank(10),  200.0),
+                ("Griewank", Griewank(10), 200.0),
             ],
             "dimensions": 10,
             "total_budget": 6000,
@@ -84,9 +84,11 @@ def build_family(family: str, rotation_seed: int = 42):
         base = RippledEllipsoid(50, condition=1e6, amplitude=0.0)
         return {
             "problems": [
-                ("Ellipsoid-rot-d50",
-                 RotatedFunction(base, rotation="random", seed=rotation_seed),
-                 10.0),
+                (
+                    "Ellipsoid-rot-d50",
+                    RotatedFunction(base, rotation="random", seed=rotation_seed),
+                    10.0,
+                ),
             ],
             "dimensions": 50,
             "total_budget": 10000,
@@ -97,9 +99,11 @@ def build_family(family: str, rotation_seed: int = 42):
         base = RippledEllipsoid(30, condition=1e6, amplitude=0.1)
         return {
             "problems": [
-                ("RippledEllipsoid-a0.1-rot-d30",
-                 RotatedFunction(base, rotation="random", seed=rotation_seed),
-                 2.0),
+                (
+                    "RippledEllipsoid-a0.1-rot-d30",
+                    RotatedFunction(base, rotation="random", seed=rotation_seed),
+                    2.0,
+                ),
             ],
             "dimensions": 30,
             "total_budget": 10000,
@@ -110,9 +114,11 @@ def build_family(family: str, rotation_seed: int = 42):
         base = RippledEllipsoid(50, condition=1e6, amplitude=1.0)
         return {
             "problems": [
-                ("RippledEllipsoid-a1-rot-d50",
-                 RotatedFunction(base, rotation="random", seed=rotation_seed),
-                 2.0),
+                (
+                    "RippledEllipsoid-a1-rot-d50",
+                    RotatedFunction(base, rotation="random", seed=rotation_seed),
+                    2.0,
+                ),
             ],
             "dimensions": 50,
             "total_budget": 10000,
@@ -125,14 +131,15 @@ def build_family(family: str, rotation_seed: int = 42):
 def default_warmup_gens(family: str) -> list[int]:
     """Generations to use as the timing-sweep axis per family."""
     return {
-        "baseline":       [10, 30, 75, 150, 300],
-        "reproduce_old":  [20, 75, 150, 300, 500],
-        "low_amp":        [50, 100, 200, 350, 500],
-        "multimodal":     [30, 75, 150, 250, 400],
+        "baseline": [10, 30, 75, 150, 300],
+        "reproduce_old": [20, 75, 150, 300, 500],
+        "low_amp": [50, 100, 200, 350, 500],
+        "multimodal": [30, 75, 150, 250, 400],
     }[family]
 
 
 # ---------- algorithm construction ----------
+
 
 def build_algorithms(
     family_cfg: dict,
@@ -152,7 +159,8 @@ def build_algorithms(
         color=REFERENCE_COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         stopping_condition=MaxEvaluations(total_budget),
     )
@@ -162,7 +170,8 @@ def build_algorithms(
         color=REFERENCE_COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, **lbfgsb_kwargs,
+            dimensions=d,
+            **lbfgsb_kwargs,
         ),
         line_search=armijo,
         stopping_condition=MaxEvaluations(total_budget),
@@ -177,34 +186,42 @@ def build_algorithms(
                 f"warmup {warmup_gens} gen ({warmup_evals} evals) >= total {total_budget}"
             )
 
-        handoffs.append(CMAESLBFGSBHandoff(
-            name=f"C^-1 @ {warmup_gens} gen",
-            color=PALETTE_INVERSE[idx % len(PALETTE_INVERSE)],
-            cmaes_config_factory=lambda d: CMAESConfig(
-                dimensions=d, sigma=initial_sigma,
-            ),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                dimensions=d, **lbfgsb_kwargs,
-            ),
-            transform="inverse",
-            lbfgsb_line_search=armijo,
-            cmaes_stopping_condition=MaxEvaluations(warmup_evals),
-            lbfgsb_stopping_condition=MaxEvaluations(post),
-        ))
-        handoffs.append(CMAESLBFGSBHandoff(
-            name=f"identity @ {warmup_gens} gen",
-            color=PALETTE_IDENTITY[idx % len(PALETTE_IDENTITY)],
-            cmaes_config_factory=lambda d: CMAESConfig(
-                dimensions=d, sigma=initial_sigma,
-            ),
-            lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                dimensions=d, **lbfgsb_kwargs,
-            ),
-            transform="identity",
-            lbfgsb_line_search=armijo,
-            cmaes_stopping_condition=MaxEvaluations(warmup_evals),
-            lbfgsb_stopping_condition=MaxEvaluations(post),
-        ))
+        handoffs.append(
+            CMAESLBFGSBHandoff(
+                name=f"C^-1 @ {warmup_gens} gen",
+                color=PALETTE_INVERSE[idx % len(PALETTE_INVERSE)],
+                cmaes_config_factory=lambda d: CMAESConfig(
+                    dimensions=d,
+                    sigma=initial_sigma,
+                ),
+                lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                    dimensions=d,
+                    **lbfgsb_kwargs,
+                ),
+                transform="inverse",
+                lbfgsb_line_search=armijo,
+                cmaes_stopping_condition=MaxEvaluations(warmup_evals),
+                lbfgsb_stopping_condition=MaxEvaluations(post),
+            )
+        )
+        handoffs.append(
+            CMAESLBFGSBHandoff(
+                name=f"identity @ {warmup_gens} gen",
+                color=PALETTE_IDENTITY[idx % len(PALETTE_IDENTITY)],
+                cmaes_config_factory=lambda d: CMAESConfig(
+                    dimensions=d,
+                    sigma=initial_sigma,
+                ),
+                lbfgsb_config_factory=lambda d: LBFGSBConfig(
+                    dimensions=d,
+                    **lbfgsb_kwargs,
+                ),
+                transform="identity",
+                lbfgsb_line_search=armijo,
+                cmaes_stopping_condition=MaxEvaluations(warmup_evals),
+                lbfgsb_stopping_condition=MaxEvaluations(post),
+            )
+        )
 
     return [cmaes_only, lbfgsb_only, *handoffs]
 
@@ -247,10 +264,10 @@ def run(
             representative_algorithms = algorithms
 
     titles = {
-        "baseline":      "Handoff timing — baseline (Rastrigin, Griewank d=10, m=10)",
+        "baseline": "Handoff timing — baseline (Rastrigin, Griewank d=10, m=10)",
         "reproduce_old": "Handoff timing — pure rotated Ellipsoid d=50, m=5",
-        "low_amp":       "Handoff timing — rotated RippledEllipsoid amp=0.1 d=30 m=5",
-        "multimodal":    "Handoff timing — rotated RippledEllipsoid amp=1 d=50 m=5",
+        "low_amp": "Handoff timing — rotated RippledEllipsoid amp=0.1 d=30 m=5",
+        "multimodal": "Handoff timing — rotated RippledEllipsoid amp=1 d=50 m=5",
     }
     plot_benchmark_convergence(
         combined_traces,
@@ -270,11 +287,15 @@ def run(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--family", required=True,
+        "--family",
+        required=True,
         choices=("baseline", "reproduce_old", "low_amp", "multimodal"),
     )
     parser.add_argument(
-        "--warmup-gens", type=int, nargs="+", default=None,
+        "--warmup-gens",
+        type=int,
+        nargs="+",
+        default=None,
         help="CMA-ES generations to use as warmup timings. Defaults to a sensible per-family list.",
     )
     parser.add_argument("--num-seeds", type=int, default=15)

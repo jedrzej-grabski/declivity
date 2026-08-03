@@ -66,12 +66,18 @@ never an error.
 ```python
 @dataclass
 class RunTrace:
-    algorithm: str; problem: str; seed: int
+    algorithm: str
+    problem: str
+    seed: int
     evaluations: list[int]
     best_fitness: list[float]
-    final_evaluations: int; final_fitness: float
-    handoff_eval: int | None = None; handoff_iter: int | None = None
-    series: dict[str, list[float]] = field(default_factory=dict)   # ← NEW: retained scalars
+    final_evaluations: int
+    final_fitness: float
+    handoff_eval: int | None = None
+    handoff_iter: int | None = None
+    series: dict[str, list[float]] = field(
+        default_factory=dict
+    )  # ← NEW: retained scalars
 ```
 
 `series` holds the *additional* cheap scalar-per-step diagnostics kept from the
@@ -85,12 +91,15 @@ across seeds.
 @dataclass
 class RunGroup:
     label: str
-    runs: list[RunSeries]              # len 1 → line; len N → band
+    runs: list[RunSeries]  # len 1 → line; len N → band
     color: str | None = None
-    algorithm: AlgorithmChoice | None = None   # registry bucket for semantic keys
+    algorithm: AlgorithmChoice | None = None  # registry bucket for semantic keys
 
-RunGroup.from_result(result)                 # a single run
-RunGroup.from_runs("CMA-ES", traces, color=..., algorithm=AlgorithmChoice.CMAES)  # a benchmark
+
+RunGroup.from_result(result)  # a single run
+RunGroup.from_runs(
+    "CMA-ES", traces, color=..., algorithm=AlgorithmChoice.CMAES
+)  # a benchmark
 ```
 
 ---
@@ -112,11 +121,17 @@ from src.plotting import plot_panels, RunGroup
 plot_panels(result, panels=["convergence"])
 
 # Benchmark of one algorithm → the SAME panel, now a median + IQR band:
-group = RunGroup.from_runs("CMA-ES", bench.traces[("Rastrigin", "CMA-ES")],
-                           color="#c0392b", algorithm=AlgorithmChoice.CMAES)
-plot_panels(group, panels=["convergence"])     # convergence band
-plot_panels(group, panels=["step_size"])       # σ band — a NON-best_fitness metric, aggregated
-plot_panels(group)                             # every default panel, as bands
+group = RunGroup.from_runs(
+    "CMA-ES",
+    bench.traces[("Rastrigin", "CMA-ES")],
+    color="#c0392b",
+    algorithm=AlgorithmChoice.CMAES,
+)
+plot_panels(group, panels=["convergence"])  # convergence band
+plot_panels(
+    group, panels=["step_size"]
+)  # σ band — a NON-best_fitness metric, aggregated
+plot_panels(group)  # every default panel, as bands
 
 # A dict overlays several algorithms (single runs or benchmarks):
 plot_panels({"CMA-ES": cmaes_result, "L-BFGS-B": lbfgsb_result}, panels=["convergence"])
@@ -135,7 +150,7 @@ When `BenchmarkAlgorithm.trace_from_result` trims a `LogData` into a
 `RunTrace`, it now also captures the cheap scalar-per-step fields:
 
 ```python
-series=capture_scalar_series(result.diagnostic, retain=self.retain_series)
+series = capture_scalar_series(result.diagnostic, retain=self.retain_series)
 ```
 
 `capture_scalar_series` keeps every field that is a list of scalars the same
@@ -222,7 +237,9 @@ the *same* `Panel` that draws σ as a single line for one run:
 
 ```python
 plot_panels(
-    RunGroup.from_runs("CMA-ES", traces, color="#c0392b", algorithm=AlgorithmChoice.CMAES),
+    RunGroup.from_runs(
+        "CMA-ES", traces, color="#c0392b", algorithm=AlgorithmChoice.CMAES
+    ),
     panels=["step_size"],
     annotate_final="median",
     save_path="sigma_band.png",

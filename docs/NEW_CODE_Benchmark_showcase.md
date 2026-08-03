@@ -44,33 +44,53 @@ closed for modification (you never touch `Benchmark`) and open for extension
 
 ```python
 from src.benchmarking import (
-    Benchmark, Problem, SingleAlgorithm, CMAESLBFGSBHandoff,
+    Benchmark,
+    Problem,
+    SingleAlgorithm,
+    CMAESLBFGSBHandoff,
 )
 from src.plotting import plot_benchmark_convergence
 
 algorithms = [
     # Rungs 1 & 2 — concrete SingleAlgorithm, two different families.
-    SingleAlgorithm("CMA-ES",   "#e74c3c", AlgorithmChoice.CMAES,
-                    config_factory=lambda d: CMAESConfig(d, budget=4000)),
-    SingleAlgorithm("L-BFGS-B", "#3498db", AlgorithmChoice.LBFGSB,
-                    config_factory=lambda d: LBFGSBConfig(d, budget=4000)),
+    SingleAlgorithm(
+        "CMA-ES",
+        "#e74c3c",
+        AlgorithmChoice.CMAES,
+        config_factory=lambda d: CMAESConfig(d, budget=4000),
+    ),
+    SingleAlgorithm(
+        "L-BFGS-B",
+        "#3498db",
+        AlgorithmChoice.LBFGSB,
+        config_factory=lambda d: LBFGSBConfig(d, budget=4000),
+    ),
     # Rung 3 — the pre-built two-phase handoff.
-    CMAESLBFGSBHandoff("CMA-ES -> L-BFGS-B", "#2ecc71",
-                       cmaes_config_factory=lambda d: CMAESConfig(d, budget=1600),
-                       lbfgsb_config_factory=lambda d: LBFGSBConfig(d, budget=2400),
-                       transform="inverse"),
+    CMAESLBFGSBHandoff(
+        "CMA-ES -> L-BFGS-B",
+        "#2ecc71",
+        cmaes_config_factory=lambda d: CMAESConfig(d, budget=1600),
+        lbfgsb_config_factory=lambda d: LBFGSBConfig(d, budget=2400),
+        transform="inverse",
+    ),
     # Rung 4 — a custom BenchmarkAlgorithm defined in the same file.
-    MultiStartCMAES("Multi-start CMA-ES", "#9b59b6",
-                    config_factory=lambda d: CMAESConfig(d, budget=1000),
-                    num_restarts=4),
+    MultiStartCMAES(
+        "Multi-start CMA-ES",
+        "#9b59b6",
+        config_factory=lambda d: CMAESConfig(d, budget=1000),
+        num_restarts=4,
+    ),
 ]
 
-bench = Benchmark(problems, algorithms, seeds=range(15),
-                  output_dir="plots/basic/benchmark_showcase")
-bench.run()                       # 2 x 4 x 15 = 120 runs, then traces.json/csv
+bench = Benchmark(
+    problems, algorithms, seeds=range(15), output_dir="plots/basic/benchmark_showcase"
+)
+bench.run()  # 2 x 4 x 15 = 120 runs, then traces.json/csv
 
-plot_benchmark_convergence(       # one call — heterogeneity is invisible here
-    bench.traces, problems=problems, algorithms=algorithms,
+plot_benchmark_convergence(  # one call — heterogeneity is invisible here
+    bench.traces,
+    problems=problems,
+    algorithms=algorithms,
     save_path="01_heterogeneous_convergence.png",
 )
 ```

@@ -50,6 +50,7 @@ Comprehensive guide to profiling, analyzing, and optimizing Python code for bett
 ```python
 import time
 
+
 def measure_time():
     """Simple timing measurement."""
     start = time.time()
@@ -61,14 +62,12 @@ def measure_time():
     print(f"Execution time: {elapsed:.4f} seconds")
     return result
 
+
 # Better: use timeit for accurate measurements
 import timeit
 
-execution_time = timeit.timeit(
-    "sum(range(1000000))",
-    number=100
-)
-print(f"Average time: {execution_time/100:.6f} seconds")
+execution_time = timeit.timeit("sum(range(1000000))", number=100)
+print(f"Average time: {execution_time / 100:.6f} seconds")
 ```
 
 ## Detailed patterns and worked examples

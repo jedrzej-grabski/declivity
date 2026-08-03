@@ -1,16 +1,15 @@
-import pandas as pd
-import matplotlib.pyplot as plt
+import warnings
 from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.des.config import DESConfig
 from declivity.core.algorithm_factory import AlgorithmFactory
-from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.benchmark_functions import CEC17Function
+from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.stopping_conditions import MaxEvaluations
-
-import warnings
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="opfunu")
 
@@ -35,7 +34,7 @@ def run_python_des_cec2017():
     results = []
 
     for run in range(runs):
-        print(f"Run {run+1}/{runs}")
+        print(f"Run {run + 1}/{runs}")
 
         # Reset seed for each run to match R behavior
         np.random.seed(42 + run)
@@ -86,7 +85,7 @@ def run_python_des_cec2017():
     save_python_results(results, function_id, dimensions)
 
     final_fitness = [r["best_fitness"] for r in results]
-    print(f"\n=== PYTHON RESULTS SUMMARY ===")
+    print("\n=== PYTHON RESULTS SUMMARY ===")
     print(
         f"Best Fitness - Mean: {np.mean(final_fitness):.6e}, Median: {np.median(final_fitness):.6e}"
     )
@@ -111,8 +110,10 @@ def save_python_results(results, function_id, dimensions):
         convergence_matrix[: len(history), i] = history
 
     convergence_df = pd.DataFrame(convergence_matrix)
-    convergence_df.columns = [f"run_{i+1}" for i in range(len(results))]
-    convergence_path = output_dir / f"python_convergence_f{function_id}_d{dimensions}.csv"
+    convergence_df.columns = [f"run_{i + 1}" for i in range(len(results))]
+    convergence_path = (
+        output_dir / f"python_convergence_f{function_id}_d{dimensions}.csv"
+    )
     convergence_df.to_csv(convergence_path, index=False)
 
     summary_data = {

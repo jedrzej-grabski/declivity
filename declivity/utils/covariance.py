@@ -1,9 +1,9 @@
 """Empirical covariance matrix estimation for populations."""
 
 from dataclasses import dataclass
+
 import numpy as np
 from numpy.typing import NDArray
-
 
 _EIGENVALUE_FLOOR = 1e-30
 

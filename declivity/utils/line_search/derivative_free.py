@@ -1,14 +1,15 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, final, override
+from typing import final, override
 
 import numpy as np
 
 __all__ = [
-    "ScalarSearchResult",
-    "DerivativeFreeLineSearch",
     "BrentLineSearch",
+    "DerivativeFreeLineSearch",
     "GoldenSectionLineSearch",
+    "ScalarSearchResult",
 ]
 
 

@@ -81,12 +81,20 @@ def plot_matrix_diagonal_comparison(
         matrix_normalized = matrix_diag / (np.max(matrix_diag) + 1e-30)
 
         ax.semilogy(
-            variable_indices, reference_normalized,
-            "k-o", markersize=3, linewidth=1.5, label=reference_label,
+            variable_indices,
+            reference_normalized,
+            "k-o",
+            markersize=3,
+            linewidth=1.5,
+            label=reference_label,
         )
         ax.semilogy(
-            variable_indices, matrix_normalized,
-            "g--s", markersize=3, linewidth=1.5, label="Passed matrix",
+            variable_indices,
+            matrix_normalized,
+            "g--s",
+            markersize=3,
+            linewidth=1.5,
+            label="Passed matrix",
         )
         ax.set_xlabel("Variable index (sorted)", fontsize=10)
         ax.set_ylabel("Normalized diagonal (log)", fontsize=10)

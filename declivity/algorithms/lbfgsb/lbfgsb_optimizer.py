@@ -18,23 +18,25 @@ References:
     ACM Trans. Math. Software 38 (2011).
 """
 
-from typing import Callable, Union, final, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, final
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import cho_factor, cho_solve
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.core.algorithm_factory import register_optimizer
+from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
+from declivity.utils.constraint_handlers import ConstraintHandler
+from declivity.utils.gradient_strategies import CentralFD, GradientStrategy
 from declivity.utils.initial_geometry import InitialHessian, InitialHessianMode
 from declivity.utils.line_search import (
     LineSearchStrategy,
     MoreThuenteLineSearch,
 )
-from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.gradient_strategies import CentralFD, GradientStrategy
 from declivity.utils.stopping_conditions import StoppingCondition
-from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
-from declivity.core.algorithm_factory import register_optimizer
 
 if TYPE_CHECKING:
     from declivity.logging.lbfgsb_logger import LBFGSBLogData
@@ -59,8 +61,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         config: LBFGSBConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         gradient_fn: Callable[[NDArray[np.float64]], NDArray[np.float64]] | None = None,
         gradient_strategy: GradientStrategy | None = None,
@@ -236,9 +238,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         curvature_diagonal = np.diag(self._steps_dot_grad_diffs).copy()
         strict_lower_triangle = np.tril(self._steps_dot_grad_diffs, -1)
-        safe_curvature_diagonal = np.maximum(
-            curvature_diagonal, self._machine_epsilon
-        )
+        safe_curvature_diagonal = np.maximum(curvature_diagonal, self._machine_epsilon)
 
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             T = (
@@ -278,9 +278,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
         curvature_diagonal = np.diag(self._steps_dot_grad_diffs).copy()
         strict_lower_triangle = np.tril(self._steps_dot_grad_diffs, -1)
-        safe_curvature_diagonal = np.maximum(
-            curvature_diagonal, self._machine_epsilon
-        )
+        safe_curvature_diagonal = np.maximum(curvature_diagonal, self._machine_epsilon)
 
         right_hand_side = step_part + strict_lower_triangle @ (
             gradient_diff_part / safe_curvature_diagonal
@@ -303,9 +301,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self._theta = 1.0
         self._cholesky_factor_of_T = None
 
-    def _build_w_projection(
-        self, vectors: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+    def _build_w_projection(self, vectors: NDArray[np.float64]) -> NDArray[np.float64]:
         """Compute W' * v where W = [Y | theta * B_0 * S].
 
         Returns a 2*col vector: [Y' v, theta * (B_0 S)' v].
@@ -484,8 +480,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 - h_i * direction_component * distance_to_bound
             )
             second_derivative = (
-                second_derivative
-                - h_i * direction_component * direction_component
+                second_derivative - h_i * direction_component * direction_component
             )
 
             if num_corrections > 0:
@@ -511,9 +506,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             cauchy_direction[var_index] = 0.0
 
             if second_derivative > self._machine_epsilon:
-                unconstrained_minimizer_step = (
-                    -first_derivative / second_derivative
-                )
+                unconstrained_minimizer_step = -first_derivative / second_derivative
             else:
                 unconstrained_minimizer_step = 0.0
         else:
@@ -585,9 +578,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             )
             # + W[idx,:] * M * W'(xcp - x)  (the correction contribution)
             w_row_j = self._get_w_row(idx)
-            reduced_gradient[j] += float(
-                np.dot(w_row_j, middle_times_displacement)
-            )
+            reduced_gradient[j] += float(np.dot(w_row_j, middle_times_displacement))
 
         # A = Z'W  (the L-BFGS basis restricted to free variables)
         restricted_basis = np.zeros((num_free, 2 * num_corrections))
@@ -601,9 +592,10 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         B0_inv_reduced_gradient = np.zeros(num_free)
         for j in range(num_free):
             idx = free_variable_indices[j]
-            B0_inv_reduced_gradient[j] = B0.solve(
-                np.eye(1, self.dimensions, idx).flatten()
-            )[idx] * reduced_gradient[j]
+            B0_inv_reduced_gradient[j] = (
+                B0.solve(np.eye(1, self.dimensions, idx).flatten())[idx]
+                * reduced_gradient[j]
+            )
 
         # For dense B_0, the per-element solve above is wrong — we need the
         # full subblock inverse. Recompute properly.
@@ -616,18 +608,18 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 for j2 in range(num_free):
                     B0_free[j1, j2] = B0._matrix[free_idx[j1], free_idx[j2]]
             B0_free_cholesky = cho_factor(0.5 * (B0_free + B0_free.T))
-            B0_inv_reduced_gradient = cho_solve(
-                B0_free_cholesky, reduced_gradient
-            )
+            B0_inv_reduced_gradient = cho_solve(B0_free_cholesky, reduced_gradient)
 
             # B_0_Z^{-1} * A  for the Woodbury K matrix
             B0_inv_A = cho_solve(B0_free_cholesky, restricted_basis)
         else:
             # Diagonal: B_0^{-1} is element-wise inverse
-            B0_inv_diag_free = np.array([
-                1.0 / B0.diagonal_element(free_variable_indices[j])
-                for j in range(num_free)
-            ])
+            B0_inv_diag_free = np.array(
+                [
+                    1.0 / B0.diagonal_element(free_variable_indices[j])
+                    for j in range(num_free)
+                ]
+            )
             B0_inv_reduced_gradient = B0_inv_diag_free * reduced_gradient
             B0_inv_A = B0_inv_diag_free[:, np.newaxis] * restricted_basis
 
@@ -669,10 +661,9 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             return cauchy_point.copy()
 
         # Newton direction: d = (1/theta)*B_0^{-1}*r + (1/theta^2)*B_0^{-1}*A*K^{-1}*A'*B_0^{-1}*r
-        reduced_newton_direction = (
-            (1.0 / self._theta) * B0_inv_reduced_gradient
-            + (1.0 / self._theta**2) * (B0_inv_A @ woodbury_solution)
-        )
+        reduced_newton_direction = (1.0 / self._theta) * B0_inv_reduced_gradient + (
+            1.0 / self._theta**2
+        ) * (B0_inv_A @ woodbury_solution)
 
         # Lift back to full space
         candidate = cauchy_point.copy()
@@ -682,12 +673,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             )
 
         # Morales-Nocedal 2011 safeguard
-        projected_candidate = np.clip(
-            candidate, self.lower_bounds, self.upper_bounds
-        )
-        directional_derivative = float(
-            np.dot(gradient, projected_candidate - x)
-        )
+        projected_candidate = np.clip(candidate, self.lower_bounds, self.upper_bounds)
+        directional_derivative = float(np.dot(gradient, projected_candidate - x))
 
         if directional_derivative <= 0:
             return projected_candidate
@@ -764,9 +751,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         best_solution = x.copy()
         termination_message = None
 
-        projected_gradient_norm = self._compute_projected_gradient_inf_norm(
-            x, gradient
-        )
+        projected_gradient_norm = self._compute_projected_gradient_inf_norm(x, gradient)
         if projected_gradient_norm <= config.pgtol:
             termination_message = (
                 f"Converged: projected gradient norm {projected_gradient_norm:.2e} "
@@ -788,8 +773,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         while not self.should_stop(iteration, best_fitness):
             iteration += 1
 
-            cauchy_point, w_displacement, variable_status = (
-                self._compute_cauchy_point(x, gradient)
+            cauchy_point, w_displacement, variable_status = self._compute_cauchy_point(
+                x, gradient
             )
 
             free_variable_indices, num_free = self._identify_free_variables(
@@ -798,8 +783,12 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
             if num_free > 0 and self._num_corrections > 0:
                 search_target = self._perform_subspace_minimization(
-                    x, cauchy_point, gradient, w_displacement,
-                    free_variable_indices, num_free,
+                    x,
+                    cauchy_point,
+                    gradient,
+                    w_displacement,
+                    free_variable_indices,
+                    num_free,
                 )
             else:
                 search_target = cauchy_point
@@ -808,8 +797,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             direction_norm = float(np.linalg.norm(direction))
 
             if direction_norm < self._machine_epsilon:
-                projected_gradient_norm = (
-                    self._compute_projected_gradient_inf_norm(x, gradient)
+                projected_gradient_norm = self._compute_projected_gradient_inf_norm(
+                    x, gradient
                 )
                 if projected_gradient_norm <= config.pgtol:
                     termination_message = (
@@ -861,9 +850,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
             self._cached_gradient = None
 
-            def phi_and_dphi(
-                alpha: float, _x=x, _d=direction
-            ) -> tuple[float, float]:
+            def phi_and_dphi(alpha: float, _x=x, _d=direction) -> tuple[float, float]:
                 return self._compute_directional_derivative(_x, _d, alpha)
 
             line_search_result = self._line_search.search(
@@ -896,17 +883,15 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
             consecutive_resets = 0
             step_vector = accepted_step * direction
-            x_new = np.clip(
-                x + step_vector, self.lower_bounds, self.upper_bounds
-            )
+            x_new = np.clip(x + step_vector, self.lower_bounds, self.upper_bounds)
             step_vector = x_new - x
 
             if self._cached_gradient is not None:
                 gradient_new = self._cached_gradient
                 function_value_new = line_search_result.f_new
             else:
-                function_value_new, gradient_new = (
-                    self._evaluate_function_and_gradient(x_new)
+                function_value_new, gradient_new = self._evaluate_function_and_gradient(
+                    x_new
                 )
 
             gradient_difference = gradient_new - gradient

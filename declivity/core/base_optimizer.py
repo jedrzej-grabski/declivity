@@ -1,19 +1,24 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Callable, Union, TypeVar, Generic, TYPE_CHECKING
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Generic, TypeVar
+
 import numpy as np
 from numpy.typing import NDArray
-from dataclasses import dataclass
 
 from declivity.algorithms.choices import AlgorithmChoice
-from declivity.logging.base_logger import BaseLogData, BaseLogger
-
-from declivity.logging.logger_factory import LoggerFactory
 from declivity.core.config_base import BaseConfig
-from declivity.utils.constraint_handlers import ConstraintHandler, BoxConstraintHandler, BoxStrategy
+from declivity.logging.base_logger import BaseLogData, BaseLogger
+from declivity.logging.logger_factory import LoggerFactory
+from declivity.utils.constraint_handlers import (
+    BoxConstraintHandler,
+    BoxStrategy,
+    ConstraintHandler,
+)
 from declivity.utils.stopping_conditions import (
-    StoppingCondition,
     OptimizationState,
+    StoppingCondition,
     default_stopping_condition,
 )
 
@@ -44,8 +49,8 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         algorithm: AlgorithmChoice = AlgorithmChoice.Unknown,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize the base optimizer."""
@@ -68,7 +73,9 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         self.constraint_handler: ConstraintHandler = (
             constraint_handler
             if constraint_handler is not None
-            else BoxConstraintHandler(BoxStrategy.CLAMP, self.lower_bounds, self.upper_bounds)
+            else BoxConstraintHandler(
+                BoxStrategy.CLAMP, self.lower_bounds, self.upper_bounds
+            )
         )
 
         # When to stop is an injected, modular concern — exactly like the
@@ -94,7 +101,7 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
 
     @staticmethod
     def _process_bounds(
-        bounds: Union[float, NDArray[np.float64], list[float]], dimensions: int
+        bounds: float | NDArray[np.float64] | list[float], dimensions: int
     ) -> NDArray[np.float64]:
         """Process bounds input into numpy array format."""
         if isinstance(bounds, (int, float)):
@@ -193,4 +200,3 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
     @abstractmethod
     def optimize(self) -> OptimizationResult[LogDataType]:
         """Run the optimization algorithm."""
-        pass

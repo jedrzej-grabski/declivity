@@ -35,8 +35,8 @@ Example:
     )
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.plotting.types import LineStyle, PanelKey, YScale
@@ -212,7 +212,4 @@ class PanelRegistry:
     def all_registered(cls) -> dict[AlgorithmChoice, list[str]]:
         """Snapshot of every (algorithm -> keys) mapping. Useful for ``--help``-style
         listings or debugging missing registrations."""
-        return {
-            algo: sorted(panels.keys())
-            for algo, panels in cls._panels.items()
-        }
+        return {algo: sorted(panels.keys()) for algo, panels in cls._panels.items()}

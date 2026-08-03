@@ -1,41 +1,42 @@
 from __future__ import annotations
 
-from typing import Callable, Type, TypeVar, Union, overload, Literal, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Literal, TypeVar, overload
+
 import numpy as np
 from numpy.typing import NDArray
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.core.base_optimizer import BaseOptimizer
-
 from declivity.core.config_base import BaseConfig
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
-    from declivity.algorithms.des.des_optimizer import DESOptimizer
-    from declivity.algorithms.des.config import DESConfig
-    from declivity.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
-    from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
     from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
     from declivity.algorithms.cmaes.config import CMAESConfig
-    from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+    from declivity.algorithms.des.config import DESConfig
+    from declivity.algorithms.des.des_optimizer import DESOptimizer
     from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-    from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
+    from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+    from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
+    from declivity.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
     from declivity.algorithms.powell.config import PowellConfig
+    from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 
 
 class AlgorithmFactory:
     """Factory for creating optimization algorithm instances."""
 
-    _algorithms: dict[AlgorithmChoice, Type[BaseOptimizer]] = {}
-    _configs: dict[AlgorithmChoice, Type[BaseConfig]] = {}
+    _algorithms: dict[AlgorithmChoice, type[BaseOptimizer]] = {}
+    _configs: dict[AlgorithmChoice, type[BaseConfig]] = {}
 
     @classmethod
     def register_algorithm(
         cls,
         name: AlgorithmChoice,
-        optimizer_class: Type[BaseOptimizer],
-        config_class: Type[BaseConfig],
+        optimizer_class: type[BaseOptimizer],
+        config_class: type[BaseConfig],
     ) -> None:
         """Register a new optimization algorithm."""
         if name in cls._algorithms:
@@ -50,11 +51,11 @@ class AlgorithmFactory:
         algorithm: Literal[AlgorithmChoice.DES],
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
-        config: "DESConfig | None" = None,
+        config: DESConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> DESOptimizer: ...
@@ -70,8 +71,8 @@ class AlgorithmFactory:
         config: BaseConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> BaseOptimizer: ...
@@ -84,14 +85,14 @@ class AlgorithmFactory:
         algorithm: Literal[AlgorithmChoice.MFCMAES],
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
-        config: "MFCMAESConfig | None" = None,
+        config: MFCMAESConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
-    ) -> "MFCMAESOptimizer": ...
+    ) -> MFCMAESOptimizer: ...
 
     @overload
     @classmethod
@@ -100,14 +101,14 @@ class AlgorithmFactory:
         algorithm: Literal[AlgorithmChoice.CMAES],
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
-        config: "CMAESConfig | None" = None,
+        config: CMAESConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
-    ) -> "CMAESOptimizer": ...
+    ) -> CMAESOptimizer: ...
 
     @overload
     @classmethod
@@ -116,14 +117,14 @@ class AlgorithmFactory:
         algorithm: Literal[AlgorithmChoice.LBFGSB],
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
-        config: "LBFGSBConfig | None" = None,
+        config: LBFGSBConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
-    ) -> "LBFGSBOptimizer": ...
+    ) -> LBFGSBOptimizer: ...
 
     @overload
     @classmethod
@@ -132,14 +133,14 @@ class AlgorithmFactory:
         algorithm: Literal[AlgorithmChoice.POWELL],
         func: Callable[[NDArray[np.float64]], float],
         initial_point: NDArray[np.float64],
-        config: "PowellConfig | None" = None,
+        config: PowellConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
-    ) -> "PowellOptimizer": ...
+    ) -> PowellOptimizer: ...
 
     @classmethod
     def create_optimizer(
@@ -150,8 +151,8 @@ class AlgorithmFactory:
         config: BaseConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> BaseOptimizer:

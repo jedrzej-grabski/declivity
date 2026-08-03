@@ -88,7 +88,7 @@ def process_order(order_id: str) -> Order:
             raise ExternalServiceError(
                 f"Payment processing failed",
                 service="payment_service",
-                details={"order_id": order_id, "amount": order.total}
+                details={"order_id": order_id, "amount": order.total},
             ) from e
 
         # Update order
@@ -104,10 +104,7 @@ def process_order(order_id: str) -> Order:
     except Exception as e:
         # Log unexpected errors
         logger.exception(f"Unexpected error processing order {order_id}")
-        raise ApplicationError(
-            "Order processing failed",
-            code="INTERNAL_ERROR"
-        ) from e
+        raise ApplicationError("Order processing failed", code="INTERNAL_ERROR") from e
 ```
 
 ## Common Pitfalls

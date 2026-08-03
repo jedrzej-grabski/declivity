@@ -20,12 +20,12 @@ by :mod:`mfcmaes_vs_reference`.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Literal
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
-
 
 SigmaUpdater = Literal["identity", "ppmf"]
 
@@ -78,8 +78,16 @@ def nm_cma_es_vectorized(
     xmean = par.copy()
     N = xmean.size
 
-    lower_v = np.full(N, lower, dtype=np.float64) if np.isscalar(lower) else np.asarray(lower, dtype=np.float64)
-    upper_v = np.full(N, upper, dtype=np.float64) if np.isscalar(upper) else np.asarray(upper, dtype=np.float64)
+    lower_v = (
+        np.full(N, lower, dtype=np.float64)
+        if np.isscalar(lower)
+        else np.asarray(lower, dtype=np.float64)
+    )
+    upper_v = (
+        np.full(N, upper, dtype=np.float64)
+        if np.isscalar(upper)
+        else np.asarray(upper, dtype=np.float64)
+    )
 
     if budget is None:
         budget = 10_000 * N
@@ -92,15 +100,13 @@ def nm_cma_es_vectorized(
 
     # Uniform weights (R line 51): ``weights = rep(1, mu)``, then normalised.
     weights = np.ones(mu) / mu
-    mueff = (weights.sum() ** 2) / (weights ** 2).sum()
+    mueff = (weights.sum() ** 2) / (weights**2).sum()
 
     cc = 4.0 / (N + 4.0)
     cs = (mueff + 2.0) / (N + mueff + 3.0)
     mucov = mueff
-    ccov = (
-        (1.0 / mucov) * 2.0 / (N + 1.4) ** 2
-        + (1.0 - 1.0 / mucov)
-        * ((2.0 * mucov - 1.0) / ((N + 2.0) ** 2 + 2.0 * mucov))
+    ccov = (1.0 / mucov) * 2.0 / (N + 1.4) ** 2 + (1.0 - 1.0 / mucov) * (
+        (2.0 * mucov - 1.0) / ((N + 2.0) ** 2 + 2.0 * mucov)
     )
 
     c_mu = ccov * (1.0 - 1.0 / mucov)
@@ -148,7 +154,9 @@ def nm_cma_es_vectorized(
     prev_midpoint_fitness = sign * math.inf
     midpoint_fitness = sign * math.inf
 
-    result = MFCMAESReferenceResult(best_par=best_par, best_fit=best_fit, counteval=0, iter_count=0)
+    result = MFCMAESReferenceResult(
+        best_par=best_par, best_fit=best_fit, counteval=0, iter_count=0
+    )
 
     while counteval < budget:
         iter_count += 1
@@ -169,7 +177,9 @@ def nm_cma_es_vectorized(
         # spurious "divide by zero" RuntimeWarning even though the
         # result is mathematically well-defined (zero).  Suppress just
         # for these accumulations.
-        with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
+        with np.errstate(
+            divide="ignore", invalid="ignore", over="ignore", under="ignore"
+        ):
             # rank-mu term (R lines 141–143).  Note R lays out r_mu as
             # (window*mu, lambda) and right-multiplies the (N, window*mu)
             # archive — we keep that exact layout.
@@ -197,7 +207,11 @@ def nm_cma_es_vectorized(
         arx = xmean[:, None] + sigma * d  # (N, lambda)
 
         # Clamp repair + quadratic penalty (R lines 160–165).
-        vx = np.where(arx > lower_v[:, None], np.where(arx < upper_v[:, None], arx, upper_v[:, None]), lower_v[:, None])
+        vx = np.where(
+            arx > lower_v[:, None],
+            np.where(arx < upper_v[:, None], arx, upper_v[:, None]),
+            lower_v[:, None],
+        )
         pen = 1.0 + np.sum((arx - vx) ** 2, axis=0)
         pen = np.where(np.isfinite(pen), pen, np.finfo(np.float64).max / 2.0)
         cviol += int(np.sum(pen > 1.0))
@@ -277,7 +291,10 @@ def nm_cma_es_vectorized(
             # R uses 1-indexed; arfitness_sorted is sorted ascending, so
             # arfitness[1] == arfitness[cmp_idx] (R 1-indexed) means the
             # lambda/2-th and best are tied — a flat patch.
-            if cmp_idx <= lambda_ and arfitness_sorted[0] == arfitness_sorted[cmp_idx - 1]:
+            if (
+                cmp_idx <= lambda_
+                and arfitness_sorted[0] == arfitness_sorted[cmp_idx - 1]
+            ):
                 sigma = sigma * math.exp(0.2 + cs / damps)
 
     if not msg:

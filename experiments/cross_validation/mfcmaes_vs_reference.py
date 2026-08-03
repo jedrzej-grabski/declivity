@@ -27,17 +27,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
 from scipy import stats
 
-from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
 from declivity.algorithms.mfcmaes.mfcmaes_reference import nm_cma_es_vectorized
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.stopping_conditions import MaxEvaluations
-
+from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 
 DEFAULT_PROBLEM = "cec17_F10_d10"
 DEFAULT_SEEDS = 25
@@ -136,25 +134,45 @@ def _plot_convergence(spec: ProblemSpec, fw_runs, ref_runs, out_path: Path) -> N
     for r in fw_runs:
         if not r.iter_best:
             continue
-        ax.plot(r.iter_evals, np.maximum(r.iter_best, spec.floor), color="C0", alpha=0.35, lw=0.9)
+        ax.plot(
+            r.iter_evals,
+            np.maximum(r.iter_best, spec.floor),
+            color="C0",
+            alpha=0.35,
+            lw=0.9,
+        )
     for r in ref_runs:
         if not r.iter_best:
             continue
-        ax.plot(r.iter_evals, np.maximum(r.iter_best, spec.floor), color="C3", alpha=0.35, lw=0.9, linestyle="--")
+        ax.plot(
+            r.iter_evals,
+            np.maximum(r.iter_best, spec.floor),
+            color="C3",
+            alpha=0.35,
+            lw=0.9,
+            linestyle="--",
+        )
     ax.plot([], [], color="C0", lw=2, label="declivity (framework-native)")
-    ax.plot([], [], color="C3", lw=2, linestyle="--", label="port nm_cma_es (referencja)")
+    ax.plot(
+        [], [], color="C3", lw=2, linestyle="--", label="port nm_cma_es (referencja)"
+    )
     if spec.f_star > 0:
         ax.axhline(spec.f_star, color="gray", lw=0.8, linestyle=":", alpha=0.6)
         ax.annotate(
             f"f* = {spec.f_star:g}",
             xy=(0.01, spec.f_star),
             xycoords=("axes fraction", "data"),
-            color="gray", fontsize=8, va="bottom", ha="left",
+            color="gray",
+            fontsize=8,
+            va="bottom",
+            ha="left",
         )
     ax.set_xlabel("liczba ewaluacji funkcji celu")
     ax.set_ylabel("najlepsza wartość funkcji celu")
     ax.set_yscale("log")
-    ax.set_title(f"{spec.name}, d = {spec.dim} — MF-CMA-ES: declivity vs port referencyjny ({len(fw_runs)} ziaren)")
+    ax.set_title(
+        f"{spec.name}, d = {spec.dim} — MF-CMA-ES: declivity vs port referencyjny ({len(fw_runs)} ziaren)"
+    )
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(loc="upper right")
     fig.tight_layout()
@@ -162,10 +180,17 @@ def _plot_convergence(spec: ProblemSpec, fw_runs, ref_runs, out_path: Path) -> N
     plt.close(fig)
 
 
-def _plot_distribution(spec: ProblemSpec, fw_finals, ref_finals, p_w, p_ks, out_path: Path) -> None:
+def _plot_distribution(
+    spec: ProblemSpec, fw_finals, ref_finals, p_w, p_ks, out_path: Path
+) -> None:
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    bp = ax.boxplot([fw_finals, ref_finals], tick_labels=["declivity", "port"],
-                    widths=0.4, patch_artist=True, showfliers=False)
+    bp = ax.boxplot(
+        [fw_finals, ref_finals],
+        tick_labels=["declivity", "port"],
+        widths=0.4,
+        patch_artist=True,
+        showfliers=False,
+    )
     for patch, color in zip(bp["boxes"], ["C0", "C3"]):
         patch.set_facecolor(color)
         patch.set_alpha(0.4)
@@ -177,11 +202,19 @@ def _plot_distribution(spec: ProblemSpec, fw_finals, ref_finals, p_w, p_ks, out_
     ax.scatter(2 + jy, ref_finals, color="C3", s=18, alpha=0.7, zorder=3)
     if spec.f_star > 0:
         ax.axhline(spec.f_star, color="gray", lw=0.8, linestyle=":", alpha=0.6)
-    finite = np.concatenate([fw_finals[np.isfinite(fw_finals)], ref_finals[np.isfinite(ref_finals)]])
-    if finite.size and finite.min() > 0 and finite.max() / max(finite.min(), 1e-300) > 1e3:
+    finite = np.concatenate(
+        [fw_finals[np.isfinite(fw_finals)], ref_finals[np.isfinite(ref_finals)]]
+    )
+    if (
+        finite.size
+        and finite.min() > 0
+        and finite.max() / max(finite.min(), 1e-300) > 1e3
+    ):
         ax.set_yscale("log")
     ax.set_ylabel("najlepsza wartość funkcji celu (koniec uruchomienia)")
-    ax.set_title(f"Rozkład wyników końcowych — {spec.name}, d = {spec.dim}\nWilcoxon p = {p_w:.3f},   KS p = {p_ks:.3f}")
+    ax.set_title(
+        f"Rozkład wyników końcowych — {spec.name}, d = {spec.dim}\nWilcoxon p = {p_w:.3f},   KS p = {p_ks:.3f}"
+    )
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_path, dpi=160)
@@ -234,7 +267,11 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
     for seed in seeds:
         print(f"[seed {seed:2d}] framework…", end=" ", flush=True)
         fw = _run_framework(spec, seed)
-        print(f"f={fw.best_fit:.3e} (evals={fw.evaluations}, t={fw.wall_time:.1f}s)", end="  ", flush=True)
+        print(
+            f"f={fw.best_fit:.3e} (evals={fw.evaluations}, t={fw.wall_time:.1f}s)",
+            end="  ",
+            flush=True,
+        )
         print("reference…", end=" ", flush=True)
         ref = _run_reference(spec, seed)
         print(f"f={ref.best_fit:.3e} (evals={ref.evaluations}, t={ref.wall_time:.1f}s)")
@@ -246,10 +283,18 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
 
     rows = []
     for fw, ref in zip(fw_runs, ref_runs):
-        rows.append({"seed": fw.seed, "fw_final": fw.best_fit, "ref_final": ref.best_fit,
-                     "abs_diff": abs(fw.best_fit - ref.best_fit),
-                     "fw_evals": fw.evaluations, "ref_evals": ref.evaluations,
-                     "fw_wall_s": fw.wall_time, "ref_wall_s": ref.wall_time})
+        rows.append(
+            {
+                "seed": fw.seed,
+                "fw_final": fw.best_fit,
+                "ref_final": ref.best_fit,
+                "abs_diff": abs(fw.best_fit - ref.best_fit),
+                "fw_evals": fw.evaluations,
+                "ref_evals": ref.evaluations,
+                "fw_wall_s": fw.wall_time,
+                "ref_wall_s": ref.wall_time,
+            }
+        )
     df = pd.DataFrame(rows)
     df.to_csv(output_dir / "summary.csv", index=False)
 
@@ -279,8 +324,14 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
 
     fn_tag = f"{spec.name}_d{spec.dim}"
     _plot_convergence(spec, fw_runs, ref_runs, output_dir / f"convergence_{fn_tag}.png")
-    _plot_distribution(spec, fw_finals, ref_finals, float(p_w), float(p_ks),
-                       output_dir / f"distribution_{fn_tag}.png")
+    _plot_distribution(
+        spec,
+        fw_finals,
+        ref_finals,
+        float(p_w),
+        float(p_ks),
+        output_dir / f"distribution_{fn_tag}.png",
+    )
     _plot_state(spec, fw_runs[0], ref_runs[0], output_dir / f"state_{fn_tag}.png")
     print(f"wrote plots to {output_dir.resolve()}")
 

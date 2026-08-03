@@ -4,7 +4,6 @@ A collection of benchmark functions for testing optimization algorithms.
 
 import numpy as np
 from numpy.typing import NDArray
-
 from opfunu.cec_based import cec2017
 
 
@@ -380,9 +379,7 @@ class RotatedEllipsoid(BenchmarkFunction):
     def _build_rotation(self, mode: str, seed: int) -> NDArray[np.float64]:
         n = self.dimensions
         if mode == "uniform_45":
-            return self._givens_chain(
-                [np.radians(45)] * (n - 1)
-            )
+            return self._givens_chain([np.radians(45)] * (n - 1))
         elif mode == "golden":
             golden_angle = np.radians(137.5)
             angles = [(k + 1) * golden_angle for k in range(n - 1)]
@@ -495,7 +492,9 @@ class RippledEllipsoid(BenchmarkFunction):
 
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        return -self.bound * np.ones(self.dimensions), self.bound * np.ones(self.dimensions)
+        return -self.bound * np.ones(self.dimensions), self.bound * np.ones(
+            self.dimensions
+        )
 
     @property
     def global_minimum(self) -> tuple[NDArray[np.float64], float]:
@@ -539,8 +538,8 @@ class RotatedFunction(BenchmarkFunction):
             )
         self.base = base
         self.rotation_matrix = self._build_rotation(rotation, seed)
-        self.rotation_name = (
-            name_suffix or (rotation if isinstance(rotation, str) else "custom")
+        self.rotation_name = name_suffix or (
+            rotation if isinstance(rotation, str) else "custom"
         )
 
     def _build_rotation(
@@ -669,7 +668,9 @@ class ShiftedFunction(BenchmarkFunction):
             sign[sign == 0.0] = 1.0
         target = centre + fraction * sign * half_width  # near-corner point (x-space)
         opt_z, _ = base.global_minimum
-        shift = target - np.asarray(opt_z, dtype=float)  # so x* = opt_z + shift = target
+        shift = target - np.asarray(
+            opt_z, dtype=float
+        )  # so x* = opt_z + shift = target
         return cls(base, shift, name_suffix=name_suffix or f"corner{fraction:g}")
 
     def __call__(self, x: NDArray[np.float64]) -> float:
@@ -690,7 +691,6 @@ class ShiftedFunction(BenchmarkFunction):
 
 
 class CEC17Function(BenchmarkFunction):
-
     def __init__(self, dimensions: int, function_id: int):
         """
         Initialize a CEC benchmark function.

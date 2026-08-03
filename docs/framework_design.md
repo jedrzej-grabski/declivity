@@ -29,13 +29,13 @@ the rendering function reads both.
 
 ```python
 Panel(
-    key=PanelKey.STEP_SIZE,   # semantic identifier
+    key=PanelKey.STEP_SIZE,  # semantic identifier
     title="Step Size",
     ylabel="σ",
-    field="sigma",            # attribute on the LogData
+    field="sigma",  # attribute on the LogData
     yscale=YScale.LOG,
-    floor=1e-30,              # log-scale safety
-    default=True,             # included in headline plot
+    floor=1e-30,  # log-scale safety
+    default=True,  # included in headline plot
 )
 ```
 
@@ -136,7 +136,7 @@ and refactor safety as `StrEnum` types. A `StrEnum` member compares
 equal to its value, so:
 
 ```python
-plot_metrics(result, panels=["convergence", "step_size"])      # works
+plot_metrics(result, panels=["convergence", "step_size"])  # works
 plot_metrics(result, panels=[PanelKey.CONVERGENCE, PanelKey.STEP_SIZE])  # also works
 ```
 

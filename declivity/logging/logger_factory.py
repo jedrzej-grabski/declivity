@@ -1,4 +1,5 @@
-from typing import Callable, Type
+from collections.abc import Callable
+
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.logging.base_logger import BaseLogger
 
@@ -6,11 +7,11 @@ from declivity.logging.base_logger import BaseLogger
 class LoggerFactory:
     """Factory for creating algorithm-specific loggers."""
 
-    _loggers: dict[AlgorithmChoice, Type[BaseLogger]] = {}
+    _loggers: dict[AlgorithmChoice, type[BaseLogger]] = {}
 
     @classmethod
     def register_logger(
-        cls, algorithm: AlgorithmChoice, logger_class: Type[BaseLogger]
+        cls, algorithm: AlgorithmChoice, logger_class: type[BaseLogger]
     ) -> None:
         """Register a logger for an algorithm."""
         if algorithm in cls._loggers:

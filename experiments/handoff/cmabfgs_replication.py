@@ -70,7 +70,6 @@ from declivity.utils.benchmark_functions import Ellipsoid, ShiftedFunction
 from declivity.utils.initial_point_generator import UniformBoxInitialPointGenerator
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -80,11 +79,11 @@ COLOR_BFGS = "#1f3d7a"
 COLOR_CMAES = "#d62728"
 K_VALUES = [0.5, 1.0, 2.0, 4.0, 8.0]
 K_COLORS = {
-    0.5: "#aec7e8",   # light blue
-    1.0: "#ff7f0e",   # orange
-    2.0: "#ffbb78",   # light orange
-    4.0: "#2ca02c",   # dark green
-    8.0: "#98df8a",   # light green
+    0.5: "#aec7e8",  # light blue
+    1.0: "#ff7f0e",  # orange
+    2.0: "#ffbb78",  # light orange
+    4.0: "#2ca02c",  # dark green
+    8.0: "#98df8a",  # light green
 }
 
 
@@ -137,22 +136,20 @@ def build_algorithms(
     """
 
     def cmaes_config(d: int) -> CMAESConfig:
-        return CMAESConfig(
-            dimensions=d, population_size=population_size
-        )
+        return CMAESConfig(dimensions=d, population_size=population_size)
 
     def lbfgsb_config(d: int) -> LBFGSBConfig:
-        return LBFGSBConfig(
-            dimensions=d, m=memory_size, pgtol=1e-10, factr=0
-        )
+        return LBFGSBConfig(dimensions=d, m=memory_size, pgtol=1e-10, factr=0)
 
     algorithms: list[AlgorithmRun] = []
 
     if include_bfgs:
         algorithms.append(
             SingleAlgorithm(
-                name="BFGS", color=COLOR_BFGS,
-                algorithm=AlgorithmChoice.LBFGSB, config_factory=lbfgsb_config,
+                name="BFGS",
+                color=COLOR_BFGS,
+                algorithm=AlgorithmChoice.LBFGSB,
+                config_factory=lbfgsb_config,
                 stopping_condition=MaxEvaluations(total_budget),
             )
         )
@@ -161,7 +158,8 @@ def build_algorithms(
         interval = max(1, round(k * dimensions))
         algorithms.append(
             InterleavedCMAESLBFGSB(
-                name=f"CMABFGS, k={k:g}", color=K_COLORS[k],
+                name=f"CMABFGS, k={k:g}",
+                color=K_COLORS[k],
                 cmaes_config_factory=cmaes_config,
                 lbfgsb_config_factory=lbfgsb_config,
                 cmaes_interval=interval,
@@ -175,8 +173,10 @@ def build_algorithms(
 
     algorithms.append(
         SingleAlgorithm(
-            name="CMA-ES", color=COLOR_CMAES,
-            algorithm=AlgorithmChoice.CMAES, config_factory=cmaes_config,
+            name="CMA-ES",
+            color=COLOR_CMAES,
+            algorithm=AlgorithmChoice.CMAES,
+            config_factory=cmaes_config,
             stopping_condition=MaxEvaluations(total_budget),
         )
     )
@@ -190,52 +190,70 @@ def main() -> None:
     parser.add_argument("--upper", type=float, default=20.0)
     parser.add_argument("--total-budget", type=int, default=1_000_000)
     parser.add_argument(
-        "--popsize", type=int, default=400,
+        "--popsize",
+        type=int,
+        default=400,
         help="CMA-ES population size lambda. 0 = framework default (4 + floor(3 ln d)). "
-             "400 = 4*d, matching the reference's iteration axis.",
+        "400 = 4*d, matching the reference's iteration axis.",
     )
     parser.add_argument("--memory-size", type=int, default=10)
     parser.add_argument(
-        "--corner-fraction", type=float, default=0.8,
+        "--corner-fraction",
+        type=float,
+        default=0.8,
         help="Where the optimum sits between box centre (0) and corner (1). "
-             "0.8 = the origin (zero shift), 10%% of the box width from the corner, "
-             "matching the reference's case 2; 1.0 = exactly on the corner, which a "
-             "bounded L-BFGS-B solves in one step.",
+        "0.8 = the origin (zero shift), 10%% of the box width from the corner, "
+        "matching the reference's case 2; 1.0 = exactly on the corner, which a "
+        "bounded L-BFGS-B solves in one step.",
     )
     parser.add_argument(
-        "--probe-max-evals", type=int, default=20000,
+        "--probe-max-evals",
+        type=int,
+        default=20000,
         help="Hard cap on evaluations per L-BFGS-B burst (generous, so a burst "
-             "can descend the ill-conditioned quadratic to full convergence).",
+        "can descend the ill-conditioned quadratic to full convergence).",
     )
     parser.add_argument(
-        "--probe-factr", type=float, default=10.0,
+        "--probe-factr",
+        type=float,
+        default=10.0,
         help="Burst relative-decrease stop. Small (~10) => run each burst to "
-             "full convergence (like the reference's BFGS-to-convergence); "
-             "large (1e7) => 'stops advancing rapidly'.",
+        "full convergence (like the reference's BFGS-to-convergence); "
+        "large (1e7) => 'stops advancing rapidly'.",
     )
     parser.add_argument("--probe-pgtol", type=float, default=1e-12)
     parser.add_argument(
-        "--show-bfgs", action="store_true",
+        "--show-bfgs",
+        action="store_true",
         help="Include the standalone BFGS (L-BFGS-B) baseline. Off by default: "
-             "on this smooth bowl L-BFGS-B alone is so dominant it overshadows "
-             "the CMA-ES-vs-CMABFGS comparison the figure is about.",
+        "on this smooth bowl L-BFGS-B alone is so dominant it overshadows "
+        "the CMA-ES-vs-CMABFGS comparison the figure is about.",
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--num-workers", type=int, default=1,
+        "--num-workers",
+        type=int,
+        default=1,
         help="Parallel workers; one contender per worker. Results are identical "
-             "to serial (each run is independent and deterministic).",
+        "to serial (each run is independent and deterministic).",
     )
     parser.add_argument("--floor", type=float, default=1e-13)
-    parser.add_argument("--tag", type=str, default=None,
-                        help="Filename suffix, e.g. pop4d / popdefault.")
     parser.add_argument(
-        "--replot-from", type=Path, default=None,
-        help="Skip the runs and re-render the figure from a saved Benchmark "
-             "traces.json (algorithm specs are rebuilt for colours/names).",
+        "--tag",
+        type=str,
+        default=None,
+        help="Filename suffix, e.g. pop4d / popdefault.",
     )
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--replot-from",
+        type=Path,
+        default=None,
+        help="Skip the runs and re-render the figure from a saved Benchmark "
+        "traces.json (algorithm specs are rebuilt for colours/names).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/cmabfgs_replication"),
     )
     args = parser.parse_args()
@@ -253,10 +271,18 @@ def main() -> None:
 
     # Problem + algorithm specs are cheap to build and are needed in both the
     # run path (to execute) and the replot path (for colours / names / title).
-    problem = build_problem(args.dimensions, args.lower, args.upper, args.corner_fraction)
+    problem = build_problem(
+        args.dimensions, args.lower, args.upper, args.corner_fraction
+    )
     algorithms = build_algorithms(
-        args.dimensions, args.popsize, args.total_budget, args.memory_size,
-        args.probe_max_evals, args.probe_factr, args.probe_pgtol, args.show_bfgs,
+        args.dimensions,
+        args.popsize,
+        args.total_budget,
+        args.memory_size,
+        args.probe_max_evals,
+        args.probe_factr,
+        args.probe_pgtol,
+        args.show_bfgs,
     )
 
     if args.replot_from is not None:
@@ -266,8 +292,10 @@ def main() -> None:
         # Single-seed Benchmark: still gives same-seed x0 and auto-persists
         # traces.json / runs.csv / summary.csv into a per-tag subdirectory.
         bench = Benchmark(
-            problems=[problem], algorithms=algorithms,
-            seeds=[args.seed], output_dir=args.output_dir / tag,
+            problems=[problem],
+            algorithms=algorithms,
+            seeds=[args.seed],
+            output_dir=args.output_dir / tag,
             num_workers=args.num_workers,
         )
         bench.run(verbose=True)
@@ -276,7 +304,9 @@ def main() -> None:
 
     save_path = args.output_dir / f"cmabfgs_{tag}.png"
     plot_convergence_overlay(
-        traces, problem, algorithms,
+        traces,
+        problem,
+        algorithms,
         title=(
             f"d={args.dimensions}, f=SDP\n"
             f"optimum w rogu obszaru dopuszczalnego (granice: "

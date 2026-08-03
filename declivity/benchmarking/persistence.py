@@ -12,8 +12,8 @@ the optimizers.
 
 import csv
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Union
 
 from declivity.benchmarking.run_trace import RunTrace
 
@@ -50,10 +50,14 @@ def _trace_from_dict(payload: dict) -> RunTrace:
         final_evaluations=int(payload["final_evaluations"]),
         final_fitness=float(payload["final_fitness"]),
         handoff_eval=(
-            int(payload["handoff_eval"]) if payload["handoff_eval"] is not None else None
+            int(payload["handoff_eval"])
+            if payload["handoff_eval"] is not None
+            else None
         ),
         handoff_iter=(
-            int(payload["handoff_iter"]) if payload.get("handoff_iter") is not None else None
+            int(payload["handoff_iter"])
+            if payload.get("handoff_iter") is not None
+            else None
         ),
         # Backward-compatible: traces.json written before retained series
         # existed simply have no "series" key.
@@ -66,22 +70,20 @@ def _trace_from_dict(payload: dict) -> RunTrace:
 
 def save_traces_json(
     traces: dict[tuple[str, str], list[RunTrace]],
-    path: Union[str, Path],
+    path: str | Path,
 ) -> Path:
     """Write the full trace dictionary as a single JSON file."""
     path = Path(path)
     payload = {
         "runs": [
-            _trace_to_dict(trace)
-            for run_list in traces.values()
-            for trace in run_list
+            _trace_to_dict(trace) for run_list in traces.values() for trace in run_list
         ],
     }
     path.write_text(json.dumps(payload, indent=2))
     return path
 
 
-def load_traces_json(path: Union[str, Path]) -> dict[tuple[str, str], list[RunTrace]]:
+def load_traces_json(path: str | Path) -> dict[tuple[str, str], list[RunTrace]]:
     """Reconstruct the trace dictionary from a previously saved JSON file."""
     payload = json.loads(Path(path).read_text())
     traces: dict[tuple[str, str], list[RunTrace]] = {}
@@ -93,7 +95,7 @@ def load_traces_json(path: Union[str, Path]) -> dict[tuple[str, str], list[RunTr
 
 def save_runs_csv(
     traces: dict[tuple[str, str], list[RunTrace]],
-    path: Union[str, Path],
+    path: str | Path,
 ) -> Path:
     """Write one CSV row per run (good for spreadsheet inspection)."""
     path = Path(path)
@@ -119,7 +121,7 @@ def save_runs_csv(
     return path
 
 
-def save_summary_csv(rows: Iterable[dict], path: Union[str, Path]) -> Path:
+def save_summary_csv(rows: Iterable[dict], path: str | Path) -> Path:
     """Write the aggregate summary table (one row per problem x algorithm)."""
     path = Path(path)
     rows = list(rows)

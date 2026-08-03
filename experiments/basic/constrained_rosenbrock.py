@@ -16,8 +16,9 @@ Output goes to ``plots/basic/constrained_rosenbrock/``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, override
+from typing import override
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,7 +30,12 @@ from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.des.config import DESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.plotting import plot_comparison
-from declivity.utils import BoxConstraintHandler, BoxStrategy, ConstraintHandler, Rosenbrock
+from declivity.utils import (
+    BoxConstraintHandler,
+    BoxStrategy,
+    ConstraintHandler,
+    Rosenbrock,
+)
 
 plt.ioff()
 plt.switch_backend("Agg")
@@ -175,10 +181,12 @@ def main() -> None:
 
     print(f"2D Rosenbrock, box bounds {LOWER} … {UPPER}")
     print(f"Starting point x0 = {x0}")
-    print(f"Unconstrained global optimum: (1, 1)  →  f = 0")
-    print(f"Disk constraint g(x) = ‖x‖² - 1.5 ≤ 0")
-    print(f"  g(1,1) = {disk_constraint(np.array([1.0, 1.0])):.3f}  "
-          f"(> 0 → infeasible under penalty config)\n")
+    print("Unconstrained global optimum: (1, 1)  →  f = 0")
+    print("Disk constraint g(x) = ‖x‖² - 1.5 ≤ 0")
+    print(
+        f"  g(1,1) = {disk_constraint(np.array([1.0, 1.0])):.3f}  "
+        f"(> 0 → infeasible under penalty config)\n"
+    )
 
     # ------------------------------------------------------------------
     # Configuration (i): box-only — BoxConstraintHandler(CLAMP)
@@ -207,13 +215,15 @@ def main() -> None:
         title="Constrained Rosenbrock — Box-only (CLAMP)",
         save_path=OUTPUT_DIR / "01_box_only_comparison.png",
     )
-    print(f"  → saved 01_box_only_comparison.png\n")
+    print("  → saved 01_box_only_comparison.png\n")
 
     # ------------------------------------------------------------------
     # Configuration (ii): PenaltyConstraintHandler — box + disk constraint
     # ------------------------------------------------------------------
 
-    penalty_handler = PenaltyConstraintHandler(box_handler, disk_constraint, penalty_coeff=1e4)
+    penalty_handler = PenaltyConstraintHandler(
+        box_handler, disk_constraint, penalty_coeff=1e4
+    )
 
     print("=== Config (ii): PenaltyConstraintHandler — box + disk constraint ===")
     penalty_results: dict[str, object] = {}
@@ -239,7 +249,7 @@ def main() -> None:
         title="Constrained Rosenbrock — Penalty (box + disk g(x)≤0)",
         save_path=OUTPUT_DIR / "02_penalty_comparison.png",
     )
-    print(f"  → saved 02_penalty_comparison.png\n")
+    print("  → saved 02_penalty_comparison.png\n")
 
     # ------------------------------------------------------------------
     # Sanity check: penalty config produces a different optimum than box-only
@@ -251,7 +261,9 @@ def main() -> None:
         pen_f = penalty_results[label].best_fitness  # type: ignore[union-attr]
         delta = abs(pen_f - box_f)
         verdict = "DIFFERENT ✓" if delta > 1e-6 else "SAME (warn)"
-        print(f"  {label:8s}  box_f={box_f:.4e}  penalty_f={pen_f:.4e}  Δ={delta:.4e}  {verdict}")
+        print(
+            f"  {label:8s}  box_f={box_f:.4e}  penalty_f={pen_f:.4e}  Δ={delta:.4e}  {verdict}"
+        )
 
     print(f"\nOutput written to: {OUTPUT_DIR.absolute()}")
 

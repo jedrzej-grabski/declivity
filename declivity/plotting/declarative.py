@@ -18,8 +18,8 @@ overlays, and multi-seed bands alike. Adding a new panel is one line in
 (``plot_evaluation_bars`` lives here too — a non-panel summary bar chart.)
 """
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
@@ -118,8 +118,7 @@ def plot_evaluation_bars(
     fig, ax = plt.subplots(figsize=figsize)
 
     bar_colors = [
-        (colors.get(label, "#888888") if colors else "#888888")
-        for label in labels
+        (colors.get(label, "#888888") if colors else "#888888") for label in labels
     ]
     bars = ax.barh(labels, evaluations, color=bar_colors, edgecolor="white")
 
@@ -229,9 +228,13 @@ def plot_comparison(
 
         # Handoff marker, routed to the panel that matches the caller's x-axis.
         if handoff_eval is not None and reference.x_field == "evaluations":
-            ax.axvline(handoff_eval, color="black", linestyle="--", linewidth=1.2, alpha=0.45)
+            ax.axvline(
+                handoff_eval, color="black", linestyle="--", linewidth=1.2, alpha=0.45
+            )
         if handoff_iter is not None and reference.x_field == "iteration":
-            ax.axvline(handoff_iter, color="black", linestyle="--", linewidth=1.2, alpha=0.45)
+            ax.axvline(
+                handoff_iter, color="black", linestyle="--", linewidth=1.2, alpha=0.45
+            )
 
         ax.legend(fontsize=9, framealpha=0.9)
 

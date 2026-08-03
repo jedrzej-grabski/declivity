@@ -17,15 +17,6 @@ search is injected into the optimizer at construction time
 L-BFGS-B, Brent for Powell).
 """
 
-from declivity.utils.line_search.gradient import (
-    ArmijoBacktracking,
-    GradientLineSearch,
-    LineSearchResult,
-    LineSearchStrategy,
-    MoreThuenteLineSearch,
-    armijo_search,
-    more_thuente_search,
-)
 from declivity.utils.line_search.derivative_free import (
     BracketError,
     BrentLineSearch,
@@ -35,6 +26,15 @@ from declivity.utils.line_search.derivative_free import (
     bounded_minimize,
     bracket_minimum,
     brent_minimize,
+)
+from declivity.utils.line_search.gradient import (
+    ArmijoBacktracking,
+    GradientLineSearch,
+    LineSearchResult,
+    LineSearchStrategy,
+    MoreThuenteLineSearch,
+    armijo_search,
+    more_thuente_search,
 )
 
 __all__ = [

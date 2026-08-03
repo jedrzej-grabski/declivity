@@ -148,7 +148,8 @@ class InitialPointGeneratorType(Enum):
                     "'lower' and 'upper' keyword arguments"
                 )
             return UniformBoxInitialPointGenerator(
-                float(kwargs["lower"]), float(kwargs["upper"])  # type: ignore[arg-type]
+                float(kwargs["lower"]),
+                float(kwargs["upper"]),  # type: ignore[arg-type]
             )
         if self is InitialPointGeneratorType.FIXED:
             if "point" not in kwargs:

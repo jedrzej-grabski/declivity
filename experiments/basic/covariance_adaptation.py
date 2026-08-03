@@ -7,17 +7,17 @@ On Ellipsoid the covariance should elongate to compensate for the
 different per-dimension scaling (condition ~ 10^6).
 """
 
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
-import numpy as np
+import warnings
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Ellipse
 
 from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
-from declivity.utils.benchmark_functions import Sphere, Ellipsoid, BenchmarkFunction
-from declivity.utils.covariance import empirical_covariance, CovarianceMatrix
-
-import warnings
+from declivity.utils.benchmark_functions import BenchmarkFunction, Ellipsoid
+from declivity.utils.covariance import CovarianceMatrix, empirical_covariance
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="opfunu")
 
@@ -97,7 +97,7 @@ def plot_eigenvalue_evolution(
             eigenvalue_traces[:, i],
             linewidth=2,
             linestyle=style,
-            label=f"λ_{i+1}" + (" (smallest)" if i == n_show - 1 else ""),
+            label=f"λ_{i + 1}" + (" (smallest)" if i == n_show - 1 else ""),
         )
 
     ax.set_xlabel("Function Evaluations")

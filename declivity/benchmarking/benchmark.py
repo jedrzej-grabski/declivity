@@ -9,14 +9,13 @@ Set ``num_workers > 1`` to parallelize across (problem, algorithm, seed)
 triples via joblib (which uses cloudpickle and so handles lambdas).
 """
 
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-import time
-from typing import Optional
 
 import numpy as np
-from numpy.typing import NDArray
 from joblib import Parallel, delayed
+from numpy.typing import NDArray
 
 from declivity.benchmarking.algorithm_run import AlgorithmRun
 from declivity.benchmarking.persistence import (
@@ -61,7 +60,9 @@ class Benchmark:
         self.output_dir = Path(self.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def _build_jobs(self) -> list[tuple[AlgorithmRun, Problem, NDArray[np.float64], int]]:
+    def _build_jobs(
+        self,
+    ) -> list[tuple[AlgorithmRun, Problem, NDArray[np.float64], int]]:
         jobs = []
         for problem in self.problems:
             for seed in self.seeds:
@@ -115,8 +116,8 @@ class Benchmark:
         start: float,
     ) -> list[tuple[str, str, RunTrace]]:
         results: list[tuple[str, str, RunTrace]] = []
-        prev_problem: Optional[str] = None
-        prev_seed: Optional[int] = None
+        prev_problem: str | None = None
+        prev_seed: int | None = None
         for idx, (algorithm, problem, x0, seed) in enumerate(jobs, start=1):
             if verbose and problem.name != prev_problem:
                 print(f"\n{'=' * 70}")
@@ -164,7 +165,7 @@ class Benchmark:
             delayed(_execute_one)(algorithm, problem, x0, seed)
             for algorithm, problem, x0, seed in jobs
         )
-        for result in (raw or []):
+        for result in raw or []:
             results.append(callback(result))  # type: ignore[arg-type]
         return results
 
@@ -177,9 +178,7 @@ class Benchmark:
         start: float,
     ) -> None:
         handoff_str = (
-            f" handoff@{trace.handoff_eval}"
-            if trace.handoff_eval is not None
-            else ""
+            f" handoff@{trace.handoff_eval}" if trace.handoff_eval is not None else ""
         )
         elapsed = time.time() - start
         print(
@@ -200,7 +199,7 @@ class Benchmark:
             self.summary_table(), self.output_dir / "summary.csv"
         )
         if verbose:
-            print(f"\nArtifacts written:")
+            print("\nArtifacts written:")
             print(f"  - {traces_path}")
             print(f"  - {runs_path}")
             print(f"  - {summary_path}")

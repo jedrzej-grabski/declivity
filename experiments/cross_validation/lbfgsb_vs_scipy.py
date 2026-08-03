@@ -45,15 +45,12 @@ from numpy.typing import NDArray
 from scipy import stats
 from scipy.optimize import minimize as scipy_minimize
 
-from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
-from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.gradient_strategies import ForwardFD
 from declivity.utils.stopping_conditions import MaxEvaluations
-
+from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 
 DEFAULT_PROBLEM = "ellipsoid_d10"
 DEFAULT_SEEDS = 25
@@ -212,14 +209,19 @@ def _plot_convergence(
         ax.plot(evals, fit, color="C3", alpha=0.45, lw=0.9, linestyle="--")
 
     ax.plot([], [], color="C0", lw=2, label="declivity (framework-native)")
-    ax.plot([], [], color="C3", lw=2, linestyle="--", label="scipy.optimize (Fortran v3.0)")
+    ax.plot(
+        [], [], color="C3", lw=2, linestyle="--", label="scipy.optimize (Fortran v3.0)"
+    )
     if spec.f_star > 0:
         ax.axhline(spec.f_star, color="gray", lw=0.8, linestyle=":", alpha=0.6)
         ax.annotate(
             f"f* = {spec.f_star:g}",
             xy=(0.01, spec.f_star),
             xycoords=("axes fraction", "data"),
-            color="gray", fontsize=8, va="bottom", ha="left",
+            color="gray",
+            fontsize=8,
+            va="bottom",
+            ha="left",
         )
 
     ax.set_xlabel("liczba ewaluacji funkcji celu")
@@ -266,7 +268,11 @@ def _plot_distribution(
     finite = np.concatenate(
         [fw_finals[np.isfinite(fw_finals)], ref_finals[np.isfinite(ref_finals)]]
     )
-    if finite.size and finite.min() > 0 and finite.max() / max(finite.min(), 1e-300) > 1e3:
+    if (
+        finite.size
+        and finite.min() > 0
+        and finite.max() / max(finite.min(), 1e-300) > 1e3
+    ):
         ax.set_yscale("log")
     ax.set_ylabel("najlepsza wartość funkcji celu (koniec uruchomienia)")
     ax.set_title(

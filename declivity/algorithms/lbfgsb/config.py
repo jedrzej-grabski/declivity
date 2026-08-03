@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Union
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -12,8 +12,7 @@ __all__ = [
 
 @dataclass
 class LBFGSBConfig(BaseConfig):
-
-    initial_hessian: Union[None, float, NDArray[np.float64]] = None
+    initial_hessian: None | float | NDArray[np.float64] = None
     """Initial Hessian approximation B_0. Controls the scaling of the first iteration
     before L-BFGS corrections are available. Once correction pairs accumulate, the
     Barzilai-Borwein scaling theta = y'y/y's takes over.

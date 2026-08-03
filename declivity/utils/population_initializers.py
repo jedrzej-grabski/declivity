@@ -156,7 +156,9 @@ class UniformPopulationInitializer(PopulationInitializer):
         # R's ``replicate(lambda, runif(N, low, high))`` draws (N, lambda)
         # column-by-column.  Preserve that draw order so a side-by-side
         # NumPy-seeded reference port consumes the same RNG stream.
-        out = rng.uniform(low=low[:, None], high=high[:, None], size=(len(low), pop_size))
+        out = rng.uniform(
+            low=low[:, None], high=high[:, None], size=(len(low), pop_size)
+        )
         return out.T  # (pop_size, dim)
 
 

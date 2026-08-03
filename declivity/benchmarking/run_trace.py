@@ -22,17 +22,14 @@ concatenated and ``handoff_eval`` marks the boundary.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
-
 
 # Per-iteration fields that are too heavy to persist per seed and/or cannot
 # be aggregated into a cross-seed band (they are lists of vectors/matrices,
 # not scalars). ``capture_scalar_series`` always skips these.
-HEAVY_LOGDATA_FIELDS = frozenset(
-    {"best_solution", "population", "eigenvalues"}
-)
+HEAVY_LOGDATA_FIELDS = frozenset({"best_solution", "population", "eigenvalues"})
 
 # Fields that live as first-class attributes on RunTrace, so they are never
 # duplicated into the ``series`` dict.
@@ -63,10 +60,10 @@ class RunTrace:
     final_fitness: float = float("inf")
     """Final best fitness."""
 
-    handoff_eval: Optional[int] = None
+    handoff_eval: int | None = None
     """Evaluation count at which an algorithm handoff occurred, if any."""
 
-    handoff_iter: Optional[int] = None
+    handoff_iter: int | None = None
     """CMA-ES generation count at which the handoff occurred. Same event as
     ``handoff_eval`` but expressed in iterations of the warmup algorithm.
     Useful when plots want to annotate handoffs in a population-size-agnostic
@@ -79,7 +76,7 @@ class RunTrace:
     empty for a bare trace. Exposed uniformly via :meth:`get_series` so the
     panel plotter treats a persisted trace and a live ``LogData`` alike."""
 
-    def get_series(self, name: str) -> Optional[list[float]]:
+    def get_series(self, name: str) -> list[float] | None:
         """Return the per-step array for ``name``, or ``None`` if not present.
 
         This is the :class:`~src.plotting.unified.RunSeries` contract: the
@@ -101,7 +98,7 @@ class RunTrace:
 def capture_scalar_series(
     log_data: Any,
     *,
-    retain: Optional[tuple[str, ...]] = None,
+    retain: tuple[str, ...] | None = None,
     exclude: frozenset[str] = frozenset(),
 ) -> dict[str, list[float]]:
     """Trim a ``LogData`` to its cheap, aggregatable scalar-per-step fields.

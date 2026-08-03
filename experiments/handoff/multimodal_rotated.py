@@ -44,16 +44,15 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import Griewank, Rastrigin, RotatedFunction
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 COLORS = {
-    "CMA-ES":                          "#e74c3c",
-    "L-BFGS-B":                        "#3498db",
-    "Handoff (C^-1)":                  "#2ecc71",
-    "Handoff (identity)":              "#9b59b6",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
+    "Handoff (C^-1)": "#2ecc71",
+    "Handoff (identity)": "#9b59b6",
 }
 
 
@@ -78,7 +77,8 @@ def build_algorithms(
         color=COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         stopping_condition=MaxEvaluations(total_budget),
     )
@@ -88,8 +88,10 @@ def build_algorithms(
         color=COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, m=memory_size,
-            pgtol=1e-10, factr=0,
+            dimensions=d,
+            m=memory_size,
+            pgtol=1e-10,
+            factr=0,
         ),
         line_search=ArmijoBacktracking(),
         stopping_condition=MaxEvaluations(total_budget),
@@ -99,11 +101,14 @@ def build_algorithms(
         name="Handoff (C^-1)",
         color=COLORS["Handoff (C^-1)"],
         cmaes_config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, m=memory_size,
-            pgtol=1e-10, factr=0,
+            dimensions=d,
+            m=memory_size,
+            pgtol=1e-10,
+            factr=0,
         ),
         transform="inverse",
         lbfgsb_line_search=ArmijoBacktracking(),
@@ -115,11 +120,14 @@ def build_algorithms(
         name="Handoff (identity)",
         color=COLORS["Handoff (identity)"],
         cmaes_config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, m=memory_size,
-            pgtol=1e-10, factr=0,
+            dimensions=d,
+            m=memory_size,
+            pgtol=1e-10,
+            factr=0,
         ),
         transform="identity",
         lbfgsb_line_search=ArmijoBacktracking(),
@@ -215,13 +223,17 @@ def render_combined(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--bases", nargs="+", default=["Griewank"],
+        "--bases",
+        nargs="+",
+        default=["Griewank"],
         help="Base function name(s): Griewank or Rastrigin (or both).",
     )
     parser.add_argument("--dimensions", type=int, nargs="+", default=[10, 30])
     parser.add_argument("--memory", type=int, nargs="+", default=[10])
     parser.add_argument(
-        "--rotated", action="store_true", default=True,
+        "--rotated",
+        action="store_true",
+        default=True,
         help="Use rotated functions (default true; pass --no-rotated to disable).",
     )
     parser.add_argument("--no-rotated", dest="rotated", action="store_false")
@@ -231,7 +243,8 @@ def main() -> None:
     parser.add_argument("--rotation-seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/multimodal_rotated"),
     )
     args = parser.parse_args()

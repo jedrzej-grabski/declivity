@@ -26,7 +26,6 @@ from declivity.plotting import (
 from declivity.utils.benchmark_functions import Ellipsoid
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -84,15 +83,21 @@ def run_hessian_benchmark():
 
     configs_1 = {
         "Identity (default)": LBFGSBConfig(
-            dimensions=dimensions, pgtol=1e-12, factr=0,
+            dimensions=dimensions,
+            pgtol=1e-12,
+            factr=0,
         ),
         "Exact Hessian diagonal": LBFGSBConfig(
-            dimensions=dimensions, initial_hessian=exact_diag,
-            pgtol=1e-12, factr=0,
+            dimensions=dimensions,
+            initial_hessian=exact_diag,
+            pgtol=1e-12,
+            factr=0,
         ),
         "Inverse Hessian": LBFGSBConfig(
-            dimensions=dimensions, initial_hessian=inverse_diag,
-            pgtol=1e-12, factr=0,
+            dimensions=dimensions,
+            initial_hessian=inverse_diag,
+            pgtol=1e-12,
+            factr=0,
         ),
     }
     print(exact_diag)
@@ -106,9 +111,9 @@ def run_hessian_benchmark():
         )
 
     colors_1 = {
-        "Identity (default)":      "#e74c3c",
-        "Exact Hessian diagonal":  "#2ecc71",
-        "Inverse Hessian":         "#3498db",
+        "Identity (default)": "#e74c3c",
+        "Exact Hessian diagonal": "#2ecc71",
+        "Inverse Hessian": "#3498db",
     }
 
     plot_comparison(
@@ -134,15 +139,23 @@ def run_hessian_benchmark():
 
     configs_2 = {
         "Exact diag, persist=True": LBFGSBConfig(
-            dimensions=dimensions, initial_hessian=exact_diag,
-            persist_initial_hessian=True, pgtol=1e-12, factr=0,
+            dimensions=dimensions,
+            initial_hessian=exact_diag,
+            persist_initial_hessian=True,
+            pgtol=1e-12,
+            factr=0,
         ),
         "Exact diag, persist=False": LBFGSBConfig(
-            dimensions=dimensions, initial_hessian=exact_diag,
-            persist_initial_hessian=False, pgtol=1e-12, factr=0,
+            dimensions=dimensions,
+            initial_hessian=exact_diag,
+            persist_initial_hessian=False,
+            pgtol=1e-12,
+            factr=0,
         ),
         "Identity (no Hessian info)": LBFGSBConfig(
-            dimensions=dimensions, pgtol=1e-12, factr=0,
+            dimensions=dimensions,
+            pgtol=1e-12,
+            factr=0,
         ),
     }
 
@@ -155,8 +168,8 @@ def run_hessian_benchmark():
         )
 
     colors_2 = {
-        "Exact diag, persist=True":   "#2ecc71",
-        "Exact diag, persist=False":  "#f39c12",
+        "Exact diag, persist=True": "#2ecc71",
+        "Exact diag, persist=False": "#f39c12",
         "Identity (no Hessian info)": "#e74c3c",
     }
 

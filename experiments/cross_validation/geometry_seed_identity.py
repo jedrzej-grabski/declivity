@@ -51,25 +51,25 @@ def _trajectory(result) -> tuple[list[float], list[int], np.ndarray]:
 def _identical(a, b) -> bool:
     fa, ea, xa = a
     fb, eb, xb = b
-    return (
-        fa == fb
-        and ea == eb
-        and xa.shape == xb.shape
-        and np.array_equal(xa, xb)
-    )
+    return fa == fb and ea == eb and xa.shape == xb.shape and np.array_equal(xa, xb)
 
 
 def _run_powell(func, x0, budget, geometry):
     return PowellOptimizer(
-        func, x0, PowellConfig(dimensions=len(x0)),
-        stopping_condition=MaxEvaluations(budget), seed=0,
+        func,
+        x0,
+        PowellConfig(dimensions=len(x0)),
+        stopping_condition=MaxEvaluations(budget),
+        seed=0,
         initial_geometry=geometry,
     ).optimize()
 
 
 def _run_lbfgsb(func, x0, budget, geometry):
     return LBFGSBOptimizer(
-        func, x0, LBFGSBConfig(dimensions=len(x0)),
+        func,
+        x0,
+        LBFGSBConfig(dimensions=len(x0)),
         stopping_condition=MaxEvaluations(budget),
         initial_geometry=geometry,
     ).optimize()
@@ -100,7 +100,9 @@ def main() -> None:
                     x0 = rng.uniform(-80.0, 80.0, size=dim)
                     default = _trajectory(runner(fn_cls(dim), x0, args.budget, None))
                     seeded = _trajectory(
-                        runner(fn_cls(dim), x0, args.budget, InitialGeometry.identity(dim))
+                        runner(
+                            fn_cls(dim), x0, args.budget, InitialGeometry.identity(dim)
+                        )
                     )
                     ok = _identical(default, seeded)
                     failures += not ok
@@ -109,13 +111,17 @@ def main() -> None:
                             f"  [FAIL] {algo_name:9} {fn_name:10} d={dim:<3} seed={seed}: "
                             f"identity-geometry trajectory != default"
                         )
-        print(f"  {algo_name}: identity geometry == default across all "
-              f"{len(FUNCTIONS)}x{len(args.dims)}x{args.num_seeds} cases "
-              f"{'OK' if failures == 0 else 'with FAILURES'}")
+        print(
+            f"  {algo_name}: identity geometry == default across all "
+            f"{len(FUNCTIONS)}x{len(args.dims)}x{args.num_seeds} cases "
+            f"{'OK' if failures == 0 else 'with FAILURES'}"
+        )
 
     print("=" * 74)
     if failures:
-        print(f"RESULT: {failures} FAILURE(S) — the geometry seam changed a default path.")
+        print(
+            f"RESULT: {failures} FAILURE(S) — the geometry seam changed a default path."
+        )
         sys.exit(1)
     print("RESULT: PASS — identity geometry reproduces the native baselines exactly.")
 

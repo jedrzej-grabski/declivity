@@ -1,4 +1,5 @@
-from typing import Callable, Union, final, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,8 +35,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         config: PowellConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         line_search: DerivativeFreeLineSearch | None = None,
         initial_directions: NDArray[np.float64] | None = None,

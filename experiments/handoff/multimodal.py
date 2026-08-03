@@ -38,16 +38,15 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import Griewank, Rastrigin
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 COLORS = {
-    "CMA-ES":                          "#e74c3c",
-    "L-BFGS-B":                        "#3498db",
-    "CMA-ES -> L-BFGS-B (C^-1)":       "#2ecc71",
-    "CMA-ES -> L-BFGS-B (identity)":   "#9b59b6",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
+    "CMA-ES -> L-BFGS-B (C^-1)": "#2ecc71",
+    "CMA-ES -> L-BFGS-B (identity)": "#9b59b6",
 }
 
 
@@ -160,12 +159,15 @@ def run_multimodal_handoff(
 
     sub_settings = [
         ("Rastrigin", Rastrigin(dimensions), initial_sigma_rastrigin),
-        ("Griewank",  Griewank(dimensions),  initial_sigma_griewank),
+        ("Griewank", Griewank(dimensions), initial_sigma_griewank),
     ]
 
     all_problems: list[Problem] = []
     all_algorithms = build_algorithms(
-        total_budget, cmaes_warmup_budget, initial_sigma_rastrigin, memory_size,
+        total_budget,
+        cmaes_warmup_budget,
+        initial_sigma_rastrigin,
+        memory_size,
         include_identity_baseline,
     )
     combined_traces: dict = {}
@@ -173,7 +175,10 @@ def run_multimodal_handoff(
     for problem_name, function, initial_sigma in sub_settings:
         problem = Problem.from_benchmark(problem_name, function)
         algorithms = build_algorithms(
-            total_budget, cmaes_warmup_budget, initial_sigma, memory_size,
+            total_budget,
+            cmaes_warmup_budget,
+            initial_sigma,
+            memory_size,
             include_identity_baseline,
         )
 
@@ -217,7 +222,9 @@ def main() -> None:
     parser.add_argument("--dimensions", type=int, default=10)
     parser.add_argument("--total-budget", type=int, default=10000)
     parser.add_argument(
-        "--cmaes-warmup-budget", type=int, default=1500,
+        "--cmaes-warmup-budget",
+        type=int,
+        default=1500,
         help=(
             "Evaluations spent on CMA-ES warm-up before the handoff. "
             "Too high and CMA-ES converges fully and L-BFGS-B has nothing "
@@ -227,19 +234,26 @@ def main() -> None:
     parser.add_argument("--num-seeds", type=int, default=25)
     parser.add_argument("--memory-size", type=int, default=10)
     parser.add_argument(
-        "--sigma-rastrigin", type=float, default=2.0,
+        "--sigma-rastrigin",
+        type=float,
+        default=2.0,
         help="Initial sigma for CMA-ES on Rastrigin (bounds [-5.12, 5.12]).",
     )
     parser.add_argument(
-        "--sigma-griewank", type=float, default=200.0,
+        "--sigma-griewank",
+        type=float,
+        default=200.0,
         help="Initial sigma for CMA-ES on Griewank (bounds [-600, 600]).",
     )
     parser.add_argument(
-        "--num-workers", type=int, default=1,
+        "--num-workers",
+        type=int,
+        default=1,
         help="Process count for parallel run execution (>1 uses joblib loky backend).",
     )
     parser.add_argument(
-        "--include-identity-baseline", action="store_true",
+        "--include-identity-baseline",
+        action="store_true",
         help=(
             "Add a 4th algorithm: CMA-ES warmup then L-BFGS-B with identity "
             "B_0. Isolates the value of *passing covariance information* "
@@ -247,15 +261,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/multimodal"),
     )
     args = parser.parse_args()
 
     if args.cmaes_warmup_budget >= args.total_budget:
-        raise ValueError(
-            "cmaes-warmup-budget must be strictly less than total-budget"
-        )
+        raise ValueError("cmaes-warmup-budget must be strictly less than total-budget")
 
     run_multimodal_handoff(
         dimensions=args.dimensions,

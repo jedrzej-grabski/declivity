@@ -9,23 +9,23 @@ All CMA-ES state is obtained through the diagnostic logger and public API,
 not through private attribute access.
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
-from declivity.utils.stopping_conditions import MaxEvaluations
 from declivity.plotting import (
     PanelKey,
     plot_comparison,
     plot_evaluation_bars,
     plot_matrix_diagonal_comparison,
 )
-
+from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 # 4-panel L-BFGS-B comparison layout — the equivalent of the legacy
 # plot_labeled_convergence_comparison: convergence by evals, by
@@ -72,11 +72,11 @@ def build_transformations(eigenvectors, eigenvalues_sqrt, sigma, dimensions):
 
 
 TRANSFORMATION_COLORS = {
-    "Identity (no CMA-ES info)":    "#95a5a6",
-    "Raw covariance C":             "#e74c3c",
-    "Inverse C^{-1}":               "#3498db",
-    "Inverse scaled (s^2 C)^{-1}":  "#2ecc71",
-    "Normalized C / tr(C) * n":     "#9b59b6",
+    "Identity (no CMA-ES info)": "#95a5a6",
+    "Raw covariance C": "#e74c3c",
+    "Inverse C^{-1}": "#3498db",
+    "Inverse scaled (s^2 C)^{-1}": "#2ecc71",
+    "Normalized C / tr(C) * n": "#9b59b6",
     "Inv. normalized (C/tr*n)^{-1}": "#e67e22",
 }
 
@@ -90,10 +90,10 @@ def run_handoff_study(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rotations = [
-        ("none",       "No rotation"),
+        ("none", "No rotation"),
         ("uniform_45", "Uniform 45-degree chain"),
-        ("golden",     "Golden angle chain"),
-        ("random",     "Random orthogonal"),
+        ("golden", "Golden angle chain"),
+        ("random", "Random orthogonal"),
     ]
 
     for rotation_mode, rotation_desc in rotations:
@@ -114,7 +114,7 @@ def run_handoff_study(
         rng = np.random.default_rng(seed)
         initial_point = rng.uniform(lower_bounds, upper_bounds, size=dimensions)
 
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"{rotation_desc} ({dimensions}D, m={memory_size})")
         print(f"Initial f(x) = {func(initial_point):.2e}")
 
@@ -124,7 +124,8 @@ def run_handoff_study(
         cmaes_budget = cmaes_generations * evals_per_generation
 
         cmaes_config = CMAESConfig(
-            dimensions=dimensions, sigma=10.0,
+            dimensions=dimensions,
+            sigma=10.0,
         )
         cmaes_config.diag_sigma = True
         cmaes_config.diag_eigen = True
@@ -148,8 +149,10 @@ def run_handoff_study(
         starting_point = optimizer_cmaes.mean
         warmup_evals = result_cmaes.evaluations
 
-        print(f"CMA-ES warm-up: {warmup_evals} evals, "
-              f"best={result_cmaes.best_fitness:.4e}, sigma={sigma:.4f}")
+        print(
+            f"CMA-ES warm-up: {warmup_evals} evals, "
+            f"best={result_cmaes.best_fitness:.4e}, sigma={sigma:.4f}"
+        )
         print()
 
         # Phase 2: L-BFGS-B with each transformation
@@ -203,8 +206,10 @@ def run_handoff_study(
             results[label] = result
             total_evals = warmup_evals + result.evaluations
 
-            print(f"  {label:35s}: f={result.best_fitness:.4e}  "
-                  f"lbfgsb={result.evaluations:>5d}  total={total_evals:>6d}")
+            print(
+                f"  {label:35s}: f={result.best_fitness:.4e}  "
+                f"lbfgsb={result.evaluations:>5d}  total={total_evals:>6d}"
+            )
 
         print()
 
@@ -227,9 +232,7 @@ def run_handoff_study(
         plot_evaluation_bars(
             results,
             colors=TRANSFORMATION_COLORS,
-            title=(
-                f"Total Evaluations: {rotation_desc} ({dimensions}D)"
-            ),
+            title=(f"Total Evaluations: {rotation_desc} ({dimensions}D)"),
             save_path=output_dir / f"{safe_mode}_{dimensions}d_bar.png",
         )
 
@@ -257,6 +260,7 @@ def run_handoff_study(
 
 if __name__ == "__main__":
     import sys
+
     dims = int(sys.argv[1]) if len(sys.argv) > 1 else 50
     mem = int(sys.argv[2]) if len(sys.argv) > 2 else 5
     gens = int(sys.argv[3]) if len(sys.argv) > 3 else 300

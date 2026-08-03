@@ -25,7 +25,7 @@ counter naturally.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -139,5 +139,3 @@ class CentralFD(GradientStrategy):
             x_backward[i] -= eps
             gradient[i] = (f(x_forward) - f(x_backward)) / (2.0 * eps)
         return gradient
-
-

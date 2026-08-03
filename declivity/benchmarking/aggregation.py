@@ -14,7 +14,8 @@ callers.
 """
 
 import warnings
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -116,8 +117,12 @@ def percentile_band(
     """
     cleaned = np.where(np.isinf(matrix), np.nan, matrix)
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning, message="All-NaN slice encountered")
-        warnings.filterwarnings("ignore", category=RuntimeWarning, message="All-NaN axis encountered")
+        warnings.filterwarnings(
+            "ignore", category=RuntimeWarning, message="All-NaN slice encountered"
+        )
+        warnings.filterwarnings(
+            "ignore", category=RuntimeWarning, message="All-NaN axis encountered"
+        )
         median = np.nanmedian(cleaned, axis=0)
         low = np.nanpercentile(cleaned, low_percentile, axis=0)
         high = np.nanpercentile(cleaned, high_percentile, axis=0)
@@ -127,6 +132,7 @@ def percentile_band(
 # ---------------------------------------------------------------------------
 # Backward-compatible wrappers: best_fitness-on-evaluations over RunTraces.
 # ---------------------------------------------------------------------------
+
 
 def common_evaluation_grid(
     traces: Iterable[_SeriesSource],

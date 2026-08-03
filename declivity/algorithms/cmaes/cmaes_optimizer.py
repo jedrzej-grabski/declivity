@@ -24,8 +24,9 @@ empirical evidence that convergence behaviour is preserved.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Union, final, TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -119,8 +120,8 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
-        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
         seed: int | np.random.Generator | None = None,
         initial_state: CMAESState | None = None,
     ) -> None:
@@ -208,8 +209,16 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         # resumed run reuses the exact same (B, D) rather than re-deriving
         # them from C (which drifts in the last bits). Falls back to a lazy
         # rebuild from C when the snapshot predates any decomposition.
-        self._B = None if state.eigenvectors is None else state.eigenvectors.astype(float, copy=True)
-        self._D = None if state.eigenvalues_sqrt is None else state.eigenvalues_sqrt.astype(float, copy=True)
+        self._B = (
+            None
+            if state.eigenvectors is None
+            else state.eigenvectors.astype(float, copy=True)
+        )
+        self._D = (
+            None
+            if state.eigenvalues_sqrt is None
+            else state.eigenvalues_sqrt.astype(float, copy=True)
+        )
 
     @property
     def sigma(self) -> float:
@@ -226,7 +235,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         B, D = self._eigen_decomposition()
         return B.copy(), D.copy()
 
-    def get_learned_covariance(self) -> "CovarianceMatrix":
+    def get_learned_covariance(self) -> CovarianceMatrix:
         """Return the current covariance wrapped in a :class:`CovarianceMatrix`."""
         from declivity.utils.covariance import _decompose
 
@@ -237,7 +246,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
     # Core algorithm.
     # ------------------------------------------------------------------
 
-    def optimize(self) -> OptimizationResult["CMAESLogData"]:
+    def optimize(self) -> OptimizationResult[CMAESLogData]:
         self.evaluations = 0
         self._begin_run()
         best_fitness = float("inf")
@@ -264,9 +273,13 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
             # ---- Bookkeeping for the iteration log -----------------------
             iter_worst = float(np.max(fitness_values))
-            worst_fitness = iter_worst if worst_fitness is None else max(worst_fitness, iter_worst)
+            worst_fitness = (
+                iter_worst if worst_fitness is None else max(worst_fitness, iter_worst)
+            )
             median_fitness = float(np.median(fitness_values))
-            mean_fitness_value = self.evaluate(self.constraint_handler.repair(self._mean))
+            mean_fitness_value = self.evaluate(
+                self.constraint_handler.repair(self._mean)
+            )
 
             # ---- Update distribution -------------------------------------
             self._tell(population, fitness_values)
@@ -282,7 +295,9 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                 fitness=fitness_values,
                 population=population if self.config.diag_pop else None,
                 best_fitness=best_fitness,
-                worst_fitness=worst_fitness if worst_fitness is not None else float("inf"),
+                worst_fitness=worst_fitness
+                if worst_fitness is not None
+                else float("inf"),
                 best_solution=best_solution,
                 mean_fitness=mean_fitness_value,
                 median_fitness=median_fitness,

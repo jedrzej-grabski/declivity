@@ -17,7 +17,7 @@ L-BFGS-B is a single-point method, so :class:`LBFGSBLogData` extends
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypeVar, Generic
+from typing import Any, Generic, Protocol, TypeVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -128,12 +128,10 @@ class BaseLogger(ABC, Generic[LogDataType]):
     @abstractmethod
     def _create_log_data(self) -> LogDataType:
         """Create algorithm-specific log data container."""
-        pass
 
     @abstractmethod
     def log_iteration(self, **kwargs) -> None:
         """Log iteration data."""
-        pass
 
     def get_logs(self) -> LogDataType:
         """Get all logged data."""
