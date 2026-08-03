@@ -57,10 +57,10 @@ from numpy.typing import NDArray
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
 from declivity.algorithms.cmaes.cmaes_reference import CMA
 from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.cec import CECEdition, CECProblem
 from declivity.utils.benchmark_functions import (
     Ackley,
     BenchmarkFunction,
-    CEC17Function,
     Ellipsoid,
     Rastrigin,
     Rosenbrock,
@@ -472,7 +472,7 @@ def _plot_diff_heatmap(rows: list[dict], out_path: Path) -> None:
 @dataclass
 class FunctionSpec:
     # ``cls`` may be a class (instantiated as ``cls(dim)``) or a zero-arg
-    # callable (e.g. a lambda that captures a configured CEC17 function).
+    # callable (e.g. a lambda that captures a configured CEC2017 problem).
     cls: Callable[..., BenchmarkFunction]
     dim: int
     initial: NDArray[np.float64]
@@ -510,7 +510,7 @@ def build_specs() -> list[FunctionSpec]:
     dim = 10
     specs.append(
         FunctionSpec(
-            cls=lambda d=dim: CEC17Function(dimensions=d, function_id=10),
+            cls=lambda d=dim: CECProblem(CECEdition.CEC2017, 10, d),
             dim=dim,
             initial=np.full(dim, 50.0),
             sigma=20.0,
@@ -532,8 +532,8 @@ def _instantiate(spec: FunctionSpec) -> tuple[str, BenchmarkFunction]:
         name = spec.cls.__name__
     else:
         name = fn.__class__.__name__
-        if isinstance(fn, CEC17Function):
-            name = f"CEC17_F{fn.function_id}"
+        if isinstance(fn, CECProblem):
+            name = fn.name
     return name, fn
 
 

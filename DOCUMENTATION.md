@@ -313,7 +313,6 @@ Built-in classes live in `src/utils/benchmark_functions.py`:
 | `RotatedEllipsoid`   | Ellipsoid with Givens / random orthogonal rotation           |
 | `RotatedFunction`    | Generic rotation wrapper for any `BenchmarkFunction`         |
 | `RippledEllipsoid`   | Anisotropic + multimodal: `Σ sᵢxᵢ² + a·Σ(1 - cos(2πxᵢ))`     |
-| `CEC17Function`      | opfunu wrapper for CEC2017 F1–F30                           |
 | `CECProblem`         | `declivity.cec`; cecxx-backed CEC2013/CEC2014/CEC2017 F1–Fn  |
 
 Every benchmark function exposes:

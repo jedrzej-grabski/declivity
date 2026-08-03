@@ -14,10 +14,10 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from declivity.cec import CECEdition, CECProblem
 from declivity.utils.benchmark_functions import (
     Ackley,
     BenchmarkFunction,
-    CEC17Function,
     Ellipsoid,
     Rastrigin,
     Rosenbrock,
@@ -104,7 +104,7 @@ PROBLEMS: dict[str, ProblemSpec] = {
     "cec17_F10_d10": ProblemSpec(
         name="CEC17_F10",
         dim=10,
-        fn_factory=lambda d: CEC17Function(dimensions=d, function_id=10),
+        fn_factory=lambda d: CECProblem(CECEdition.CEC2017, 10, d),
         x0_factory=lambda d: np.full(d, 50.0),
         lower=-100.0,
         upper=100.0,
@@ -115,7 +115,7 @@ PROBLEMS: dict[str, ProblemSpec] = {
     "cec17_F3_d10": ProblemSpec(
         name="CEC17_F3",
         dim=10,
-        fn_factory=lambda d: CEC17Function(dimensions=d, function_id=3),
+        fn_factory=lambda d: CECProblem(CECEdition.CEC2017, 3, d),
         x0_factory=lambda d: np.full(d, 50.0),
         lower=-100.0,
         upper=100.0,
@@ -126,7 +126,7 @@ PROBLEMS: dict[str, ProblemSpec] = {
     "cec17_F5_d10": ProblemSpec(
         name="CEC17_F5",
         dim=10,
-        fn_factory=lambda d: CEC17Function(dimensions=d, function_id=5),
+        fn_factory=lambda d: CECProblem(CECEdition.CEC2017, 5, d),
         x0_factory=lambda d: np.full(d, 50.0),
         lower=-100.0,
         upper=100.0,

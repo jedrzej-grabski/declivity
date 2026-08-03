@@ -4,7 +4,6 @@ Utility modules for the optimization package.
 
 # Import core utilities without circular dependencies
 from declivity.utils.benchmark_functions import (
-    CEC17Function,
     Rastrigin,
     Rosenbrock,
     Sphere,
@@ -79,7 +78,6 @@ __all__ = [
     # Constraint handler surface
     "BoxStrategy",
     "BrentLineSearch",
-    "CEC17Function",
     "ConstraintHandler",
     "ConstraintHandlerType",
     "CovarianceSimplexInitializer",

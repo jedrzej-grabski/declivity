@@ -7,7 +7,6 @@ On Ellipsoid the covariance should elongate to compensate for the
 different per-dimension scaling (condition ~ 10^6).
 """
 
-import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -18,8 +17,6 @@ from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.utils.benchmark_functions import BenchmarkFunction, Ellipsoid
 from declivity.utils.covariance import CovarianceMatrix, empirical_covariance
-
-warnings.filterwarnings("ignore", category=SyntaxWarning, module="opfunu")
 
 plt.ioff()
 plt.switch_backend("Agg")

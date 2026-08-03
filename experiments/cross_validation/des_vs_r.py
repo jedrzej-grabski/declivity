@@ -1,4 +1,3 @@
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -6,12 +5,10 @@ import pandas as pd
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.des.config import DESConfig
+from declivity.cec import CECEdition, CECProblem
 from declivity.core.algorithm_factory import AlgorithmFactory
-from declivity.utils.benchmark_functions import CEC17Function
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.stopping_conditions import MaxEvaluations
-
-warnings.filterwarnings("ignore", category=SyntaxWarning, module="opfunu")
 
 
 def run_python_des_cec2017():
@@ -39,7 +36,7 @@ def run_python_des_cec2017():
         # Reset seed for each run to match R behavior
         np.random.seed(42 + run)
 
-        opt_func = CEC17Function(dimensions=dimensions, function_id=function_id)
+        opt_func = CECProblem(CECEdition.CEC2017, function_id, dimensions)
 
         # Use rep(50, dimensions) to match R's initial point
         initial_point = np.full(dimensions, 50.0)
