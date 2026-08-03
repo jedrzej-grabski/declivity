@@ -15,6 +15,7 @@ dependencies = [
     # opfunu imports pkg_resources at runtime without declaring setuptools;
     # setuptools 82 removed pkg_resources, so cap below it.
     "setuptools>=80.4.0,<82",
+    "cecpy>=0.1.7",
 ]
 requires-python = ">=3.12"
 readme = "README.md"

@@ -20,6 +20,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from declivity.cec import CECEdition
+from declivity.cec.problem import CECProblem
 from declivity.utils.benchmark_functions import BenchmarkFunction
 from declivity.utils.initial_point_generator import (
     FixedInitialPointGenerator,
@@ -98,6 +100,30 @@ class Problem:
             lower_bound=float(lb_array[0]) if lower_bound is None else lower_bound,
             upper_bound=float(ub_array[0]) if upper_bound is None else upper_bound,
             gradient=function.gradient if overrides_gradient else None,
+            initial_point_generator=initial_point_generator,
+        )
+
+    @classmethod
+    def from_cec(
+        cls,
+        edition: CECEdition,
+        function_number: int,
+        dimensions: int,
+        *,
+        initial_point_generator: InitialPointGenerator
+        | NDArray[np.float64]
+        | None = None,
+    ) -> Problem:
+        """Build a Problem from a cecxx-backed CEC benchmark function.
+
+        See CECProblem for the (edition, function_number, dimensions)
+        validity rules -- not every CEC edition supports the same
+        dimensionalities.
+        """
+        function = CECProblem(edition, function_number, dimensions)
+        return cls.from_benchmark(
+            name=function.name,
+            function=function,
             initial_point_generator=initial_point_generator,
         )
 

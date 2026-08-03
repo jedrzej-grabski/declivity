@@ -37,8 +37,8 @@ just run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
 Or directly:
 
 ```bash
-PYTHONPATH=. uv run python experiments/basic/declarative_plotting.py
-PYTHONPATH=. uv run python experiments/handoff/multimodal.py --num-seeds 25
+PYTHONPATH=. uv run experiments/basic/declarative_plotting.py
+PYTHONPATH=. uv run experiments/handoff/multimodal.py --num-seeds 25
 ```
 
 ## Development

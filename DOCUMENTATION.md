@@ -99,7 +99,7 @@ pip install -e .
 ```
 
 Requirements: Python 3.12 (pinned in `.python-version`), NumPy 2.x,
-SciPy 1.15+, Matplotlib 3.10+, opfunu (CEC2017), pandas, joblib.
+SciPy 1.15+, Matplotlib 3.10+, cecpy (CEC2013/2014/2017), pandas, joblib.
 
 Development tooling is driven by the `Justfile`, with tool versions pinned
 there so results are reproducible across machines: `just fmt` / `just fmt-check`
@@ -314,6 +314,7 @@ Built-in classes live in `src/utils/benchmark_functions.py`:
 | `RotatedFunction`    | Generic rotation wrapper for any `BenchmarkFunction`         |
 | `RippledEllipsoid`   | Anisotropic + multimodal: `Σ sᵢxᵢ² + a·Σ(1 - cos(2πxᵢ))`     |
 | `CEC17Function`      | opfunu wrapper for CEC2017 F1–F30                           |
+| `CECProblem`         | `declivity.cec`; cecxx-backed CEC2013/CEC2014/CEC2017 F1–Fn  |
 
 Every benchmark function exposes:
 
@@ -335,6 +336,40 @@ modes for `RotatedEllipsoid` / `RotatedFunction`:
 | `"uniform_45"`| Givens chain in adjacent planes at 45°                  |
 | `"golden"`    | Givens chain at `(k+1)·137.5°` per plane (aperiodic)    |
 | `"random"`    | QR factor of an `N(0,1)` matrix (full random orthogonal)|
+
+### CEC problems (`declivity.cec`)
+
+`declivity.cec` re-shares [cecxx](https://codeberg.org/ewarchul/cecxx)'s own
+`CECEdition` enum instead of wrapping it, so the supported editions come
+with real type hints straight from cecxx:
+
+```python
+from declivity.cec import CECEdition
+from declivity.benchmarking import Problem
+
+problem = Problem.from_cec(CECEdition.CEC2017, function_number=1, dimensions=10)
+```
+
+`Problem.from_cec(edition, function_number, dimensions)` builds a
+`CECProblem` (a `BenchmarkFunction`) and wraps it exactly like
+`Problem.from_benchmark`. Notes specific to CEC problems:
+
+- **Dimensions are edition-specific.** CEC2013 supports
+  `{2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}`; CEC2014/CEC2017 only
+  support `{10, 30, 50, 100}`. `CECProblem` validates `dimensions` against
+  `cecpy.benchmark.benchmark_valid_dimensions(edition)` and raises
+  `ValueError` up front rather than failing deep inside cecxx.
+- **Bounds are always `[-100, 100]^d`** — the standard CEC search domain;
+  cecxx doesn't enforce or clip to it.
+- **No gradients.** cecxx only exposes function values, so `Problem.gradient`
+  is `None` and L-BFGS-B falls back to finite differences.
+- **Names are synthesized** as `f"{edition.name}-F{function_number}"`
+  (e.g. `"CEC2017-F1"`) since cecxx doesn't expose per-function names.
+- **Evaluators are shared and cached per edition** — the first `CECProblem`
+  built for an edition loads cecxx's shift/rotate/shuffle tables for every
+  function number and every dimension that edition supports; every
+  subsequent `CECProblem` for that edition reuses the same evaluator
+  instead of reloading the same tables.
 
 ## Constraint handling
 
