@@ -25,7 +25,7 @@ DES, CMA-ES, MF-CMA-ES, and L-BFGS-B.
 ## Architecture
 
 ```
-src/
+declivity/
 ├── core/                  BaseOptimizer (ABC, generic), PopulationOptimizer (ABC),
 │                          BaseConfig, AlgorithmFactory (+ @register_optimizer)
 ├── algorithms/
@@ -115,10 +115,10 @@ only — `experiments/` is not yet type-clean.
 
 ```python
 import numpy as np
-from src import AlgorithmFactory
-from src.algorithms.choices import AlgorithmChoice
-from src.plotting import plot_metrics
-from src.utils.benchmark_functions import Sphere
+from declivity import AlgorithmFactory
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.plotting import plot_metrics
+from declivity.utils.benchmark_functions import Sphere
 
 func = Sphere(dimensions=10)
 x0 = np.random.uniform(-50, 50, 10)
@@ -157,7 +157,7 @@ Differential Evolution Strategy. Adaptive scaling factor `Ft` updated from a
 ring buffer of successful steps.
 
 ```python
-from src.algorithms.des.config import DESConfig
+from declivity.algorithms.des.config import DESConfig
 
 config = DESConfig(dimensions=10)
 config.ft = 1.0  # initial scaling factor of difference vectors
@@ -181,7 +181,7 @@ historical reference port and is only used as the oracle in
 for the migration story and convergence-equivalence evidence.
 
 ```python
-from src.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.cmaes.config import CMAESConfig
 
 config = CMAESConfig(dimensions=10)
 config.sigma = 0.0  # 0 ⇒ auto-derive from bounds
@@ -219,7 +219,7 @@ minimization via the Woodbury identity, More-Thuente or Armijo line
 search, and a projected-Newton safeguard.
 
 ```python
-from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 
 config = LBFGSBConfig(
     dimensions=10,
@@ -260,7 +260,7 @@ for internals.
 Every algorithm has a `*Config` dataclass extending `BaseConfig`:
 
 ```python
-from src.core.config_base import BaseConfig
+from declivity.core.config_base import BaseConfig
 
 
 @dataclass
@@ -299,7 +299,7 @@ config = AlgorithmFactory.create_config(
 
 ## Benchmark functions
 
-Built-in classes live in `src/utils/benchmark_functions.py`:
+Built-in classes live in `declivity/utils/benchmark_functions.py`:
 
 | Class                | Description                                                  |
 |----------------------|--------------------------------------------------------------|
@@ -377,7 +377,7 @@ when none is supplied is `BoxConstraintHandler(BoxStrategy.CLAMP, ...)`
 constructed from the optimizer's `lower_bounds` / `upper_bounds`.
 
 ```python
-from src.utils.constraint_handlers import (
+from declivity.utils.constraint_handlers import (
     BoxConstraintHandler,
     BoxStrategy,
     ConstraintHandlerType,
@@ -403,7 +403,7 @@ optimizer = AlgorithmFactory.create_optimizer(
 Custom handlers (e.g. inequality constraints, penalty methods) subclass
 `ConstraintHandler` directly — implement `is_feasible` and
 `feasibility_distance`, then override `repair` and/or `penalty`. See
-`src/utils/constraint_handlers.py` for the ABC and
+`declivity/utils/constraint_handlers.py` for the ABC and
 `experiments/basic/constrained_rosenbrock.py` for a worked example.
 
 ## Pluggable components
@@ -428,12 +428,12 @@ algorithms swap population-level policies without touching feasibility
 semantics.
 
 ```python
-from src.utils.repair_strategies import LamarckianRepair, RepairStrategyType
-from src.utils.population_initializers import (
+from declivity.utils.repair_strategies import LamarckianRepair, RepairStrategyType
+from declivity.utils.population_initializers import (
     NormalPopulationInitializer,
     PopulationInitializerType,
 )
-from src.utils.initial_point_generator import (
+from declivity.utils.initial_point_generator import (
     UniformInitialPointGenerator,
     InitialPointGeneratorType,
 )
@@ -500,7 +500,7 @@ exposes, and the rendering functions read both.
 
 ### Eight entry points
 
-All in `src.plotting`:
+All in `declivity.plotting`:
 
 | Function | Use when |
 |---|---|
@@ -516,7 +516,7 @@ All in `src.plotting`:
 ### Single-run deep dive
 
 ```python
-from src.plotting import plot_metrics, PanelKey, PanelSet
+from declivity.plotting import plot_metrics, PanelKey, PanelSet
 
 # Default: every panel marked `default=True` for the algorithm.
 plot_metrics(result, save_path="cmaes.png")
@@ -535,7 +535,7 @@ plot_metrics(result, panels=PanelSet.ALL, save_path="cmaes_all.png")
 ### Cross-algorithm comparison
 
 ```python
-from src.plotting import plot_comparison
+from declivity.plotting import plot_comparison
 
 plot_comparison(
     {"CMA-ES": cmaes_result, "L-BFGS-B": lbfgsb_result},
@@ -566,7 +566,7 @@ plot_comparison(
 ### Multi-seed benchmark
 
 ```python
-from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
+from declivity.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
 
 plot_benchmark_convergence(
     bench.traces,
@@ -586,10 +586,10 @@ plot_benchmark_boxplot(
 
 ### Adding a new panel
 
-One line in [`src/plotting/standard_panels.py`](src/plotting/standard_panels.py):
+One line in [`declivity/plotting/standard_panels.py`](declivity/plotting/standard_panels.py):
 
 ```python
-from src.plotting import Panel, PanelKey, PanelRegistry, YScale
+from declivity.plotting import Panel, PanelKey, PanelRegistry, YScale
 
 PanelRegistry.register(
     AlgorithmChoice.CMAES,
@@ -609,7 +609,7 @@ Multi-series panels (one panel, several lines on the same axes — like
 the classic best/mean/median view) use `series=` instead of `field=`:
 
 ```python
-from src.plotting import Series, LineStyle
+from declivity.plotting import Series, LineStyle
 
 Panel(
     key=PanelKey.CONVERGENCE,
@@ -650,7 +650,7 @@ plot_metrics(result, panels=[PanelKey.CONVERGENCE, PanelKey.STEP_SIZE])
 Outside the panel system (they don't fit the per-iteration time-series model):
 
 ```python
-from src.plotting import (
+from declivity.plotting import (
     plot_function_landscape,
     plot_function_landscape_grid,
     plot_matrix_diagonal_comparison,
@@ -684,7 +684,7 @@ plot_matrix_diagonal_comparison(
 
 ## Benchmarking framework
 
-`src.benchmarking` is the orchestrator for fair multi-seed comparisons.
+`declivity.benchmarking` is the orchestrator for fair multi-seed comparisons.
 
 ### Extension hierarchy
 
@@ -716,18 +716,18 @@ L-BFGS-B since the kwargs are only emitted when non-`None`.
 ### Standard usage
 
 ```python
-from src.benchmarking import (
+from declivity.benchmarking import (
     Benchmark,
     Problem,
     SingleAlgorithm,
     CMAESLBFGSBHandoff,
     HandoffTransform,
 )
-from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
-from src.utils.benchmark_functions import Rastrigin
-from src.algorithms.choices import AlgorithmChoice
-from src.algorithms.cmaes.config import CMAESConfig
-from src.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
+from declivity.utils.benchmark_functions import Rastrigin
+from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 
 problem = Problem.from_benchmark("Rastrigin-10D", Rastrigin(10))
 
@@ -828,7 +828,7 @@ implements `run()` and stitches a custom multi-restart `RunTrace` by hand.
   standalone run up to the handoff point.
 - **Persistence**: every `Benchmark.run()` auto-dumps `traces.json`,
   `runs.csv`, `summary.csv` (toggle with `save_artifacts=False`).
-  Restore with `src.benchmarking.persistence.load_traces_json(...)`.
+  Restore with `declivity.benchmarking.persistence.load_traces_json(...)`.
 
 ## CMA-ES → L-BFGS-B handoff
 
@@ -887,12 +887,12 @@ class AlgorithmFactory:
 ### Registration decorators
 
 Optimizer and logger classes register themselves at import time via
-decorators imported from `src` (and re-exported from `src.core` /
-`src.logging`):
+decorators imported from `declivity` (and re-exported from `declivity.core` /
+`declivity.logging`):
 
 ```python
-from src import register_optimizer, register_logger
-from src.algorithms.choices import AlgorithmChoice
+from declivity import register_optimizer, register_logger
+from declivity.algorithms.choices import AlgorithmChoice
 
 
 @register_optimizer(AlgorithmChoice.DES)
@@ -905,7 +905,7 @@ class DESLogger(BaseLogger[DESLogData]): ...
 
 The decorators wire `AlgorithmFactory` and `LoggerFactory` at module
 import. Adding a new algorithm requires only the two decorators (plus
-panel registrations in `src/plotting/standard_panels.py`) — there is no
+panel registrations in `declivity/plotting/standard_panels.py`) — there is no
 central registration block to edit.
 
 ### `PopulationOptimizer`
@@ -1046,7 +1046,7 @@ class HandoffTransform(StrEnum):
 
 
 # Plotting StrEnums
-class PanelKey(StrEnum): ...  # See src/plotting/types.py for all values
+class PanelKey(StrEnum): ...  # See declivity/plotting/types.py for all values
 
 
 class YScale(StrEnum):
