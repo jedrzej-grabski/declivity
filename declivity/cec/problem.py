@@ -15,6 +15,7 @@ from cecpy.benchmark import (
     CECEvaluator,
     benchmark_problem_num,
     benchmark_valid_dimensions,
+    problem_optimum_value,
 )
 from numpy.typing import NDArray
 
@@ -74,3 +75,9 @@ class CECProblem(BenchmarkFunction):
     @property
     def name(self) -> str:
         return f"{self.edition.name}-F{self.function_number}"
+
+    @property
+    def global_minimum(self) -> tuple[NDArray[np.float64], float]:
+        """Known optimal value only - CEC-based problems don't come with x_opt."""
+        optimal_value = problem_optimum_value(self.edition, self.function_number)
+        return np.full(self.dimensions, np.nan), float(optimal_value)
