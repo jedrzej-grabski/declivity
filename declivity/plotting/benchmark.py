@@ -22,7 +22,14 @@ import numpy as np
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
+from declivity.benchmarking.aggregation import series_grid
 from declivity.benchmarking.algorithm_run import AlgorithmRun
+from declivity.benchmarking.ecdf import (
+    DEFAULT_THRESHOLD_FLOOR,
+    aggregate_ecdf,
+    ecdf_auc,
+    threshold_grid,
+)
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace
 from declivity.plotting.unified import (
@@ -375,5 +382,101 @@ def plot_convergence_overlay(
         secondary.set_xlabel(secondary_label, fontsize=12)
 
     fig.tight_layout()
+    save_if_path(fig, save_path)
+    return fig
+
+
+def plot_benchmark_ecdf(
+    traces: dict[tuple[str, str], list[RunTrace]],
+    problem: Problem,
+    algorithms: Iterable[AlgorithmRun],
+    *,
+    n_thresholds: int = 50,
+    num_grid_points: int = 200,
+    threshold_floor: float = DEFAULT_THRESHOLD_FLOOR,
+    global_minimum: float = 0.0,
+    normalize: bool = True,
+    annotate_auc: bool = True,
+    title: str | None = None,
+    xlabel: str = "Function Evaluations",
+    ylabel: str = "Fraction of targets reached",
+    linewidth: float = 2.2,
+    legend_loc: str = "best",
+    legend_fontsize: int = 9,
+    figsize: tuple[float, float] = (9.0, 6.2),
+    save_path: Path | str | None = None,
+) -> Figure:
+    """Single-problem ECDF overlay: one curve per algorithm.
+
+    Pools every algorithm's runs on ``problem`` to build one shared
+    threshold grid (see :func:`~declivity.benchmarking.ecdf.threshold_grid`),
+    so every algorithm is judged against identical targets, then discretises
+    each algorithm's mean ECDF onto a shared evaluation-budget grid spanning
+    every run's own evaluation counts.
+
+    Args:
+        traces: ``{(problem.name, algorithm.name): [RunTrace per seed]}``.
+        problem: The single problem to plot.
+        algorithms: Draw order; ``color`` / ``name`` read from each.
+        n_thresholds: Number of log-spaced target levels.
+        num_grid_points: Resolution of the shared evaluation-budget grid.
+        global_minimum: ``problem``'s known ``f*``, subtracted from
+            ``best_fitness`` before thresholding (see
+            :mod:`~declivity.benchmarking.ecdf`). Ignored when
+            ``normalize=False``.
+        normalize: Whether to gap-normalise against ``global_minimum``
+            (default) or use raw ``best_fitness`` values.
+        annotate_auc: Append each curve's normalised AUC to its legend label.
+        save_path: If set, the figure is written here (dpi 150).
+
+    Returns:
+        The matplotlib :class:`Figure`.
+    """
+    algorithms_list = list(algorithms)
+    pooled_traces = [
+        trace
+        for algorithm in algorithms_list
+        for trace in traces.get((problem.name, algorithm.name), [])
+    ]
+    if not pooled_traces:
+        raise ValueError(f"No traces found for problem {problem.name!r}")
+
+    thresholds = threshold_grid(
+        pooled_traces,
+        n_thresholds=n_thresholds,
+        floor=threshold_floor,
+        global_minimum=global_minimum,
+        normalize=normalize,
+    )
+    x_grid = series_grid(pooled_traces, "evaluations", num_grid_points)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    for algorithm in algorithms_list:
+        algorithm_traces = traces.get((problem.name, algorithm.name), [])
+        if not algorithm_traces:
+            continue
+        curve = aggregate_ecdf(
+            algorithm_traces,
+            thresholds,
+            x_grid,
+            global_minimum=global_minimum,
+            normalize=normalize,
+        )
+        label = algorithm.name
+        if annotate_auc:
+            label = f"{label} (AUC={ecdf_auc(x_grid, curve):.3f})"
+        ax.plot(x_grid, curve, label=label, color=algorithm.color, linewidth=linewidth)
+
+    ax.set_xscale("log")
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_ylim(0.0, 1.02)
+    if title:
+        ax.set_title(title, fontsize=12)
+    ax.grid(True, alpha=0.25, which="both")
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)
+    ax.tick_params(axis="both", labelsize=10)
+    fig.tight_layout()
+
     save_if_path(fig, save_path)
     return fig
