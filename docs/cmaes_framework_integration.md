@@ -148,13 +148,13 @@ algorithm.
 
 ```bash
 # Convergence-equivalence vs the historical reference port (5 seeds):
-PYTHONPATH=. pdm run python experiments/cross_validation/cmaes_vs_reference.py --seeds 5
+PYTHONPATH=. uv run python experiments/cross_validation/cmaes_vs_reference.py --seeds 5
 
 # Component-injection benchmark:
-PYTHONPATH=. pdm run python experiments/cross_validation/cmaes_components.py
+PYTHONPATH=. uv run python experiments/cross_validation/cmaes_components.py
 
 # Sanity smoke test (default CMA-ES on Sphere d=10):
-pdm run run-example  # uses DES — CMA-ES smoke run is inline above
+just run-example  # uses DES — CMA-ES smoke run is inline above
 ```
 
 Outputs land in `plots/cross_validation/cmaes_vs_reference/` and

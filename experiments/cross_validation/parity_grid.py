@@ -15,7 +15,7 @@ Output (under ``plots/cross_validation/parity_grid/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python -m experiments.cross_validation.parity_grid
+    PYTHONPATH=. uv run python -m experiments.cross_validation.parity_grid
 """
 
 from __future__ import annotations

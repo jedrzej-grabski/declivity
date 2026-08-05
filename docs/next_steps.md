@@ -102,7 +102,7 @@ improves the framework's "framework-ness".
       F10 for 3 fixed seeds and asserts the convergence trace stays
       within tolerance of the saved R reference output in
       `reference/outputs/`. Same for the CMA-ES variants.
-- [ ] Wire into `pdm test` or a Makefile target.
+- [ ] Wire into a `just test` target.
 
   Why: every refactor risks subtle drift in the optimizer numerics.
   The supervisor experiments catch catastrophic breaks but not 1e-4

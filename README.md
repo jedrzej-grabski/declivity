@@ -29,16 +29,16 @@ L-BFGS-B is the newest addition and ships with the more involved studies
 ## Quick start
 
 ```bash
-pdm install
-pdm run run-example      # Sphere demo (DES on 10D Sphere)
-pdm run run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
+uv sync
+just run-example      # Sphere demo (DES on 10D Sphere)
+just run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
 ```
 
 Or directly:
 
 ```bash
-PYTHONPATH=. pdm run python experiments/basic/declarative_plotting.py
-PYTHONPATH=. pdm run python experiments/handoff/multimodal.py --num-seeds 25
+PYTHONPATH=. uv run python experiments/basic/declarative_plotting.py
+PYTHONPATH=. uv run python experiments/handoff/multimodal.py --num-seeds 25
 ```
 
 ## Development

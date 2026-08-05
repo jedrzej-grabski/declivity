@@ -21,7 +21,7 @@ and
 [`experiments/basic/custom_algorithm.py`](../experiments/basic/custom_algorithm.py).
 
 - **Script:** [`experiments/basic/benchmark_showcase.py`](../experiments/basic/benchmark_showcase.py)
-- **Run:** `PYTHONPATH=. pdm run python experiments/basic/benchmark_showcase.py`
+- **Run:** `PYTHONPATH=. uv run python experiments/basic/benchmark_showcase.py`
 - **Output:** `plots/basic/benchmark_showcase/`
 
 ### The four runners — one per rung of the hierarchy

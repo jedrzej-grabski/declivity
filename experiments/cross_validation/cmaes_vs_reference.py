@@ -37,7 +37,7 @@ Output (under ``plots/cross_validation/cmaes_vs_reference/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/cross_validation/cmaes_vs_reference.py
+    PYTHONPATH=. uv run python experiments/cross_validation/cmaes_vs_reference.py
 """
 
 from __future__ import annotations

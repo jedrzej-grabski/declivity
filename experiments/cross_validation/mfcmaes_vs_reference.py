@@ -13,7 +13,7 @@ hypothesis of identical distributions un-rejected at α = 0.05.
 
 Run::
 
-    PYTHONPATH=. pdm run python -m experiments.cross_validation.mfcmaes_vs_reference
+    PYTHONPATH=. uv run python -m experiments.cross_validation.mfcmaes_vs_reference
 """
 
 from __future__ import annotations

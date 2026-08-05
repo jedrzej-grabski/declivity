@@ -25,7 +25,7 @@ Output (under ``plots/cross_validation/des_vs_reference/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python -m experiments.cross_validation.des_vs_reference
+    PYTHONPATH=. uv run python -m experiments.cross_validation.des_vs_reference
 """
 
 from __future__ import annotations

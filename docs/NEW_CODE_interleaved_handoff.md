@@ -191,13 +191,13 @@ covariance model often rather than over-committing to one probe.
 
 ```bash
 # Headline staircase + multi-seed comparison on the near-corner ellipsoid
-PYTHONPATH=. pdm run python experiments/handoff/interleaved.py
+PYTHONPATH=. uv run python experiments/handoff/interleaved.py
 
 # Multimodal variant
-PYTHONPATH=. pdm run python experiments/handoff/interleaved.py --problem rastrigin
+PYTHONPATH=. uv run python experiments/handoff/interleaved.py --problem rastrigin
 
 # Tunables
-PYTHONPATH=. pdm run python experiments/handoff/interleaved.py \
+PYTHONPATH=. uv run python experiments/handoff/interleaved.py \
     --dimensions 20 --num-seeds 25 --cmaes-interval 15 --probe-max-evals 60 \
     --corner-fraction 1.0          # optimum exactly on the corner
 ```
@@ -277,8 +277,8 @@ BFGS) without re-running via `--replot-from`.
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py --popsize 400 --tag pop4d
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 400 --tag pop4d
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
     # re-render from saved traces (instant), e.g. add the BFGS baseline back:
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py \
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py \
         --replot-from plots/handoff/cmabfgs_replication/traces_pop4d.json --show-bfgs --tag pop4d

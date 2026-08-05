@@ -42,10 +42,10 @@ that and the framework default to see which matches.
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py --popsize 400 --tag pop4d
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 400 --tag pop4d
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
     # re-render a figure from saved traces (no re-running):
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py \
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py \
         --popsize 400 --tag pop4d --replot-from plots/handoff/cmabfgs_replication/pop4d/traces.json
 """
 

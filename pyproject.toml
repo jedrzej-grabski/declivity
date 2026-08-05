@@ -45,18 +45,11 @@ Repository = "https://github.com/jedrzej-grabski/declivity"
 Issues = "https://github.com/jedrzej-grabski/declivity/issues"
 
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.pdm]
-distribution = true
-
-[tool.pdm.build]
-includes = ["declivity/"]
-
-[tool.pdm.scripts]
-run-example = "python -m experiments.basic.simple_optimization"
-run-r = "python -m experiments.cross_validation.des_vs_r"
+[tool.hatch.build.targets.wheel]
+include = ["declivity/"]
 
 [tool.ruff]
 line-length = 88

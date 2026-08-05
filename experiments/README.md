@@ -7,16 +7,16 @@ into the corresponding subdirectory.
 Run any experiment as a module from the project root:
 
 ```bash
-PYTHONPATH=. pdm run python -m experiments.<group>.<name>
+PYTHONPATH=. uv run python -m experiments.<group>.<name>
 # or directly
-PYTHONPATH=. pdm run python experiments/<group>/<name>.py [--flags ...]
+PYTHONPATH=. uv run python experiments/<group>/<name>.py [--flags ...]
 ```
 
 The two short-form PDM scripts cover the canonical starting points:
 
 ```bash
-pdm run run-example      # experiments/basic/simple_optimization.py
-pdm run run-r            # experiments/cross_validation/des_vs_r.py
+just run-example      # experiments/basic/simple_optimization.py
+just run-r            # experiments/cross_validation/des_vs_r.py
 ```
 
 **Writing a new experiment?** See the step-by-step guide

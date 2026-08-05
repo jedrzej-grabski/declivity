@@ -50,7 +50,7 @@ provenance only.
 To run:
 
 ```bash
-PYTHONPATH=. pdm run python -m experiments.cross_validation.des_vs_reference
-PYTHONPATH=. pdm run python -m experiments.cross_validation.mfcmaes_vs_reference
-PYTHONPATH=. pdm run python -m experiments.cross_validation.cmaes_vs_reference
+PYTHONPATH=. uv run python -m experiments.cross_validation.des_vs_reference
+PYTHONPATH=. uv run python -m experiments.cross_validation.mfcmaes_vs_reference
+PYTHONPATH=. uv run python -m experiments.cross_validation.cmaes_vs_reference
 ```

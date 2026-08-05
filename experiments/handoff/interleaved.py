@@ -29,9 +29,9 @@ Outputs (under ``plots/handoff/interleaved/<problem>/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/handoff/interleaved.py
-    PYTHONPATH=. pdm run python experiments/handoff/interleaved.py --problem rastrigin
-    PYTHONPATH=. pdm run python experiments/handoff/interleaved.py --dimensions 20 --num-seeds 25
+    PYTHONPATH=. uv run python experiments/handoff/interleaved.py
+    PYTHONPATH=. uv run python experiments/handoff/interleaved.py --problem rastrigin
+    PYTHONPATH=. uv run python experiments/handoff/interleaved.py --dimensions 20 --num-seeds 25
 """
 
 import argparse

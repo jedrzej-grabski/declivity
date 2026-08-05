@@ -93,7 +93,7 @@ Six high-level concepts:
 ## Installation
 
 ```bash
-pdm install         # PDM (recommended; uses pdm.lock)
+uv sync             # uv (recommended; uses uv.lock)
 # or
 pip install -e .
 ```

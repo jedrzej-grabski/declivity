@@ -25,8 +25,8 @@ up to the handoff. One convergence plot + one final-fitness boxplot per optimize
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/handoff/local_geometry_seed.py
-    PYTHONPATH=. pdm run python experiments/handoff/local_geometry_seed.py \
+    PYTHONPATH=. uv run python experiments/handoff/local_geometry_seed.py
+    PYTHONPATH=. uv run python experiments/handoff/local_geometry_seed.py \
         --dimensions 20 --num-seeds 15 --rotation random
 """
 

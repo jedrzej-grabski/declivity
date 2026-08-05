@@ -26,7 +26,7 @@ Output (under ``plots/cross_validation/lbfgsb_vs_scipy/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python -m experiments.cross_validation.lbfgsb_vs_scipy --function rosenbrock_d10
+    PYTHONPATH=. uv run python -m experiments.cross_validation.lbfgsb_vs_scipy --function rosenbrock_d10
 """
 
 from __future__ import annotations

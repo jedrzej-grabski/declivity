@@ -10,7 +10,7 @@ For the design rationale (why declarative, why semantic keys, why a curated
 default set) see [`framework_design.md`](framework_design.md) §"Premise 1".
 
 - **Script:** [`experiments/basic/plotter_showcase.py`](../experiments/basic/plotter_showcase.py)
-- **Run:** `PYTHONPATH=. pdm run python experiments/basic/plotter_showcase.py`
+- **Run:** `PYTHONPATH=. uv run python experiments/basic/plotter_showcase.py`
 - **Output:** `plots/basic/plotter_showcase/`
 
 | # | One-liner | Entry point | What it proves |

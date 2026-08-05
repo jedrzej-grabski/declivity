@@ -273,28 +273,28 @@ reason: less remaining L-BFGS-B budget. It declines monotonically.
 
 ```bash
 # Multimodal baseline (the puzzling one)
-PYTHONPATH=. pdm run python examples/multimodal_handoff_benchmark.py \
+PYTHONPATH=. uv run python examples/multimodal_handoff_benchmark.py \
     --include-identity-baseline --num-workers 6 \
     --output-dir plots/hybrid/multimodal_handoff
 
 # Rotated multimodal (no anisotropy gained)
-PYTHONPATH=. pdm run python examples/rotated_multimodal_handoff.py \
+PYTHONPATH=. uv run python examples/rotated_multimodal_handoff.py \
     --bases Griewank --dimensions 10 30 --memory 10 \
     --num-workers 6 --output-dir plots/hybrid/exp1_rotated_griewank_m10
 
 # Rotated rippled multimodal (still no clear winner)
-PYTHONPATH=. pdm run python examples/rippled_ellipsoid_handoff.py \
+PYTHONPATH=. uv run python examples/rippled_ellipsoid_handoff.py \
     --dimensions 10 30 --conditions 1000 --memory 5 \
     --num-workers 6 --output-dir plots/hybrid/exp3_rippled_c1000_m5
 
 # Rotated rippled near-unimodal (C^-1 wins by orders of magnitude)
-PYTHONPATH=. pdm run python examples/rippled_ellipsoid_handoff.py \
+PYTHONPATH=. uv run python examples/rippled_ellipsoid_handoff.py \
     --dimensions 10 30 50 --conditions 1000000 --memory 5 \
     --amplitude 0.1 --num-workers 6 \
     --output-dir plots/hybrid/exp6_low_ripple_high_cond
 
 # Warmup timing sweep on the regime where C^-1 wins
-PYTHONPATH=. pdm run python examples/rippled_handoff_timing_sweep.py \
+PYTHONPATH=. uv run python examples/rippled_handoff_timing_sweep.py \
     --dimensions 30 --warmup-budgets 500 1500 3000 5000 7500 \
     --num-workers 6 --output-dir plots/hybrid/exp7_timing_sweep
 ```
