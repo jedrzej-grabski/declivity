@@ -10,7 +10,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "scipy>=1.15.3",
     "opfunu>=1.0.1",
-    "seaborn>=0.13.2",
+    "pandas>=2.3.0",
     "joblib>=1.5.3",
     # opfunu imports pkg_resources at runtime without declaring setuptools;
     # setuptools 82 removed pkg_resources, so cap below it.
@@ -50,6 +50,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 include = ["declivity/"]
+
+[tool.hatch.build.targets.sdist]
+# The wheel `include` above scopes only the wheel. Without this the sdist
+# defaults to every non-ignored file, which pulls in the vendored .agents
+# tree and a 5 MB PDF under docs/.
+include = ["declivity/", "README.md", "LICENSE"]
 
 [tool.ruff]
 line-length = 88

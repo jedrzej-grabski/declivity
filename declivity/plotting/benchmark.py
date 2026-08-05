@@ -354,7 +354,9 @@ def plot_convergence_overlay(
         ax.set_title(title, fontsize=12)
     ax.set_yscale("log")
     ax.grid(True, alpha=0.25, which="both")
-    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)
+    # legend_loc stays a plain str in this signature; matplotlib 3.11 narrowed
+    # loc to a Literal union, which a str cannot satisfy statically.
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
     ax.tick_params(axis="both", labelsize=10)
 
     if secondary_iter_lambda is not None:

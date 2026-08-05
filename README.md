@@ -155,7 +155,7 @@ declivity/
 
 ## Tech stack
 
-- Python 3.12 (strict), managed with PDM
+- Python 3.12 (strict), managed with uv (pinned in `.python-version`)
 - NumPy 2.x, SciPy 1.15+, Matplotlib 3.10+
 - `opfunu` for CEC2017 benchmark functions
 - `joblib` for optional parallel benchmark execution

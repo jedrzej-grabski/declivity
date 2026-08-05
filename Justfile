@@ -4,7 +4,7 @@ basedpyright_version := "1.39.9"
 default: fmt-check lint types
 
 install:
-    uv sync
+    uv sync --frozen
 
 lock:
     uv lock

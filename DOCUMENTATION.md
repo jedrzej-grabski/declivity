@@ -98,8 +98,8 @@ uv sync             # uv (recommended; uses uv.lock)
 pip install -e .
 ```
 
-Requirements: Python 3.12, NumPy 2.x, SciPy 1.15+, Matplotlib 3.10+,
-opfunu (CEC2017), seaborn, joblib.
+Requirements: Python 3.12 (pinned in `.python-version`), NumPy 2.x,
+SciPy 1.15+, Matplotlib 3.10+, opfunu (CEC2017), pandas, joblib.
 
 Development tooling is driven by the `Justfile`, with tool versions pinned
 there so results are reproducible across machines: `just fmt` / `just fmt-check`

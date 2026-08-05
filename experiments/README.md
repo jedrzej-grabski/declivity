@@ -12,7 +12,7 @@ PYTHONPATH=. uv run python -m experiments.<group>.<name>
 PYTHONPATH=. uv run python experiments/<group>/<name>.py [--flags ...]
 ```
 
-The two short-form PDM scripts cover the canonical starting points:
+Two short-form recipes cover the canonical starting points:
 
 ```bash
 just run-example      # experiments/basic/simple_optimization.py
