@@ -78,7 +78,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 10,
             "total_budget": 6000,
             "memory_size": 10,
-            "ls_settings": dict(pgtol=1e-10, factr=0),
+            "ls_settings": {"pgtol": 1e-10, "factr": 0},
         }
     if family == "reproduce_old":
         base = RippledEllipsoid(50, condition=1e6, amplitude=0.0)
@@ -93,7 +93,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 50,
             "total_budget": 10000,
             "memory_size": 5,
-            "ls_settings": dict(pgtol=1e-8, factr=1e7),
+            "ls_settings": {"pgtol": 1e-8, "factr": 1e7},
         }
     if family == "low_amp":
         base = RippledEllipsoid(30, condition=1e6, amplitude=0.1)
@@ -108,7 +108,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 30,
             "total_budget": 10000,
             "memory_size": 5,
-            "ls_settings": dict(pgtol=1e-10, factr=0),
+            "ls_settings": {"pgtol": 1e-10, "factr": 0},
         }
     if family == "multimodal":
         base = RippledEllipsoid(50, condition=1e6, amplitude=1.0)
@@ -123,7 +123,7 @@ def build_family(family: str, rotation_seed: int = 42):
             "dimensions": 50,
             "total_budget": 10000,
             "memory_size": 5,
-            "ls_settings": dict(pgtol=1e-8, factr=1e7),
+            "ls_settings": {"pgtol": 1e-8, "factr": 1e7},
         }
     raise ValueError(f"unknown family {family!r}")
 

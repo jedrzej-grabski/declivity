@@ -79,7 +79,7 @@ def _draw_eigenvectors(
                     center[dim2] + sign * arrow_scale * eigenvector[1],
                 ),
                 xytext=(center[dim1], center[dim2]),
-                arrowprops=dict(arrowstyle="->", color=color, lw=2.5),
+                arrowprops={"arrowstyle": "->", "color": color, "lw": 2.5},
             )
         if with_legend:
             ax.plot(

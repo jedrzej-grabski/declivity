@@ -41,6 +41,20 @@ PYTHONPATH=. pdm run python experiments/basic/declarative_plotting.py
 PYTHONPATH=. pdm run python experiments/handoff/multimodal.py --num-seeds 25
 ```
 
+## Development
+
+Formatting, linting and type checking go through the `Justfile`, which pins
+the tool versions so results do not drift between machines:
+
+```bash
+just fmt          # ruff format
+just fmt-check    # ruff format --check (no writes)
+just lint         # ruff check (no writes)
+just lint-fix     # ruff check --fix
+just types        # basedpyright
+just              # fmt-check + lint + types
+```
+
 ## Minimal example
 
 Run one optimizer:

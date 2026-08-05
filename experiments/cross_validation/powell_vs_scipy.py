@@ -128,8 +128,8 @@ def run_declivity_powell(
 # Plotting.
 # ---------------------------------------------------------------------------
 
-_OURS_STYLE = dict(color="tab:blue", lw=1.8, label="declivity")
-_SCIPY_STYLE = dict(color="tab:orange", lw=1.8, ls="--", label="scipy")
+_OURS_STYLE = {"color": "tab:blue", "lw": 1.8, "label": "declivity"}
+_SCIPY_STYLE = {"color": "tab:orange", "lw": 1.8, "ls": "--", "label": "scipy"}
 
 
 def plot_convergence(logs, trace: ScipyPowellTrace, title: str, path: Path) -> None:

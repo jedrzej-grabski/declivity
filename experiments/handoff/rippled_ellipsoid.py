@@ -71,7 +71,7 @@ def build_algorithms(
 ):
     lbfgsb_handoff_budget = total_budget - cmaes_warmup_budget
 
-    common_lbfgsb_kwargs = dict(m=memory_size, pgtol=pgtol, factr=factr)
+    common_lbfgsb_kwargs = {"m": memory_size, "pgtol": pgtol, "factr": factr}
     armijo = ArmijoBacktracking()
 
     cmaes_only = SingleAlgorithm(

@@ -2,11 +2,9 @@
 Python Evolutionary Optimization Package
 """
 
-import declivity.algorithms.cmaes.cmaes_optimizer
-
 # Import optimizer and logger modules to trigger @register_optimizer and
-# @register_logger decorators.  These must come after the factory imports so
-# the factories are already defined when the decorators execute.
+# @register_logger decorators.
+import declivity.algorithms.cmaes.cmaes_optimizer
 import declivity.algorithms.des.des_optimizer
 import declivity.algorithms.lbfgsb.lbfgsb_optimizer
 import declivity.algorithms.mfcmaes.mfcmaes_optimizer
@@ -23,6 +21,7 @@ from declivity.core.config_base import BaseConfig
 from declivity.logging.logger_factory import register_logger
 
 __all__ = [
+    "AlgorithmChoice",
     "AlgorithmFactory",
     "BaseConfig",
     "BaseOptimizer",

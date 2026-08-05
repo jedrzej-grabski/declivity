@@ -11,15 +11,15 @@ Examples:
 """
 
 import argparse
-import shutil
 import sys
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
 
 import defusedxml.minidom
-from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator
 
+from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator
 
 def pack(
     input_directory: str,

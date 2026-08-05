@@ -38,21 +38,21 @@ from declivity.utils.line_search.gradient import (
 )
 
 __all__ = [
-    # Gradient-based branch
-    "GradientLineSearch",
-    "LineSearchStrategy",
-    "LineSearchResult",
-    "MoreThuenteLineSearch",
     "ArmijoBacktracking",
-    "more_thuente_search",
-    "armijo_search",
+    "BracketError",
+    "BrentLineSearch",
     # Derivative-free branch
     "DerivativeFreeLineSearch",
-    "ScalarSearchResult",
-    "BrentLineSearch",
     "GoldenSectionLineSearch",
-    "BracketError",
+    # Gradient-based branch
+    "GradientLineSearch",
+    "LineSearchResult",
+    "LineSearchStrategy",
+    "MoreThuenteLineSearch",
+    "ScalarSearchResult",
+    "armijo_search",
+    "bounded_minimize",
     "bracket_minimum",
     "brent_minimize",
-    "bounded_minimize",
+    "more_thuente_search",
 ]

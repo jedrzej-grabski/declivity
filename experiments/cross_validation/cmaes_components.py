@@ -70,7 +70,8 @@ def main() -> None:
         Problem.from_benchmark("Rastrigin", Rastrigin(dimensions=dimensions)),
     ]
 
-    config_factory = lambda d: CMAESConfig(dimensions=d)
+    def config_factory(d: int) -> CMAESConfig:
+        return CMAESConfig(dimensions=d)
 
     algorithms: list[AlgorithmRun] = [
         SingleAlgorithm(

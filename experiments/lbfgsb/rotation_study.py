@@ -13,6 +13,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 
 from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
@@ -144,7 +145,13 @@ def run_rotation_study():
             if rotation_mode == "none":
                 func = Ellipsoid(n)
                 scales = 10.0 ** (6.0 * np.arange(n) / max(n - 1, 1))
-                gradient_fn = lambda x, s=scales: 2.0 * s * x
+
+                def ellipsoid_gradient(
+                    x: NDArray[np.float64], s: NDArray[np.float64] = scales
+                ) -> NDArray[np.float64]:
+                    return 2.0 * s * x
+
+                gradient_fn = ellipsoid_gradient
                 hessian_diag = 2.0 * scales
                 full_hessian = np.diag(hessian_diag)
                 diag_fraction = 1.0
@@ -238,7 +245,6 @@ def _plot_rotation_summary(summary_data, rotations, colors, n, m, save_path):
     rotation_labels = [desc for _, desc in rotations]
     hessian_labels = ["Identity", "Hessian diagonal", "Full Hessian"]
     num_rotations = len(rotation_labels)
-    num_hessians = len(hessian_labels)
     bar_width = 0.25
     x_positions = np.arange(num_rotations)
 

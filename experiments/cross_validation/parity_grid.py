@@ -132,11 +132,11 @@ def run(problem_keys: list[str], seeds: list[int], output_dir: Path) -> None:
             fw_finals = np.array([r.best_fit for r in fw_runs])
             ref_finals = np.array([r.best_fit for r in ref_runs])
             try:
-                w_stat, p_w = stats.wilcoxon(
+                _w_stat, p_w = stats.wilcoxon(
                     fw_finals, ref_finals, zero_method="zsplit"
                 )
             except ValueError:
-                w_stat, p_w = 0.0, 1.0  # all pairs equal — treat as match
+                _w_stat, p_w = 0.0, 1.0  # all pairs equal — treat as match
             ks_stat, p_ks = stats.ks_2samp(fw_finals, ref_finals)
 
             ax = axes[i, j]

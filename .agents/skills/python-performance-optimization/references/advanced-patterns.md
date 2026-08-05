@@ -10,16 +10,13 @@ Advanced optimization techniques including NumPy vectorization, caching, memory 
 import timeit
 import numpy as np
 
-
 def python_sum(n):
     """Sum using pure Python."""
     return sum(range(n))
 
-
 def numpy_sum(n):
     """Sum using NumPy."""
     return np.arange(n).sum()
-
 
 n = 1000000
 
@@ -28,8 +25,7 @@ numpy_time = timeit.timeit(lambda: numpy_sum(n), number=100)
 
 print(f"Python: {python_time:.4f}s")
 print(f"NumPy: {numpy_time:.4f}s")
-print(f"Speedup: {python_time / numpy_time:.2f}x")
-
+print(f"Speedup: {python_time/numpy_time:.2f}x")
 
 # Vectorized operations
 def python_multiply():
@@ -38,20 +34,18 @@ def python_multiply():
     b = list(range(100000))
     return [x * y for x, y in zip(a, b)]
 
-
 def numpy_multiply():
     """Vectorized multiplication in NumPy."""
     a = np.arange(100000)
     b = np.arange(100000)
     return a * b
 
-
 py_time = timeit.timeit(python_multiply, number=100)
 np_time = timeit.timeit(numpy_multiply, number=100)
 
 print(f"\nPython multiply: {py_time:.4f}s")
 print(f"NumPy multiply: {np_time:.4f}s")
-print(f"Speedup: {py_time / np_time:.2f}x")
+print(f"Speedup: {py_time/np_time:.2f}x")
 ```
 
 ### Pattern 12: Caching with functools.lru_cache
@@ -60,21 +54,18 @@ print(f"Speedup: {py_time / np_time:.2f}x")
 from functools import lru_cache
 import timeit
 
-
 def fibonacci_slow(n):
     """Recursive fibonacci without caching."""
     if n < 2:
         return n
-    return fibonacci_slow(n - 1) + fibonacci_slow(n - 2)
-
+    return fibonacci_slow(n-1) + fibonacci_slow(n-2)
 
 @lru_cache(maxsize=None)
 def fibonacci_fast(n):
     """Recursive fibonacci with caching."""
     if n < 2:
         return n
-    return fibonacci_fast(n - 1) + fibonacci_fast(n - 2)
-
+    return fibonacci_fast(n-1) + fibonacci_fast(n-2)
 
 # Massive speedup for recursive algorithms
 n = 30
@@ -94,26 +85,21 @@ print(f"Cache info: {fibonacci_fast.cache_info()}")
 ```python
 import sys
 
-
 class RegularClass:
     """Regular class with __dict__."""
-
     def __init__(self, x, y, z):
         self.x = x
         self.y = y
         self.z = z
-
 
 class SlottedClass:
     """Class with __slots__ for memory efficiency."""
-
-    __slots__ = ["x", "y", "z"]
+    __slots__ = ['x', 'y', 'z']
 
     def __init__(self, x, y, z):
         self.x = x
         self.y = y
         self.z = z
-
 
 # Memory comparison
 regular = RegularClass(1, 2, 3)
@@ -123,8 +109,8 @@ print(f"Regular class size: {sys.getsizeof(regular)} bytes")
 print(f"Slotted class size: {sys.getsizeof(slotted)} bytes")
 
 # Significant savings with many instances
-regular_objects = [RegularClass(i, i + 1, i + 2) for i in range(10000)]
-slotted_objects = [SlottedClass(i, i + 1, i + 2) for i in range(10000)]
+regular_objects = [RegularClass(i, i+1, i+2) for i in range(10000)]
+slotted_objects = [SlottedClass(i, i+1, i+2) for i in range(10000)]
 
 print(f"\nMemory for 10000 regular objects: ~{sys.getsizeof(regular) * 10000} bytes")
 print(f"Memory for 10000 slotted objects: ~{sys.getsizeof(slotted) * 10000} bytes")
@@ -136,11 +122,9 @@ print(f"Memory for 10000 slotted objects: ~{sys.getsizeof(slotted) * 10000} byte
 import multiprocessing as mp
 import time
 
-
 def cpu_intensive_task(n):
     """CPU-intensive calculation."""
     return sum(i**2 for i in range(n))
-
 
 def sequential_processing():
     """Process tasks sequentially."""
@@ -148,7 +132,6 @@ def sequential_processing():
     results = [cpu_intensive_task(1000000) for _ in range(4)]
     elapsed = time.time() - start
     return elapsed, results
-
 
 def parallel_processing():
     """Process tasks in parallel."""
@@ -158,14 +141,13 @@ def parallel_processing():
     elapsed = time.time() - start
     return elapsed, results
 
-
 if __name__ == "__main__":
     seq_time, seq_results = sequential_processing()
     par_time, par_results = parallel_processing()
 
     print(f"Sequential: {seq_time:.2f}s")
     print(f"Parallel: {par_time:.2f}s")
-    print(f"Speedup: {seq_time / par_time:.2f}x")
+    print(f"Speedup: {seq_time/par_time:.2f}x")
 ```
 
 ### Pattern 15: Async I/O for I/O-Bound Tasks
@@ -183,7 +165,6 @@ urls = [
     "https://httpbin.org/delay/1",
 ]
 
-
 def synchronous_requests():
     """Synchronous HTTP requests."""
     start = time.time()
@@ -194,12 +175,10 @@ def synchronous_requests():
     elapsed = time.time() - start
     return elapsed, results
 
-
 async def async_fetch(session, url):
     """Async HTTP request."""
     async with session.get(url) as response:
         return response.status
-
 
 async def asynchronous_requests():
     """Asynchronous HTTP requests."""
@@ -210,14 +189,13 @@ async def asynchronous_requests():
     elapsed = time.time() - start
     return elapsed, results
 
-
 # Async is much faster for I/O-bound work
 sync_time, sync_results = synchronous_requests()
 async_time, async_results = asyncio.run(asynchronous_requests())
 
 print(f"Synchronous: {sync_time:.2f}s")
 print(f"Asynchronous: {async_time:.2f}s")
-print(f"Speedup: {sync_time / async_time:.2f}x")
+print(f"Speedup: {sync_time/async_time:.2f}x")
 ```
 
 ## Database Optimization
@@ -228,13 +206,11 @@ print(f"Speedup: {sync_time / async_time:.2f}x")
 import sqlite3
 import time
 
-
 def create_db():
     """Create test database."""
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
     return conn
-
 
 def slow_inserts(conn, count):
     """Insert records one at a time."""
@@ -246,7 +222,6 @@ def slow_inserts(conn, count):
     elapsed = time.time() - start
     return elapsed
 
-
 def fast_inserts(conn, count):
     """Batch insert with single commit."""
     start = time.time()
@@ -257,7 +232,6 @@ def fast_inserts(conn, count):
     elapsed = time.time() - start
     return elapsed
 
-
 # Benchmark
 conn1 = create_db()
 slow_time = slow_inserts(conn1, 1000)
@@ -267,7 +241,7 @@ fast_time = fast_inserts(conn2, 1000)
 
 print(f"Individual inserts: {slow_time:.4f}s")
 print(f"Batch insert: {fast_time:.4f}s")
-print(f"Speedup: {slow_time / fast_time:.2f}x")
+print(f"Speedup: {slow_time/fast_time:.2f}x")
 ```
 
 ### Pattern 17: Query Optimization
@@ -290,9 +264,7 @@ conn = sqlite3.connect("example.db")
 cursor = conn.cursor()
 
 # Analyze query performance
-cursor.execute(
-    "EXPLAIN QUERY PLAN SELECT * FROM users WHERE email = ?", ("test@example.com",)
-)
+cursor.execute("EXPLAIN QUERY PLAN SELECT * FROM users WHERE email = ?", ("test@example.com",))
 print(cursor.fetchall())
 
 # Use SELECT only needed columns
@@ -308,7 +280,6 @@ print(cursor.fetchall())
 import tracemalloc
 import gc
 
-
 def memory_leak_example():
     """Example that leaks memory."""
     leaked_objects = []
@@ -318,7 +289,6 @@ def memory_leak_example():
         leaked_objects.append([i] * 100)
 
     # In real code, this would be an unintended reference
-
 
 def track_memory_usage():
     """Track memory allocations."""
@@ -334,14 +304,13 @@ def track_memory_usage():
     snapshot2 = tracemalloc.take_snapshot()
 
     # Compare
-    top_stats = snapshot2.compare_to(snapshot1, "lineno")
+    top_stats = snapshot2.compare_to(snapshot1, 'lineno')
 
     print("Top 10 memory allocations:")
     for stat in top_stats[:10]:
         print(stat)
 
     tracemalloc.stop()
-
 
 # Monitor memory
 track_memory_usage()
@@ -355,19 +324,16 @@ gc.collect()
 ```python
 import sys
 
-
 def process_file_list(filename):
     """Load entire file into memory."""
     with open(filename) as f:
         lines = f.readlines()  # Loads all lines
         return sum(1 for line in lines if line.strip())
 
-
 def process_file_iterator(filename):
     """Process file line by line."""
     with open(filename) as f:
         return sum(1 for line in f if line.strip())
-
 
 # Iterator uses constant memory
 # List loads entire file into memory
@@ -378,17 +344,13 @@ def process_file_iterator(filename):
 ```python
 import weakref
 
-
 class CachedResource:
     """Resource that can be garbage collected."""
-
     def __init__(self, data):
         self.data = data
 
-
 # Regular cache prevents garbage collection
 regular_cache = {}
-
 
 def get_resource_regular(key):
     """Get resource from regular cache."""
@@ -396,10 +358,8 @@ def get_resource_regular(key):
         regular_cache[key] = CachedResource(f"Data for {key}")
     return regular_cache[key]
 
-
 # Weak reference cache allows garbage collection
 weak_cache = weakref.WeakValueDictionary()
-
 
 def get_resource_weak(key):
     """Get resource from weak cache."""
@@ -408,7 +368,6 @@ def get_resource_weak(key):
         resource = CachedResource(f"Data for {key}")
         weak_cache[key] = resource
     return resource
-
 
 # When no strong references exist, objects can be GC'd
 ```
@@ -421,10 +380,8 @@ def get_resource_weak(key):
 import time
 from functools import wraps
 
-
 def benchmark(func):
     """Decorator to benchmark function execution."""
-
     @wraps(func)
     def wrapper(*args, **kwargs):
         start = time.perf_counter()
@@ -432,16 +389,13 @@ def benchmark(func):
         elapsed = time.perf_counter() - start
         print(f"{func.__name__} took {elapsed:.6f} seconds")
         return result
-
     return wrapper
-
 
 @benchmark
 def slow_function():
     """Function to benchmark."""
     time.sleep(0.5)
     return sum(range(1000000))
-
 
 result = slow_function()
 ```
@@ -451,18 +405,15 @@ result = slow_function()
 ```python
 # Install: pip install pytest-benchmark
 
-
 def test_list_comprehension(benchmark):
     """Benchmark list comprehension."""
     result = benchmark(lambda: [i**2 for i in range(10000)])
     assert len(result) == 10000
 
-
 def test_map_function(benchmark):
     """Benchmark map function."""
     result = benchmark(lambda: list(map(lambda x: x**2, range(10000))))
     assert len(result) == 10000
-
 
 # Run with: pytest test_performance.py --benchmark-compare
 ```

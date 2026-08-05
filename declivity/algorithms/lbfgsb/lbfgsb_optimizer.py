@@ -588,7 +588,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         # B_0^{-1} restricted to free variables, applied to the reduced gradient
         # For diagonal B_0: element-wise division
         # For dense B_0: extract the free-variable subblock and solve
-        reduced_gradient_free = reduced_gradient
         B0_inv_reduced_gradient = np.zeros(num_free)
         for j in range(num_free):
             idx = free_variable_indices[j]

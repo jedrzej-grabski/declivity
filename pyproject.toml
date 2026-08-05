@@ -57,4 +57,31 @@ includes = ["declivity/"]
 [tool.pdm.scripts]
 run-example = "python -m experiments.basic.simple_optimization"
 run-r = "python -m experiments.cross_validation.des_vs_r"
-pyright = {cmd = "npx pyright", env = {}}
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = [".agents"]
+
+[tool.ruff.lint]
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F",
+    "I",
+    "C4",
+    "SIM",
+    "RUF012",
+    "RUF022",
+    "RUF100",
+]
+# SIM300 reads the uppercase math-notation operands used throughout the
+# algorithm ports (P, B, D, C) as constants and flags faithful comparisons.
+ignore = ["SIM300"]
+
+[tool.ruff.lint.per-file-ignores]
+# Line-by-line ports of external sources: keep their control flow and local
+# names as written so they stay diffable against the original.
+"declivity/algorithms/*/*_reference.py" = ["F841", "SIM103"]
+"declivity/utils/line_search/derivative_free.py" = ["SIM108", "SIM109"]

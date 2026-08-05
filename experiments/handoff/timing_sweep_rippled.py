@@ -54,7 +54,7 @@ def build_algorithms(
     memory_size: int,
     initial_sigma: float,
 ):
-    lbfgsb_kwargs = dict(m=memory_size, pgtol=1e-10, factr=0)
+    lbfgsb_kwargs = {"m": memory_size, "pgtol": 1e-10, "factr": 0}
     armijo = ArmijoBacktracking()
 
     cmaes_only = SingleAlgorithm(

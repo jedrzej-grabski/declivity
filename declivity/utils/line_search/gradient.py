@@ -181,7 +181,6 @@ def more_thuente_search(
     Stage 2 directly minimizes f within the bracket.
     """
     step_min = 0.0
-    extrapolation_lower = 1.1
     extrapolation_upper = 4.0
     bisection_threshold = 0.66
 

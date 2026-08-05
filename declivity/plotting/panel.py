@@ -37,6 +37,7 @@ Example:
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import ClassVar
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.plotting.types import LineStyle, PanelKey, YScale
@@ -142,7 +143,7 @@ class PanelRegistry:
     the "panels comparable across N algorithms" workflow.
     """
 
-    _panels: dict[AlgorithmChoice, dict[str, Panel]] = {}
+    _panels: ClassVar[dict[AlgorithmChoice, dict[str, Panel]]] = {}
 
     @classmethod
     def register(cls, algorithm: AlgorithmChoice, *panels: Panel) -> None:

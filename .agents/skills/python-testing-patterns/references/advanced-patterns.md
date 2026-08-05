@@ -9,7 +9,6 @@ Advanced testing patterns including async code, monkeypatching, temporary files,
 import pytest
 import asyncio
 
-
 async def fetch_data(url: str) -> dict:
     """Fetch data asynchronously."""
     await asyncio.sleep(0.1)
@@ -55,7 +54,6 @@ async def test_with_async_fixture(async_client):
 # test_environment.py
 import os
 import pytest
-
 
 def get_database_url() -> str:
     """Get database URL from environment."""
@@ -105,7 +103,6 @@ def test_monkeypatch_attribute(monkeypatch):
 import pytest
 from pathlib import Path
 
-
 def save_data(filepath: Path, data: str):
     """Save data to file."""
     filepath.write_text(data)
@@ -137,7 +134,7 @@ def test_multiple_files(tmp_path):
     files = {
         "file1.txt": "Content 1",
         "file2.txt": "Content 2",
-        "file3.txt": "Content 3",
+        "file3.txt": "Content 3"
     }
 
     for filename, content in files.items():
@@ -158,9 +155,7 @@ def test_multiple_files(tmp_path):
 ```python
 # conftest.py
 """Shared fixtures for all tests."""
-
 import pytest
-
 
 @pytest.fixture(scope="session")
 def database_url():
@@ -181,7 +176,11 @@ def reset_database(database_url):
 @pytest.fixture
 def sample_user():
     """Provide sample user data."""
-    return {"id": 1, "name": "Test User", "email": "test@example.com"}
+    return {
+        "id": 1,
+        "name": "Test User",
+        "email": "test@example.com"
+    }
 
 
 @pytest.fixture
@@ -213,7 +212,6 @@ def test_with_db_backend(db_backend):
 # test_properties.py
 from hypothesis import given, strategies as st
 import pytest
-
 
 def reverse_string(s: str) -> str:
     """Reverse a string."""
@@ -268,7 +266,6 @@ Base = declarative_base()
 
 class User(Base):
     """User model."""
-
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal, TypeVar, overload
+from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 class AlgorithmFactory:
     """Factory for creating optimization algorithm instances."""
 
-    _algorithms: dict[AlgorithmChoice, type[BaseOptimizer]] = {}
-    _configs: dict[AlgorithmChoice, type[BaseConfig]] = {}
+    _algorithms: ClassVar[dict[AlgorithmChoice, type[BaseOptimizer]]] = {}
+    _configs: ClassVar[dict[AlgorithmChoice, type[BaseConfig]]] = {}
 
     @classmethod
     def register_algorithm(
@@ -158,7 +158,7 @@ class AlgorithmFactory:
     ) -> BaseOptimizer:
         """Create an optimizer instance with proper typing."""
         if algorithm not in cls._algorithms:
-            available = ", ".join(str(k) for k in cls._algorithms.keys())
+            available = ", ".join(str(k) for k in cls._algorithms)
             raise ValueError(f"Unknown algorithm '{algorithm}'. Available: {available}")
 
         optimizer_class = cls._algorithms[algorithm]
@@ -190,7 +190,7 @@ class AlgorithmFactory:
     ) -> BaseConfig:
         """Create a configuration object for the specified algorithm."""
         if algorithm not in cls._configs:
-            available = ", ".join(str(k) for k in cls._configs.keys())
+            available = ", ".join(str(k) for k in cls._configs)
             raise ValueError(f"Unknown algorithm '{algorithm}'. Available: {available}")
 
         config_class = cls._configs[algorithm]

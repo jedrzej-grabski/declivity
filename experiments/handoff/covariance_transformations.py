@@ -13,6 +13,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 
 from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
@@ -101,7 +102,13 @@ def run_handoff_study(
         if rotation_mode == "none":
             func = Ellipsoid(dimensions)
             scales = 10.0 ** (6.0 * np.arange(dimensions) / max(dimensions - 1, 1))
-            gradient_fn = lambda x, s=scales: 2.0 * s * x
+
+            def ellipsoid_gradient(
+                x: NDArray[np.float64], s: NDArray[np.float64] = scales
+            ) -> NDArray[np.float64]:
+                return 2.0 * s * x
+
+            gradient_fn = ellipsoid_gradient
             true_hessian = np.diag(2.0 * scales)
         else:
             func = RotatedEllipsoid(dimensions, rotation=rotation_mode, seed=42)

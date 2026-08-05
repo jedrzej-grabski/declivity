@@ -101,6 +101,16 @@ pip install -e .
 Requirements: Python 3.12, NumPy 2.x, SciPy 1.15+, Matplotlib 3.10+,
 opfunu (CEC2017), seaborn, joblib.
 
+Development tooling is driven by the `Justfile`, with tool versions pinned
+there so results are reproducible across machines: `just fmt` / `just fmt-check`
+(ruff format), `just lint` / `just lint-fix` (ruff check), `just types`
+(basedpyright). Bare `just` runs `fmt-check`, `lint` and `types` in sequence.
+The ruff rule set lives in `[tool.ruff.lint]` in `pyproject.toml`; the
+line-by-line ports (`*_reference.py`, `line_search/derivative_free.py`) carry
+narrow per-file ignores so they stay diffable against their original sources.
+`just types` reads `pyrightconfig.json`, which currently checks `declivity/`
+only — `experiments/` is not yet type-clean.
+
 ## Quick start
 
 ```python

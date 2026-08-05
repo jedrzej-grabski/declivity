@@ -1,8 +1,19 @@
+ruff_version := "0.16.1"
+basedpyright_version := "1.39.9"
+
+default: fmt-check lint types
+
 fmt:
-    uvx ruff format
+    uvx ruff@{{ruff_version}} format
+
+fmt-check:
+    uvx ruff@{{ruff_version}} format --check
 
 lint:
-    uvx ruff check --fix
+    uvx ruff@{{ruff_version}} check
+
+lint-fix:
+    uvx ruff@{{ruff_version}} check --fix
 
 types:
-    npx basedpyright
+    npx basedpyright@{{basedpyright_version}}

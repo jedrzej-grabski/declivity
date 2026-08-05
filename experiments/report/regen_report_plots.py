@@ -108,7 +108,7 @@ def regen_panel(
 
     problems = [
         stub_problem(p_name, problem_dims.get(p_name, 0))
-        for p_name in sorted(set(p for p, _ in traces.keys()))
+        for p_name in sorted({p for p, _ in traces})
     ]
 
     plot_benchmark_convergence(
@@ -223,7 +223,7 @@ def regen_combined_baseline(base: Path) -> None:
         StubAlgorithm(name=n, color=COLOR_MAP.get(n, "#7f8c8d")) for n in seen_names
     ]
 
-    problem_names = sorted(set(p for p, _ in combined))
+    problem_names = sorted({p for p, _ in combined})
     problems = [stub_problem(p, problem_dims.get(p, 10)) for p in problem_names]
 
     plot_benchmark_convergence(
@@ -287,7 +287,7 @@ def regen_combined_low_amp(base: Path) -> None:
     ]
 
     problem_names = sorted(
-        set(p for p, _ in combined), key=lambda n: problem_dims.get(n, 0)
+        {p for p, _ in combined}, key=lambda n: problem_dims.get(n, 0)
     )
     problems = [stub_problem(p, problem_dims.get(p, 0)) for p in problem_names]
 

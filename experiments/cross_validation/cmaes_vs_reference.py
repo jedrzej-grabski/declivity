@@ -541,7 +541,8 @@ def run(seeds: list[int], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_rows: list[dict] = []
 
-    population_size_for_dim = lambda d: 4 + math.floor(3 * math.log(d))
+    def population_size_for_dim(d: int) -> int:
+        return 4 + math.floor(3 * math.log(d))
 
     for spec in build_specs():
         name, _ = _instantiate(spec)
