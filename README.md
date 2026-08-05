@@ -133,7 +133,7 @@ declivity/
 │   │                             repair strategies, initial-point generators,
 │   │                             population initializers, helpers
 │   ├── logging/                  BaseLogData / PopulationLogData + per-algo loggers
-│   └── plotting/                 Declarative panel system (Panel + 8 entry points)
+│   └── plotting/                 Declarative panel system (Panel + 9 entry points)
 │
 ├── experiments/                  Runnable studies (one script per study)
 │   ├── basic/                    Tutorial demos, sanity checks, declarative API demos

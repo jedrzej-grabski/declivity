@@ -7,13 +7,20 @@ or a single overlay axes) and draw the curves through the *same*
 so a benchmark of one seed renders as a line and a benchmark of 25 renders as
 a median + IQR band, through one code path.
 
-For now only convergence (best fitness vs. evaluations) and final-fitness
-distributions are first-class here, because those are the quantities every
-``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can be
-banded across seeds via :func:`~declivity.plotting.unified.plot_panels` with the
-matching panel key.
+Convergence (best fitness vs. evaluations), final-fitness distributions and
+target-hitting ECDFs are first-class here, because those are the quantities
+every ``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can
+be banded across seeds via :func:`~declivity.plotting.unified.plot_panels`
+with the matching panel key.
+
+The ECDF entry point takes a single ``problem`` rather than an iterable,
+unlike its siblings: it collapses one problem's runs into one curve per
+algorithm. The suite-wide COCO figure, which pools (problem, target) pairs
+across a whole function family into a single curve, is a different
+aggregation and is not built here yet.
 """
 
+import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -386,6 +393,32 @@ def plot_convergence_overlay(
     return fig
 
 
+def _problem_optimum(problem: Problem) -> float:
+    """``f*`` for ``problem``, or 0.0 with a warning if it publishes none.
+
+    ``BenchmarkFunction.global_minimum`` is the pair ``(x*, f*)``, so only
+    the second element is wanted. CEC problems report a nonzero ``f*`` (the
+    ``100·i`` bias) and ``x*`` as NaN, which is why the value is taken
+    positionally and checked for finiteness rather than trusted wholesale.
+    """
+    minimum = getattr(problem.function, "global_minimum", None)
+    if minimum is not None:
+        try:
+            value = float(minimum[1])
+        except (TypeError, IndexError, ValueError):
+            value = float("nan")
+        if np.isfinite(value):
+            return value
+    warnings.warn(
+        f"{problem.name!r} publishes no finite global minimum; thresholding "
+        f"raw fitness as if f*=0. Pass global_minimum= explicitly, or "
+        f"gap_to_optimum=False to say so deliberately.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+    return 0.0
+
+
 def plot_benchmark_ecdf(
     traces: dict[tuple[str, str], list[RunTrace]],
     problem: Problem,
@@ -394,8 +427,9 @@ def plot_benchmark_ecdf(
     n_thresholds: int = 50,
     num_grid_points: int = 200,
     threshold_floor: float = DEFAULT_THRESHOLD_FLOOR,
-    global_minimum: float = 0.0,
-    normalize: bool = True,
+    threshold_ceiling: float | None = None,
+    global_minimum: float | None = None,
+    gap_to_optimum: bool = True,
     annotate_auc: bool = True,
     title: str | None = None,
     xlabel: str = "Function Evaluations",
@@ -420,13 +454,23 @@ def plot_benchmark_ecdf(
         algorithms: Draw order; ``color`` / ``name`` read from each.
         n_thresholds: Number of log-spaced target levels.
         num_grid_points: Resolution of the shared evaluation-budget grid.
+        threshold_ceiling: Fix the top of the target range instead of taking
+            it from the pooled data. Needed for curves that have to be
+            comparable across separate figures.
         global_minimum: ``problem``'s known ``f*``, subtracted from
             ``best_fitness`` before thresholding (see
-            :mod:`~declivity.benchmarking.ecdf`). Ignored when
-            ``normalize=False``.
-        normalize: Whether to gap-normalise against ``global_minimum``
-            (default) or use raw ``best_fitness`` values.
+            :mod:`~declivity.benchmarking.ecdf`). ``None`` (default) reads it
+            off ``problem.function.global_minimum``, falling back to 0.0 with
+            a warning when the objective does not publish one. Passing 0.0
+            explicitly is only right for a problem whose optimum really is
+            zero — on the CEC suite ``f*`` is a nonzero bias, and getting it
+            wrong makes every target below ``f*`` unreachable, so all curves
+            plateau together and the figure discriminates nothing. Ignored
+            when ``gap_to_optimum=False``.
+        gap_to_optimum: Whether to subtract ``global_minimum`` (default) or
+            threshold raw ``best_fitness`` values.
         annotate_auc: Append each curve's normalised AUC to its legend label.
+            Integrated in the log budget domain, matching the drawn axis.
         save_path: If set, the figure is written here (dpi 150).
 
     Returns:
@@ -441,26 +485,32 @@ def plot_benchmark_ecdf(
     if not pooled_traces:
         raise ValueError(f"No traces found for problem {problem.name!r}")
 
+    if global_minimum is None:
+        global_minimum = _problem_optimum(problem) if gap_to_optimum else 0.0
+
     thresholds = threshold_grid(
         pooled_traces,
         n_thresholds=n_thresholds,
         floor=threshold_floor,
         global_minimum=global_minimum,
-        normalize=normalize,
+        gap_to_optimum=gap_to_optimum,
+        ceiling=threshold_ceiling,
     )
     x_grid = series_grid(pooled_traces, "evaluations", num_grid_points)
 
     fig, ax = plt.subplots(figsize=figsize)
+    seed_counts: list[int] = []
     for algorithm in algorithms_list:
         algorithm_traces = traces.get((problem.name, algorithm.name), [])
         if not algorithm_traces:
             continue
+        seed_counts.append(len(algorithm_traces))
         curve = aggregate_ecdf(
             algorithm_traces,
             thresholds,
             x_grid,
             global_minimum=global_minimum,
-            normalize=normalize,
+            gap_to_optimum=gap_to_optimum,
         )
         label = algorithm.name
         if annotate_auc:
@@ -471,10 +521,20 @@ def plot_benchmark_ecdf(
     ax.set_xlabel(xlabel, fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
     ax.set_ylim(0.0, 1.02)
-    if title:
-        ax.set_title(title, fontsize=12)
+    # Record what the curves were measured against; without it the figure
+    # does not say which targets, dimension or seed count produced it, and
+    # the target range moves with the pooled data unless fixed.
+    subtitle = (
+        f"{problem.name}  (d={problem.dimensions}, "
+        f"n_seeds={max(seed_counts) if seed_counts else 0}, "
+        f"{n_thresholds} targets in [{thresholds[0]:.1e}, {thresholds[-1]:.1e}]"
+        f"{'' if gap_to_optimum else ', raw fitness'})"
+    )
+    ax.set_title(f"{title}\n{subtitle}" if title else subtitle, fontsize=12)
     ax.grid(True, alpha=0.25, which="both")
-    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)
+    # See plot_convergence_overlay: matplotlib 3.11 narrowed loc to a Literal
+    # union that a plain str cannot satisfy statically.
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
     ax.tick_params(axis="both", labelsize=10)
     fig.tight_layout()
 

@@ -32,6 +32,7 @@ plots), where custom code belongs, and the anti-patterns to avoid.
 | `covariance_adaptation.py`   | CMA-ES on Sphere / Ellipsoid; visualizes empirical covariance evolution (eigenvalues, condition, 2D ellipse snapshots) | `plots/basic/covariance_adaptation/`    |
 | `declarative_plotting.py`    | End-to-end demo of `plot_metrics` and `plot_comparison` — including `PanelRegistry.common([algos])` introspection | `plots/basic/declarative_plotting/`     |
 | `declarative_benchmark.py`   | End-to-end demo of `plot_benchmark_convergence` and `plot_benchmark_boxplot` with a real CMA-ES → L-BFGS-B handoff | `plots/basic/declarative_benchmark/`    |
+| `ecdf_showcase.py`           | End-to-end demo of `plot_benchmark_ecdf`; also shows what a wrong `f*` does to the curves, and the fixed-target-range option | `plots/basic/ecdf_showcase/`            |
 | `custom_handoff.py`          | Builds a DES → L-BFGS-B handoff from scratch by subclassing `HandoffAlgorithm` (one `run_phases()` method) | `plots/basic/custom_handoff/`           |
 | `custom_algorithm.py`        | Multi-start CMA-ES via `BenchmarkAlgorithm` directly; shows the generic extension point | `plots/basic/custom_algorithm/`         |
 | `plotter_showcase.py`        | Three one-call figures proving the declarative plotter needs no per-algorithm code (cross-family overlay, multi-seed median+IQR, all-diagnostics grid). Write-up: `docs/NEW_CODE_Plotter_showcase.md` | `plots/basic/plotter_showcase/`         |

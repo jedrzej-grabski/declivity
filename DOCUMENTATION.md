@@ -498,7 +498,7 @@ The framework ships a declarative plotter built around `Panel` specs:
 **you describe what a panel is**, the registry knows what each algorithm
 exposes, and the rendering functions read both.
 
-### Eight entry points
+### Nine entry points
 
 All in `declivity.plotting`:
 
@@ -509,6 +509,7 @@ All in `declivity.plotting`:
 | `plot_evaluation_bars(results)` | horizontal bar chart of total evaluations |
 | `plot_benchmark_convergence(traces, problems, algorithms)` | multi-seed median + IQR per algorithm |
 | `plot_benchmark_boxplot(traces, problems, algorithms)` | final-fitness distribution per algorithm |
+| `plot_benchmark_ecdf(traces, problem, algorithms)` | fraction of shared target levels reached vs. budget, one curve per algorithm (single problem) |
 | `plot_function_landscape(func)` | 2D contour of an objective with optional Hessian arrows |
 | `plot_function_landscape_grid(funcs)` | several landscapes side-by-side |
 | `plot_matrix_diagonal_comparison(matrices, reference)` | sorted-diagonal vs reference matrix |
