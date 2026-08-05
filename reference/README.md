@@ -28,6 +28,11 @@ Historical CSVs from an earlier ad-hoc comparison of Python DES against
 hand-run R outputs. Superseded by the harness described below; kept for
 provenance only.
 
+Regenerated against `cecpy`. The earlier copies came from `opfunu`, whose
+CEC2017 transformations disagree with the reference definitions (see
+`docs/cec_provider_migration.md`), so anything derived from them is not
+comparable with current output. `just run-r` rewrites both files.
+
 | File                                  | Format                                            |
 |---------------------------------------|---------------------------------------------------|
 | `python_convergence_f<id>_d<dim>.csv` | `[max_iter, runs]` matrix of best-so-far fitness |

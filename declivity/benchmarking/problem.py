@@ -20,8 +20,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from declivity.cec import CECEdition
-from declivity.cec.problem import CECProblem
+from declivity.cec import CECEdition, CECProblem
 from declivity.utils.benchmark_functions import BenchmarkFunction
 from declivity.utils.initial_point_generator import (
     FixedInitialPointGenerator,

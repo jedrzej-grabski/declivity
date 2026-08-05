@@ -26,9 +26,14 @@ CEC_UPPER_BOUND = 100.0
 
 
 @cache
-def _evaluator(edition: CECEdition) -> CECEvaluator:
-    """One CECEvaluator per edition, shared by every CECProblem. Avoids redundant repeated disk IO by caching."""
-    return CECEvaluator(edition, benchmark_valid_dimensions(edition))
+def _evaluator(edition: CECEdition, dimensions: int) -> CECEvaluator:
+    """One CECEvaluator per (edition, dimensions), shared by every CECProblem.
+
+    Keyed on the dimension as well as the edition so only the shift and
+    rotation tables actually needed get read off disk. Loading every valid
+    dimension for CEC2017 costs ~0.26s against ~0.004s for a single one.
+    """
+    return CECEvaluator(edition, [dimensions])
 
 
 class CECProblem(BenchmarkFunction):
@@ -57,12 +62,29 @@ class CECProblem(BenchmarkFunction):
         super().__init__(dimensions)
         self.edition = edition
         self.function_number = function_number
-        self._evaluator = _evaluator(edition)
+        self._evaluator = _evaluator(edition, dimensions)
+
+    def __getstate__(self) -> dict[str, object]:
+        # CECEvaluator is a nanobind extension object and cannot be pickled,
+        # so it is dropped here and rebuilt from the cache on unpickling.
+        # Without this, a CECProblem cannot cross a process boundary and
+        # Benchmark(num_workers>1) fails.
+        state = self.__dict__.copy()
+        del state["_evaluator"]
+        return state
+
+    def __setstate__(self, state: dict[str, object]) -> None:
+        self.__dict__.update(state)
+        self._evaluator = _evaluator(self.edition, self.dimensions)
 
     def __call__(self, x: NDArray[np.float64]) -> float:
-        # cecxx's evaluator always returns one result per input column; a
-        # bare 1D array of length `dimensions` counts as a single column.
-        arr = np.ascontiguousarray(x, dtype=np.float64)
+        # cecxx's evaluator takes a (dimensions, num_points) matrix and
+        # returns one result per column. The shape is explicit here because
+        # the binding reads input.shape(1) unconditionally, so handing it a
+        # 1D array is an out-of-bounds read that only happens to work.
+        arr = np.ascontiguousarray(x, dtype=np.float64).reshape(-1, 1)
+        # cecpy's stub declares Sequence[float]; the binding actually reads
+        # shape(0) and shape(1) off the array, so the 2D form is required.
         return float(self._evaluator(self.function_number, arr)[0])  # pyright: ignore[reportArgumentType]
 
     @property

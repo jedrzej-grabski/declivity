@@ -34,6 +34,11 @@ just run-example      # Sphere demo (DES on 10D Sphere)
 just run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
 ```
 
+`cecpy` ships no wheels, so `uv sync` builds it from source. That needs a
+compiler with full C++23 library support (`<print>`, `<format>`,
+`std::unreachable`); cmake and ninja are pulled in automatically. Apple clang
+17 on macOS arm64 and GCC 14+ work.
+
 Or directly:
 
 ```bash
