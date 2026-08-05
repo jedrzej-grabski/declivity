@@ -7,11 +7,13 @@ import declivity.algorithms.cmaes.cmaes_optimizer
 # Import optimizer and logger modules to trigger @register_optimizer and
 # @register_logger decorators.  These must come after the factory imports so
 # the factories are already defined when the decorators execute.
+import declivity.algorithms.bfgs.bfgs_optimizer
 import declivity.algorithms.des.des_optimizer
 import declivity.algorithms.lbfgsb.lbfgsb_optimizer
 import declivity.algorithms.mfcmaes.mfcmaes_optimizer
 import declivity.algorithms.neldermead.neldermead_optimizer
 import declivity.algorithms.powell.powell_optimizer
+import declivity.logging.bfgs_logger
 import declivity.logging.cmaes_logger
 import declivity.logging.des_logger
 import declivity.logging.lbfgsb_logger

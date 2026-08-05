@@ -9,3 +9,4 @@ class AlgorithmChoice(Enum):
     LBFGSB = "LBFGSB"
     POWELL = "POWELL"
     NELDERMEAD = "NELDERMEAD"
+    BFGS = "BFGS"

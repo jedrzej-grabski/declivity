@@ -36,6 +36,7 @@ from declivity.utils.line_search import (
     MoreThuenteLineSearch,
     max_feasible_step,
 )
+from declivity.utils.optimality import projected_gradient_inf_norm
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
@@ -200,20 +201,9 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self, x: NDArray[np.float64], gradient: NDArray[np.float64]
     ) -> float:
         """Infinity norm of the projected gradient (KKT optimality measure)."""
-        projected_gradient = gradient.copy()
-        negative_mask = gradient < 0
-        positive_mask = gradient > 0
-        projected_gradient[negative_mask] = np.maximum(
-            x[negative_mask] - self.upper_bounds[negative_mask],
-            gradient[negative_mask],
+        return projected_gradient_inf_norm(
+            x, gradient, self.lower_bounds, self.upper_bounds
         )
-        projected_gradient[positive_mask] = np.minimum(
-            x[positive_mask] - self.lower_bounds[positive_mask],
-            gradient[positive_mask],
-        )
-        if len(projected_gradient) == 0:
-            return 0.0
-        return float(np.max(np.abs(projected_gradient)))
 
     # L-BFGS compact representation
 
