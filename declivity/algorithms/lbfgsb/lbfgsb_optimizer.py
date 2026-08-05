@@ -743,7 +743,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self._reset_correction_memory()
         self._cached_gradient: NDArray[np.float64] | None = None
 
-        x = np.clip(self.initial_point.copy(), self.lower_bounds, self.upper_bounds)
+        x = self.constraint_handler.repair(self.initial_point.copy())
 
         function_value, gradient = self._evaluate_function_and_gradient(x)
         best_fitness = function_value
@@ -905,17 +905,19 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             consecutive_resets = 0
             step_vector = accepted_step * direction
             x_line_search = x + step_vector
-            x_new = np.clip(x_line_search, self.lower_bounds, self.upper_bounds)
-            clip_moved_x = not np.array_equal(x_new, x_line_search)
+            x_new = self.constraint_handler.repair(x_line_search)
+            repair_moved_x = not np.array_equal(x_new, x_line_search)
             step_vector = x_new - x
 
-            if self._cached_gradient is not None:
-                gradient_new = self._cached_gradient
-                function_value_new = line_search_result.f_new
-            elif clip_moved_x:
+            if repair_moved_x:
+                # The line search's f/gradient describe x_line_search, not
+                # the repaired point — re-evaluate both.
                 function_value_new, gradient_new = self._evaluate_function_and_gradient(
                     x_new
                 )
+            elif self._cached_gradient is not None:
+                gradient_new = self._cached_gradient
+                function_value_new = line_search_result.f_new
             else:
                 # The line search already evaluated f at exactly x_new; only
                 # the gradient is missing.
