@@ -3,7 +3,7 @@
 The SciPy reference is :func:`scipy.optimize.minimize` with
 ``method="L-BFGS-B"`` — a Python wrapper over the Fortran v3.0
 implementation by Zhu, Byrd, Lu, and Nocedal.  This module pits it
-against :class:`~src.algorithms.lbfgsb.LBFGSBOptimizer`, the pure-Python
+against :class:`~declivity.algorithms.lbfgsb.LBFGSBOptimizer`, the pure-Python
 reimplementation in declivity.
 
 Because L-BFGS-B is **deterministic** given an initial point, the

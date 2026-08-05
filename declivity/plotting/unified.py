@@ -17,7 +17,7 @@ thing at different seed counts:
 per group for a single field, and *that one function* is what every public
 entry point (``plot_metrics``, ``plot_comparison``, ``plot_benchmark_convergence``,
 ``plot_convergence_overlay``, and the new :func:`plot_panels`) renders through.
-So a :class:`~src.plotting.panel.Panel` registered once drives all of them.
+So a :class:`~declivity.plotting.panel.Panel` registered once drives all of them.
 
 :func:`plot_panels` is the unified front door: pass it a single
 ``OptimizationResult`` and it draws that run's panels as lines; pass it a
@@ -59,8 +59,8 @@ PanelSelection = Sequence["PanelKey | str | Panel"] | PanelSet | str | None
 class RunSeries(Protocol):
     """A single run's named per-step arrays.
 
-    Satisfied by both :class:`~src.logging.base_logger.BaseLogData` (a live
-    single run, every field) and :class:`~src.benchmarking.run_trace.RunTrace`
+    Satisfied by both :class:`~declivity.logging.base_logger.BaseLogData` (a live
+    single run, every field) and :class:`~declivity.benchmarking.run_trace.RunTrace`
     (a trimmed, persisted run). ``get_series`` returns the array for a panel's
     ``field`` / ``x_field`` by name, or ``None`` when that field wasn't
     retained — which the plotter renders as an empty series, never an error.
@@ -89,7 +89,7 @@ class RunGroup:
     or the matplotlib cycle."""
 
     algorithm: AlgorithmChoice | None = None
-    """Which :class:`~src.plotting.panel.PanelRegistry` bucket this group's
+    """Which :class:`~declivity.plotting.panel.PanelRegistry` bucket this group's
     panels resolve against. Enables semantic keys across algorithms (the same
     ``step_size`` key → ``sigma`` here, ``Ft`` there). ``None`` falls back to
     a reference panel's field."""
@@ -311,7 +311,7 @@ def draw_single_run(
     *,
     floor: float | None = None,
 ) -> bool:
-    """Draw every :class:`~src.plotting.panel.Series` of one panel from one run.
+    """Draw every :class:`~declivity.plotting.panel.Series` of one panel from one run.
 
     The multi-series single-run view (best/mean/median on one axes). Distinct
     from :func:`draw_groups` (one curve per *group*); here the several curves

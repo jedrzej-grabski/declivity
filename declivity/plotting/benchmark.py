@@ -1,16 +1,16 @@
 """Multi-seed benchmark plotting — median + IQR bands over ``RunTrace`` lists.
 
-Counterpart to :py:mod:`src.plotting.declarative` for the multi-seed,
+Counterpart to :py:mod:`declivity.plotting.declarative` for the multi-seed,
 multi-problem case. These functions lay out the grid (one panel per problem,
 or a single overlay axes) and draw the curves through the *same*
-:func:`~src.plotting.unified.draw_groups` core the single-run plotters use —
+:func:`~declivity.plotting.unified.draw_groups` core the single-run plotters use —
 so a benchmark of one seed renders as a line and a benchmark of 25 renders as
 a median + IQR band, through one code path.
 
 For now only convergence (best fitness vs. evaluations) and final-fitness
 distributions are first-class here, because those are the quantities every
 ``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can be
-banded across seeds via :func:`~src.plotting.unified.plot_panels` with the
+banded across seeds via :func:`~declivity.plotting.unified.plot_panels` with the
 matching panel key.
 """
 

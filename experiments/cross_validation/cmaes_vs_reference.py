@@ -1,9 +1,9 @@
 """Cross-validation: framework-native CMA-ES vs the historical reference port.
 
-The framework-native :class:`~src.algorithms.cmaes.CMAESOptimizer` is a
+The framework-native :class:`~declivity.algorithms.cmaes.CMAESOptimizer` is a
 clean rewrite that uses the framework's
-:class:`~src.utils.repair_strategies.RepairStrategy` and
-:class:`~src.utils.population_initializers.PopulationInitializer` seams.
+:class:`~declivity.utils.repair_strategies.RepairStrategy` and
+:class:`~declivity.utils.population_initializers.PopulationInitializer` seams.
 In the *default* configuration the two implementations consume the RNG
 stream differently (the framework's
 ``MeanSigmaPopulationInitializer`` draws a ``(dim, λ)`` block at

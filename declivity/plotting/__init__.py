@@ -16,7 +16,7 @@ Entry points for diagnostic plots:
   comparison against a reference matrix.
 
 Adding a new panel: one ``PanelRegistry.register(...)`` call. See
-:py:mod:`src.plotting.standard_panels` for the four built-in algorithms.
+:py:mod:`declivity.plotting.standard_panels` for the four built-in algorithms.
 """
 
 # Importing standard_panels triggers all panel registrations as a side

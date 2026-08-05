@@ -79,7 +79,7 @@ class RunTrace:
     def get_series(self, name: str) -> list[float] | None:
         """Return the per-step array for ``name``, or ``None`` if not present.
 
-        This is the :class:`~src.plotting.unified.RunSeries` contract: the
+        This is the :class:`~declivity.plotting.unified.RunSeries` contract: the
         plotter asks for a panel's ``field`` / ``x_field`` by name and gets
         back an array regardless of whether the source is a full ``LogData``
         or a trimmed, persisted ``RunTrace``. ``evaluations`` and

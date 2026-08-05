@@ -1,10 +1,10 @@
 """Cross-validation: framework-native DES vs the literal port of DES.R.
 
 Mirrors :mod:`cmaes_vs_reference`.  The "R reference" here is
-:func:`src.algorithms.des.des_reference.des_reference` — a line-by-line
+:func:`declivity.algorithms.des.des_reference.des_reference` — a line-by-line
 Python translation of ``thesis-experiments/des_comparison/DES.R``,
 driven with the same NumPy seed as the framework-native
-:class:`src.algorithms.des.des_optimizer.DESOptimizer`.
+:class:`declivity.algorithms.des.des_optimizer.DESOptimizer`.
 
 Parity is assessed distributionally over many seeds: convergence
 trajectories should overlap, and the final-fitness samples should be

@@ -2,7 +2,7 @@
 
 A dedicated, single-run diagnostic that the panel/registry system does not
 cover: it overlays three curves derived from one
-:class:`~src.benchmarking.algorithm_run.InterleaveResult`:
+:class:`~declivity.benchmarking.algorithm_run.InterleaveResult`:
 
 - the **overall-best staircase** (the headline curve) — monotone, combining
   CMA-ES progress with each L-BFGS-B drop;
@@ -17,7 +17,7 @@ resumes CMA-ES byte-for-byte), just stretched along the evaluation axis by
 the budget the probes consume.
 
 This is the multi-seed counterpart's sibling: where
-:func:`src.plotting.plot_benchmark_convergence` shows medians across seeds,
+:func:`declivity.plotting.plot_benchmark_convergence` shows medians across seeds,
 this dissects a *single* run so the staircase mechanism is legible.
 """
 

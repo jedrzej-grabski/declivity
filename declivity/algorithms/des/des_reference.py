@@ -1,7 +1,7 @@
 """Literal Python port of ``thesis-experiments/des_comparison/DES.R``.
 
 This module is the cross-validation oracle for
-:class:`~src.algorithms.des.des_optimizer.DESOptimizer`.  It is *not*
+:class:`~declivity.algorithms.des.des_optimizer.DESOptimizer`.  It is *not*
 plugged into the framework — no :class:`PopulationOptimizer` base, no
 logger, no constraint-handler injection.  Each block of code below
 corresponds line-for-line with a block in ``DES.R`` so that the port can

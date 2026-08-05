@@ -2,7 +2,7 @@
 ``nm-cma-es-vectorized.R``.
 
 Mirrors :mod:`des_vs_reference`.  The "R reference" here is
-:func:`src.algorithms.mfcmaes.mfcmaes_reference.nm_cma_es_vectorized`,
+:func:`declivity.algorithms.mfcmaes.mfcmaes_reference.nm_cma_es_vectorized`,
 a line-by-line Python translation of
 ``thesis-paper/nm-cma-es-vectorized.R``.
 
