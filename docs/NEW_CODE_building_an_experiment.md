@@ -19,7 +19,7 @@ document is the terser conventions + anti-pattern reference.
 ## The golden rule
 
 > **An experiment is thin orchestration. Anything reusable — a function, an
-> algorithm, a plot type, an optimizer capability — lives in `src/`, not in
+> algorithm, a plot type, an optimizer capability — lives in `declivity/`, not in
 > the experiment file.**
 
 A good `experiments/<group>/<name>.py` only: builds `Problem`s, builds a list
@@ -30,16 +30,16 @@ points. If you find yourself writing a `for` loop over seeds, raw
 ## Anatomy of an experiment
 
 ```
-Problem(s)            what you optimize         (src/benchmarking/problem.py)
-   │                                            + src/utils/benchmark_functions.py
+Problem(s)            what you optimize         (declivity/benchmarking/problem.py)
+   │                                            + declivity/utils/benchmark_functions.py
    ▼
-Algorithm specs       what you compare          (src/benchmarking/algorithm_run.py)
+Algorithm specs       what you compare          (declivity/benchmarking/algorithm_run.py)
    │   name · color · run(problem, x0, seed) -> RunTrace
    ▼
 Benchmark             runs every (problem×algo×seed), persists traces
    │   bench.traces : {(problem, algorithm): [RunTrace]}
    ▼
-Declarative plots     read traces, render        (src/plotting/*)
+Declarative plots     read traces, render        (declivity/plotting/*)
 ```
 
 ---
@@ -57,7 +57,7 @@ problem = Problem.from_benchmark(
 )  # picks up bounds + gradient
 ```
 
-**Custom objective** → add it to `src/utils/benchmark_functions.py` as a
+**Custom objective** → add it to `declivity/utils/benchmark_functions.py` as a
 `BenchmarkFunction` (implement `__call__`, `bounds`, `global_minimum`, and
 `gradient` if you want analytic gradients for L-BFGS-B). Compose with the
 wrappers instead of writing a new class when you can:
@@ -129,7 +129,7 @@ interleaved scheme needed to **pause and resume** CMA-ES. The conforming move:
 
 Do **not** fork the optimizer or reach into private state from the experiment.
 If the experiment wants behaviour the optimizer can't provide, that's a signal
-to extend `src/`, not to hack around it in `experiments/`.
+to extend `declivity/`, not to hack around it in `experiments/`.
 
 ---
 
@@ -212,9 +212,9 @@ Some figures genuinely aren't covered: the interleaved **staircase**
 carry) and the CMABFGS **single-seed overlay with a secondary "CMA-ES
 iterations" axis**. Going custom is fine — but follow three rules:
 
-1. **The plot function lives in `src/plotting/`**, not in the experiment —
+1. **The plot function lives in `declivity/plotting/`**, not in the experiment —
    alongside the other non-panel specialized plots (`landscape.py`,
-   `diagnostics.py`, `interleaved.py`). Export it from `src/plotting/__init__.py`.
+   `diagnostics.py`, `interleaved.py`). Export it from `declivity/plotting/__init__.py`.
 2. **It consumes `RunTrace` (or a richer dataclass you return) and takes the
    colours from the algorithm objects** — it does not re-derive colour from a
    string label.
@@ -225,11 +225,11 @@ iterations" axis**. Going custom is fine — but follow three rules:
    boundary; extend it if you need richer per-seed diagnostics").
 
 Both custom figures in this study do it right, and both now live in
-`src/plotting/`:
+`declivity/plotting/`:
 
-- `plot_interleaved_convergence` (in `src/plotting/interleaved.py`) takes an
+- `plot_interleaved_convergence` (in `declivity/plotting/interleaved.py`) takes an
   `InterleaveResult` and draws the staircase.
-- `plot_convergence_overlay` (in `src/plotting/benchmark.py`) draws one
+- `plot_convergence_overlay` (in `declivity/plotting/benchmark.py`) draws one
   semilogy line per algorithm on a single panel, colours read from
   `algorithms`, with an optional secondary "iterations" axis:
 
@@ -241,7 +241,7 @@ plot_convergence_overlay(traces, problem, algorithms, *,
 `cmabfgs_replication.py` calls `plot_convergence_overlay(bench.traces, ...)` —
 the conforming form. *(An early draft instead had a `plot_replication`
 function building raw matplotlib inside the experiment and re-deriving colours
-from labels; extracting it into `src/plotting/` is what produced the reusable
+from labels; extracting it into `declivity/plotting/` is what produced the reusable
 `plot_convergence_overlay`.)*
 
 ---
@@ -275,17 +275,17 @@ re-run — but a multi-seed `Benchmark` study should always re-plot from JSON.)
 ## Conventions checklist
 
 - [ ] Problem built with `Problem.from_benchmark`; any custom objective is a
-      `BenchmarkFunction` in `src/utils/benchmark_functions.py` (compose
+      `BenchmarkFunction` in `declivity/utils/benchmark_functions.py` (compose
       `RotatedFunction`/`ShiftedFunction` where possible).
 - [ ] Each contender is `name` + `color` + `run()->RunTrace` via the narrowest
       base class; configs come from a dimension-keyed `config_factory`.
 - [ ] New optimizer capability = additive, defaulted API on the optimizer in
-      `src/`, proven non-regressing — never a fork or private-state hack.
+      `declivity/`, proven non-regressing — never a fork or private-state hack.
 - [ ] Runs go through `Benchmark` (even single-seed); rely on its
       auto-persistence and same-seed `x0`.
 - [ ] Figures use `src.plotting` entry points; the `algorithms` list supplies
       colours/names.
-- [ ] Any custom plot lives in `src/plotting/`, consumes `RunTrace`/a returned
+- [ ] Any custom plot lives in `declivity/plotting/`, consumes `RunTrace`/a returned
       dataclass, and takes colours from the algorithms — not from labels.
 - [ ] `experiments/README.md` row + `docs/NEW_CODE_*.md` write-up.
 
@@ -294,12 +294,12 @@ re-run — but a multi-seed `Benchmark` study should always re-plot from JSON.)
 | Anti-pattern | Why it's wrong | Fix |
 |---|---|---|
 | Hand-rolled `(algo × seed)` loop | loses fairness/persistence/parallelism plumbing | `Benchmark([...], seeds=[...]).run()` |
-| `matplotlib` inside the experiment | un-reusable, duplicates layout per study | a function in `src/plotting/`, exported |
+| `matplotlib` inside the experiment | un-reusable, duplicates layout per study | a function in `declivity/plotting/`, exported |
 | Colours re-derived from string labels | symptom of bypassing the `algorithms` list | pass the algorithm objects; read `.color` |
 | Manual `save_traces_json` | `Benchmark.run()` already persists | drop it; let `Benchmark` persist |
 | Reaching into optimizer private state from an experiment | brittle, un-typed | add an additive API on the optimizer |
 
-**Legitimate exceptions** (a custom *function*, still in `src/plotting`): a
+**Legitimate exceptions** (a custom *function*, still in `declivity/plotting`): a
 secondary axis, a single-seed overlay, or richer-than-`RunTrace` per-run detail
 are real gaps in the stock plotters. The fix is a small reusable plot + (if
 needed) a small dataclass returned by your runner — not inline experiment code.

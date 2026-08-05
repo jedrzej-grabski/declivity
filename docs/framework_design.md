@@ -41,7 +41,7 @@ Panel(
 
 That's the whole vocabulary. No layout code, no subplot setup, no
 gridspec arithmetic. Adding a new panel for any algorithm is **one
-line in `src/plotting/standard_panels.py`**.
+line in `declivity/plotting/standard_panels.py`**.
 
 ### Why semantic keys are the load-bearing piece
 

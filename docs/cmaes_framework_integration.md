@@ -139,7 +139,7 @@ Public surface unchanged: `sigma`, `mean`, `get_eigendecomposition()`,
 L-BFGS-B handoff path.
 
 `IdentityPopulationInitializer` remains in
-`src/utils/population_initializers.py` as an explicit "no-op
+`declivity/utils/population_initializers.py` as an explicit "no-op
 placeholder" for custom optimisers that handle their own initial
 sampling. It is no longer used as the default for any shipped
 algorithm.

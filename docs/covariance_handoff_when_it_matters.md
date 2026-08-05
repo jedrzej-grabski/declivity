@@ -13,7 +13,7 @@ initial Hessian.
 
 ## Setup
 
-All experiments use the new `src/benchmarking/` framework: same seed →
+All experiments use the new `declivity/benchmarking/` framework: same seed →
 same `x0`, same CMA-ES RNG path. L-BFGS-B uses the Armijo line search
 (`More-Thuente` rejects multimodal ripples within ~20 evals).
 Default 15 seeds, total budget 10 000 evaluations, L-BFGS-B memory
@@ -86,7 +86,7 @@ For covariance to *demonstrably* matter we need a problem where:
 
 ## Tools added for the study
 
-- **`RotatedFunction`** (`src/utils/benchmark_functions.py`) — generic
+- **`RotatedFunction`** (`declivity/utils/benchmark_functions.py`) — generic
   wrapper that turns any `BenchmarkFunction` with a gradient into a
   rotated variant. Inherits bounds, gradient transforms as
   `Rᵀ · ∇f_base(R x)`, supports `"uniform_45" / "golden" / "random" /

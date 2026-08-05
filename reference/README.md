@@ -2,7 +2,7 @@
 
 External-language reference implementations of algorithms ported in
 this thesis, kept here for cross-validation. The Python ports in
-`src/algorithms/` are the canonical implementations — these are for
+`declivity/algorithms/` are the canonical implementations — these are for
 checking against.
 
 ## Files
@@ -15,12 +15,12 @@ checking against.
 The R source for DES lives at `thesis-experiments/des_comparison/DES.R`.
 Its literal Python port — used as the cross-validation oracle for the
 framework-native `DESOptimizer` — lives at
-`src/algorithms/des/des_reference.py`.
+`declivity/algorithms/des/des_reference.py`.
 
 The R source for MF-CMA-ES lives at
 `../../nm-cma-es-vectorized.R` (a bundled copy is in `mf_cmaes.r`).
 Its literal Python port lives at
-`src/algorithms/mfcmaes/mfcmaes_reference.py`.
+`declivity/algorithms/mfcmaes/mfcmaes_reference.py`.
 
 ## `outputs/`
 

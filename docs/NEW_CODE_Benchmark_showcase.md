@@ -115,7 +115,7 @@ on a given seed *every* runner starts from the *same* `x0` — the only
 variable across a column of the grid is the algorithm, never the initial
 conditions or the budget. That is the property the unified-benchmarking goal
 rests on ([`framework_design.md`](framework_design.md) §"Premise 7"), and it
-is enforced in one place ([`problem.py`](../src/benchmarking/problem.py))
+is enforced in one place ([`problem.py`](../declivity/benchmarking/problem.py))
 rather than per-runner.
 
 **Same figure type, a different point.** The plotter showcase (§2) also drew

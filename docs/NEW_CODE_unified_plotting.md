@@ -47,7 +47,7 @@ A single run is just a benchmark with one seed.
 ### `RunSeries` — the contract both sources satisfy
 
 ```python
-# src/plotting/unified.py
+# declivity/plotting/unified.py
 @runtime_checkable
 class RunSeries(Protocol):
     def get_series(self, name: str) -> list[float] | None: ...
@@ -181,15 +181,15 @@ so `traces.json` grows by only a few KB of scalar arrays per run.
 
 | File | Change |
 |---|---|
-| `src/benchmarking/run_trace.py` | `RunTrace.series` dict + `get_series()`; `capture_scalar_series()` + `HEAVY_LOGDATA_FIELDS`. |
-| `src/logging/base_logger.py` | `BaseLogData.get_series()` (the `RunSeries` contract for live runs). |
-| `src/benchmarking/persistence.py` | round-trips `series` (omitted when empty → old `traces.json` still load). |
-| `src/benchmarking/algorithm_run.py` | `trace_from_result` auto-captures scalar series; `BenchmarkAlgorithm.retain_series` knob. |
-| `src/benchmarking/aggregation.py` | field-agnostic `series_grid` / `stack_runs_on_grid`; old `common_evaluation_grid` / `stack_traces_on_grid` kept as wrappers. |
-| `src/plotting/unified.py` | **new** — `RunSeries`, `RunGroup`, `draw_groups`, `draw_single_run`, `plot_panels`, shared primitives. |
-| `src/plotting/declarative.py` | `plot_metrics` → thin wrapper over `plot_panels`; `plot_comparison` → renders via `draw_groups`. |
-| `src/plotting/benchmark.py` | `plot_benchmark_convergence` / `plot_convergence_overlay` render via `draw_groups`; boxplot unchanged (final-scalar). |
-| `src/plotting/__init__.py` | export `plot_panels`, `RunGroup`, `RunSeries`, `draw_groups`. |
+| `declivity/benchmarking/run_trace.py` | `RunTrace.series` dict + `get_series()`; `capture_scalar_series()` + `HEAVY_LOGDATA_FIELDS`. |
+| `declivity/logging/base_logger.py` | `BaseLogData.get_series()` (the `RunSeries` contract for live runs). |
+| `declivity/benchmarking/persistence.py` | round-trips `series` (omitted when empty → old `traces.json` still load). |
+| `declivity/benchmarking/algorithm_run.py` | `trace_from_result` auto-captures scalar series; `BenchmarkAlgorithm.retain_series` knob. |
+| `declivity/benchmarking/aggregation.py` | field-agnostic `series_grid` / `stack_runs_on_grid`; old `common_evaluation_grid` / `stack_traces_on_grid` kept as wrappers. |
+| `declivity/plotting/unified.py` | **new** — `RunSeries`, `RunGroup`, `draw_groups`, `draw_single_run`, `plot_panels`, shared primitives. |
+| `declivity/plotting/declarative.py` | `plot_metrics` → thin wrapper over `plot_panels`; `plot_comparison` → renders via `draw_groups`. |
+| `declivity/plotting/benchmark.py` | `plot_benchmark_convergence` / `plot_convergence_overlay` render via `draw_groups`; boxplot unchanged (final-scalar). |
+| `declivity/plotting/__init__.py` | export `plot_panels`, `RunGroup`, `RunSeries`, `draw_groups`. |
 
 ---
 

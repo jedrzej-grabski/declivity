@@ -528,13 +528,13 @@ that's the difference between 5 evaluations and 99 evaluations to converge.
 ### File structure
 
 ```
-src/algorithms/lbfgsb/
+declivity/algorithms/lbfgsb/
     __init__.py             Exports: LBFGSBConfig, LBFGSBOptimizer, LineSearchMethod
     config.py               LBFGSBConfig dataclass + LineSearchMethod enum
     line_search.py          More-Thuente and Armijo line searches
     lbfgsb_optimizer.py     The optimizer (all algorithm logic)
 
-src/logging/
+declivity/logging/
     lbfgsb_logger.py        LBFGSBLogData + LBFGSBLogger
 ```
 

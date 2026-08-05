@@ -234,13 +234,13 @@ Files modified or created:
 
 | File | Change |
 |---|---|
-| `src/algorithms/lbfgsb/initial_hessian.py` | New: `InitialHessian` class with `InitialHessianMode` enum, dispatches diagonal vs dense operations |
-| `src/algorithms/lbfgsb/lbfgsb_optimizer.py` | Rewrote to use `InitialHessian` throughout: Cauchy point, W matrix, M matrix, T matrix, Woodbury solve |
-| `src/algorithms/lbfgsb/config.py` | Added `initial_hessian` (None/scalar/vector/matrix) and `persist_initial_hessian` flag |
-| `src/algorithms/cmaes/cmaes_optimizer.py` | Added `get_learned_covariance()`, `sigma`, `mean` public API |
-| `src/logging/cmaes_logger.py` | Now stores the full covariance matrix; `diag_covariance_matrix` flag for every-generation storage |
-| `src/utils/benchmark_functions.py` | New: `RotatedEllipsoid` with four rotation modes (uniform_45, golden, random, custom) |
-| `src/plotting/multi_algorithm_plotter.py` | New: `plot_function_landscape()`, `plot_function_landscape_grid()`, `plot_matrix_diagonal_comparison()`, `plot_labeled_convergence_comparison()`, `plot_evaluation_bar_chart()` |
+| `declivity/algorithms/lbfgsb/initial_hessian.py` | New: `InitialHessian` class with `InitialHessianMode` enum, dispatches diagonal vs dense operations |
+| `declivity/algorithms/lbfgsb/lbfgsb_optimizer.py` | Rewrote to use `InitialHessian` throughout: Cauchy point, W matrix, M matrix, T matrix, Woodbury solve |
+| `declivity/algorithms/lbfgsb/config.py` | Added `initial_hessian` (None/scalar/vector/matrix) and `persist_initial_hessian` flag |
+| `declivity/algorithms/cmaes/cmaes_optimizer.py` | Added `get_learned_covariance()`, `sigma`, `mean` public API |
+| `declivity/logging/cmaes_logger.py` | Now stores the full covariance matrix; `diag_covariance_matrix` flag for every-generation storage |
+| `declivity/utils/benchmark_functions.py` | New: `RotatedEllipsoid` with four rotation modes (uniform_45, golden, random, custom) |
+| `declivity/plotting/multi_algorithm_plotter.py` | New: `plot_function_landscape()`, `plot_function_landscape_grid()`, `plot_matrix_diagonal_comparison()`, `plot_labeled_convergence_comparison()`, `plot_evaluation_bar_chart()` |
 
 Benchmarks:
 
