@@ -34,6 +34,7 @@ from declivity.utils.initial_geometry import InitialHessian, InitialHessianMode
 from declivity.utils.line_search import (
     LineSearchStrategy,
     MoreThuenteLineSearch,
+    max_feasible_step,
 )
 from declivity.utils.stopping_conditions import StoppingCondition
 
@@ -731,36 +732,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             )
         return np.clip(fallback, self.lower_bounds, self.upper_bounds)
 
-    # Line search
-
-    def _compute_maximum_feasible_step(
-        self,
-        x: NDArray[np.float64],
-        direction: NDArray[np.float64],
-        is_first_iteration: bool,
-    ) -> float:
-        if is_first_iteration:
-            return 1.0
-
-        # Exact per-component step to the bound faced by each direction
-        # component; zero components never limit the step (-> inf).  Taking
-        # the exact minimum guarantees x + alpha*d stays inside the box, so
-        # the belt-and-braces clip after the line search is a no-op and the
-        # cached f/gradient always describe the accepted point.
-        with np.errstate(divide="ignore", invalid="ignore"):
-            steps_to_bound = np.where(
-                direction > 0,
-                (self.upper_bounds - x) / direction,
-                np.where(
-                    direction < 0,
-                    (self.lower_bounds - x) / direction,
-                    np.inf,
-                ),
-            )
-
-        max_step = float(min(np.min(steps_to_bound), 1e10))
-        return max(max_step, 0.0)
-
     # Main loop
 
     def optimize(self) -> OptimizationResult["LBFGSBLogData"]:
@@ -858,10 +829,17 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                     termination_message = "Cannot find descent direction"
                     break
 
-            max_feasible_step = self._compute_maximum_feasible_step(
-                x, direction, iteration == 1
+            # L-BFGS-B convention (Byrd-Lu-Nocedal-Zhu 1995): always try the
+            # full Newton step alpha=1 on the first iteration, regardless of
+            # box geometry.
+            max_feas_step = (
+                1.0
+                if iteration == 1
+                else max_feasible_step(
+                    x, direction, self.lower_bounds, self.upper_bounds
+                )
             )
-            if max_feasible_step <= 0:
+            if max_feas_step <= 0:
                 termination_message = "Maximum feasible step is zero"
                 break
 
@@ -874,7 +852,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             # ``alpha`` whenever ``||d||`` was large at ``x_0``, which the
             # line search would then accept (Wolfe conditions are trivially
             # satisfied at small alpha), wasting the first iteration.
-            initial_step = min(1.0, max_feasible_step)
+            initial_step = min(1.0, max_feas_step)
 
             self._cached_gradient = None
 
@@ -889,7 +867,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 stp0=initial_step,
                 phi0=function_value,
                 dphi0=directional_derivative,
-                stpmax=max_feasible_step,
+                stpmax=max_feas_step,
                 ftol=config.ftol,
                 gtol=config.gtol_ls,
                 xtol=config.xtol_ls,
