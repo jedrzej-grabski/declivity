@@ -4,7 +4,6 @@ Utility modules for the optimization package.
 
 # Import core utilities without circular dependencies
 from declivity.utils.benchmark_functions import (
-    CEC17Function,
     Rastrigin,
     Rosenbrock,
     Sphere,
@@ -40,6 +39,7 @@ from declivity.utils.line_search import (
     LineSearchStrategy,
     MoreThuenteLineSearch,
     ScalarSearchResult,
+    max_feasible_step,
 )
 from declivity.utils.population_initializers import (
     CovarianceSimplexInitializer,
@@ -79,7 +79,6 @@ __all__ = [
     # Constraint handler surface
     "BoxStrategy",
     "BrentLineSearch",
-    "CEC17Function",
     "ConstraintHandler",
     "ConstraintHandlerType",
     "CovarianceSimplexInitializer",
@@ -131,4 +130,5 @@ __all__ = [
     "UniformInitialPointGenerator",
     "covariance_to_hessian_matrix",
     "default_stopping_condition",
+    "max_feasible_step",
 ]

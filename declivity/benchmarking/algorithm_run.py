@@ -1,7 +1,7 @@
 """Algorithm specifications for benchmarking.
 
 The framework only needs three things from anything you put inside a
-:class:`~src.benchmarking.Benchmark`:
+:class:`~declivity.benchmarking.Benchmark`:
 
 - ``name``  — appears in legends, summary tables, and persisted traces
 - ``color`` — hex string the plotter uses for this algorithm's line
@@ -89,7 +89,7 @@ def initial_hessian_from_cmaes(
 
 @runtime_checkable
 class AlgorithmRun(Protocol):
-    """Duck-typed interface for anything :class:`~src.benchmarking.Benchmark` consumes.
+    """Duck-typed interface for anything :class:`~declivity.benchmarking.Benchmark` consumes.
 
     For most use cases prefer subclassing :class:`BenchmarkAlgorithm` —
     same three-attribute contract, plus you get the
@@ -655,9 +655,9 @@ class InterleaveResult:
     """Detailed record of one :class:`InterleavedCMAESLBFGSB` run.
 
     :attr:`trace` is the standard :class:`RunTrace` (the overall-best
-    staircase) that :class:`~src.benchmarking.Benchmark` consumes. The
+    staircase) that :class:`~declivity.benchmarking.Benchmark` consumes. The
     remaining fields expose the run's internal structure for the dedicated
-    staircase plot (:func:`src.plotting.plot_interleaved_convergence`):
+    staircase plot (:func:`declivity.plotting.plot_interleaved_convergence`):
 
     - the CMA-ES *backbone* — best-so-far over CMA-ES generations only,
       ignoring the L-BFGS-B drops, so it stays above the overall best;

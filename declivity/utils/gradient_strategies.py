@@ -6,8 +6,8 @@ approximated from black-box function evaluations, making the choice
 pluggable without touching the optimiser body.  Optimisers receive a
 strategy at construction time and call its
 :meth:`~GradientStrategy.compute` method whenever they need a gradient
-— exactly the same pattern as :class:`~src.utils.repair_strategies.RepairStrategy`
-and :class:`~src.utils.population_initializers.PopulationInitializer`.
+— exactly the same pattern as :class:`~declivity.utils.repair_strategies.RepairStrategy`
+and :class:`~declivity.utils.population_initializers.PopulationInitializer`.
 
 Hierarchy
 ---------

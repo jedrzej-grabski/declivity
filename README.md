@@ -29,16 +29,21 @@ L-BFGS-B is the newest addition and ships with the more involved studies
 ## Quick start
 
 ```bash
-pdm install
-pdm run run-example      # Sphere demo (DES on 10D Sphere)
-pdm run run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
+uv sync
+just run-example      # Sphere demo (DES on 10D Sphere)
+just run-r            # CEC2017 F10, 10 seeds, writes CSVs for R cross-check
 ```
+
+`cecpy` ships no wheels, so `uv sync` builds it from source. That needs a
+compiler with full C++23 library support (`<print>`, `<format>`,
+`std::unreachable`); cmake and ninja are pulled in automatically. Apple clang
+17 on macOS arm64 and GCC 14+ work.
 
 Or directly:
 
 ```bash
-PYTHONPATH=. pdm run python experiments/basic/declarative_plotting.py
-PYTHONPATH=. pdm run python experiments/handoff/multimodal.py --num-seeds 25
+PYTHONPATH=. uv run experiments/basic/declarative_plotting.py
+PYTHONPATH=. uv run experiments/handoff/multimodal.py --num-seeds 25
 ```
 
 ## Development
@@ -128,7 +133,7 @@ declivity/
 │   │                             repair strategies, initial-point generators,
 │   │                             population initializers, helpers
 │   ├── logging/                  BaseLogData / PopulationLogData + per-algo loggers
-│   └── plotting/                 Declarative panel system (Panel + 8 entry points)
+│   └── plotting/                 Declarative panel system (Panel + 9 entry points)
 │
 ├── experiments/                  Runnable studies (one script per study)
 │   ├── basic/                    Tutorial demos, sanity checks, declarative API demos
@@ -155,9 +160,9 @@ declivity/
 
 ## Tech stack
 
-- Python 3.12 (strict), managed with PDM
+- Python 3.12 (strict), managed with uv (pinned in `.python-version`)
 - NumPy 2.x, SciPy 1.15+, Matplotlib 3.10+
-- `opfunu` for CEC2017 benchmark functions
+- `cecpy` (cecxx) for CEC2013/2014/2017 benchmark functions
 - `joblib` for optional parallel benchmark execution
 
 ## Status

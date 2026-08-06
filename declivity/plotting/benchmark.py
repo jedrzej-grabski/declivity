@@ -1,19 +1,26 @@
 """Multi-seed benchmark plotting — median + IQR bands over ``RunTrace`` lists.
 
-Counterpart to :py:mod:`src.plotting.declarative` for the multi-seed,
+Counterpart to :py:mod:`declivity.plotting.declarative` for the multi-seed,
 multi-problem case. These functions lay out the grid (one panel per problem,
 or a single overlay axes) and draw the curves through the *same*
-:func:`~src.plotting.unified.draw_groups` core the single-run plotters use —
+:func:`~declivity.plotting.unified.draw_groups` core the single-run plotters use —
 so a benchmark of one seed renders as a line and a benchmark of 25 renders as
 a median + IQR band, through one code path.
 
-For now only convergence (best fitness vs. evaluations) and final-fitness
-distributions are first-class here, because those are the quantities every
-``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can be
-banded across seeds via :func:`~src.plotting.unified.plot_panels` with the
-matching panel key.
+Convergence (best fitness vs. evaluations), final-fitness distributions and
+target-hitting ECDFs are first-class here, because those are the quantities
+every ``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can
+be banded across seeds via :func:`~declivity.plotting.unified.plot_panels`
+with the matching panel key.
+
+The ECDF entry point takes a single ``problem`` rather than an iterable,
+unlike its siblings: it collapses one problem's runs into one curve per
+algorithm. The suite-wide COCO figure, which pools (problem, target) pairs
+across a whole function family into a single curve, is a different
+aggregation and is not built here yet.
 """
 
+import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -22,7 +29,14 @@ import numpy as np
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
+from declivity.benchmarking.aggregation import series_grid
 from declivity.benchmarking.algorithm_run import AlgorithmRun
+from declivity.benchmarking.ecdf import (
+    DEFAULT_THRESHOLD_FLOOR,
+    aggregate_ecdf,
+    ecdf_auc,
+    threshold_grid,
+)
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace
 from declivity.plotting.unified import (
@@ -354,7 +368,9 @@ def plot_convergence_overlay(
         ax.set_title(title, fontsize=12)
     ax.set_yscale("log")
     ax.grid(True, alpha=0.25, which="both")
-    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)
+    # legend_loc stays a plain str in this signature; matplotlib 3.11 narrowed
+    # loc to a Literal union, which a str cannot satisfy statically.
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
     ax.tick_params(axis="both", labelsize=10)
 
     if secondary_iter_lambda is not None:
@@ -373,5 +389,154 @@ def plot_convergence_overlay(
         secondary.set_xlabel(secondary_label, fontsize=12)
 
     fig.tight_layout()
+    save_if_path(fig, save_path)
+    return fig
+
+
+def _problem_optimum(problem: Problem) -> float:
+    """``f*`` for ``problem``, or 0.0 with a warning if it publishes none.
+
+    ``BenchmarkFunction.global_minimum`` is the pair ``(x*, f*)``, so only
+    the second element is wanted. CEC problems report a nonzero ``f*`` (the
+    ``100·i`` bias) and ``x*`` as NaN, which is why the value is taken
+    positionally and checked for finiteness rather than trusted wholesale.
+    """
+    minimum = getattr(problem.function, "global_minimum", None)
+    if minimum is not None:
+        try:
+            value = float(minimum[1])
+        except (TypeError, IndexError, ValueError):
+            value = float("nan")
+        if np.isfinite(value):
+            return value
+    warnings.warn(
+        f"{problem.name!r} publishes no finite global minimum; thresholding "
+        f"raw fitness as if f*=0. Pass global_minimum= explicitly, or "
+        f"gap_to_optimum=False to say so deliberately.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+    return 0.0
+
+
+def plot_benchmark_ecdf(
+    traces: dict[tuple[str, str], list[RunTrace]],
+    problem: Problem,
+    algorithms: Iterable[AlgorithmRun],
+    *,
+    n_thresholds: int = 50,
+    num_grid_points: int = 200,
+    threshold_floor: float = DEFAULT_THRESHOLD_FLOOR,
+    threshold_ceiling: float | None = None,
+    global_minimum: float | None = None,
+    gap_to_optimum: bool = True,
+    annotate_auc: bool = True,
+    title: str | None = None,
+    xlabel: str = "Function Evaluations",
+    ylabel: str = "Fraction of targets reached",
+    linewidth: float = 2.2,
+    legend_loc: str = "best",
+    legend_fontsize: int = 9,
+    figsize: tuple[float, float] = (9.0, 6.2),
+    save_path: Path | str | None = None,
+) -> Figure:
+    """Single-problem ECDF overlay: one curve per algorithm.
+
+    Pools every algorithm's runs on ``problem`` to build one shared
+    threshold grid (see :func:`~declivity.benchmarking.ecdf.threshold_grid`),
+    so every algorithm is judged against identical targets, then discretises
+    each algorithm's mean ECDF onto a shared evaluation-budget grid spanning
+    every run's own evaluation counts.
+
+    Args:
+        traces: ``{(problem.name, algorithm.name): [RunTrace per seed]}``.
+        problem: The single problem to plot.
+        algorithms: Draw order; ``color`` / ``name`` read from each.
+        n_thresholds: Number of log-spaced target levels.
+        num_grid_points: Resolution of the shared evaluation-budget grid.
+        threshold_ceiling: Fix the top of the target range instead of taking
+            it from the pooled data. Needed for curves that have to be
+            comparable across separate figures.
+        global_minimum: ``problem``'s known ``f*``, subtracted from
+            ``best_fitness`` before thresholding (see
+            :mod:`~declivity.benchmarking.ecdf`). ``None`` (default) reads it
+            off ``problem.function.global_minimum``, falling back to 0.0 with
+            a warning when the objective does not publish one. Passing 0.0
+            explicitly is only right for a problem whose optimum really is
+            zero — on the CEC suite ``f*`` is a nonzero bias, and getting it
+            wrong makes every target below ``f*`` unreachable, so all curves
+            plateau together and the figure discriminates nothing. Ignored
+            when ``gap_to_optimum=False``.
+        gap_to_optimum: Whether to subtract ``global_minimum`` (default) or
+            threshold raw ``best_fitness`` values.
+        annotate_auc: Append each curve's normalised AUC to its legend label.
+            Integrated in the log budget domain, matching the drawn axis.
+        save_path: If set, the figure is written here (dpi 150).
+
+    Returns:
+        The matplotlib :class:`Figure`.
+    """
+    algorithms_list = list(algorithms)
+    pooled_traces = [
+        trace
+        for algorithm in algorithms_list
+        for trace in traces.get((problem.name, algorithm.name), [])
+    ]
+    if not pooled_traces:
+        raise ValueError(f"No traces found for problem {problem.name!r}")
+
+    if global_minimum is None:
+        global_minimum = _problem_optimum(problem) if gap_to_optimum else 0.0
+
+    thresholds = threshold_grid(
+        pooled_traces,
+        n_thresholds=n_thresholds,
+        floor=threshold_floor,
+        global_minimum=global_minimum,
+        gap_to_optimum=gap_to_optimum,
+        ceiling=threshold_ceiling,
+    )
+    x_grid = series_grid(pooled_traces, "evaluations", num_grid_points)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    seed_counts: list[int] = []
+    for algorithm in algorithms_list:
+        algorithm_traces = traces.get((problem.name, algorithm.name), [])
+        if not algorithm_traces:
+            continue
+        seed_counts.append(len(algorithm_traces))
+        curve = aggregate_ecdf(
+            algorithm_traces,
+            thresholds,
+            x_grid,
+            global_minimum=global_minimum,
+            gap_to_optimum=gap_to_optimum,
+        )
+        label = algorithm.name
+        if annotate_auc:
+            label = f"{label} (AUC={ecdf_auc(x_grid, curve):.3f})"
+        ax.plot(x_grid, curve, label=label, color=algorithm.color, linewidth=linewidth)
+
+    ax.set_xscale("log")
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_ylim(0.0, 1.02)
+    # Record what the curves were measured against; without it the figure
+    # does not say which targets, dimension or seed count produced it, and
+    # the target range moves with the pooled data unless fixed.
+    subtitle = (
+        f"{problem.name}  (d={problem.dimensions}, "
+        f"n_seeds={max(seed_counts) if seed_counts else 0}, "
+        f"{n_thresholds} targets in [{thresholds[0]:.1e}, {thresholds[-1]:.1e}]"
+        f"{'' if gap_to_optimum else ', raw fitness'})"
+    )
+    ax.set_title(f"{title}\n{subtitle}" if title else subtitle, fontsize=12)
+    ax.grid(True, alpha=0.25, which="both")
+    # See plot_convergence_overlay: matplotlib 3.11 narrowed loc to a Literal
+    # union that a plain str cannot satisfy statically.
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
+    ax.tick_params(axis="both", labelsize=10)
+    fig.tight_layout()
+
     save_if_path(fig, save_path)
     return fig

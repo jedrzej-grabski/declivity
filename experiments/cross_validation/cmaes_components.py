@@ -1,21 +1,21 @@
 """Benchmark the framework CMA-ES under different component injections.
 
 This experiment exercises the two seams that were wired into
-:class:`~src.algorithms.cmaes.CMAESOptimizer` during the framework
+:class:`~declivity.algorithms.cmaes.CMAESOptimizer` during the framework
 integration milestone:
 
-* :class:`~src.utils.repair_strategies.RepairStrategy` — policy layer.
+* :class:`~declivity.utils.repair_strategies.RepairStrategy` — policy layer.
   Default ``LamarckianRepair`` (routes each λ candidate through
   ``ConstraintHandler.repair_batch``) vs ``IdentityRepair`` (skip
   repair entirely — the algorithm carries possibly-infeasible
   candidates through, exercising the policy seam end-to-end).
-* :class:`~src.utils.population_initializers.PopulationInitializer` —
+* :class:`~declivity.utils.population_initializers.PopulationInitializer` —
   ``MeanSigmaPopulationInitializer`` (default, samples ``N(m, σ²I)``)
   vs ``NormalPopulationInitializer`` (DES-style ``rng.normal`` around
   ``x0`` with bounds-derived scale).
 
 Three variants are run through the standard
-:class:`~src.benchmarking.Benchmark` harness across five seeds and
+:class:`~declivity.benchmarking.Benchmark` harness across five seeds and
 three problems (Sphere, Rosenbrock, Rastrigin — 10D each).  The
 expected outcome:
 
@@ -29,7 +29,7 @@ expected outcome:
 
 This script also exercises the
 ``repair_strategy`` / ``population_initializer`` fields on
-:class:`~src.benchmarking.SingleAlgorithm` — the canonical way to swap
+:class:`~declivity.benchmarking.SingleAlgorithm` — the canonical way to swap
 evolutionary components through the standard benchmarking surface
 without writing a custom :class:`BenchmarkAlgorithm`.
 

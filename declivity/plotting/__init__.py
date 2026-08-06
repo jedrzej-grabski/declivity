@@ -9,6 +9,8 @@ Entry points for diagnostic plots:
 - :py:func:`plot_benchmark_convergence` — multi-seed convergence grid
   with median + IQR band per algorithm.
 - :py:func:`plot_benchmark_boxplot` — multi-seed final-fitness boxplot.
+- :py:func:`plot_benchmark_ecdf` — per-problem ECDF overlay (fraction of
+  target levels reached vs. evaluation budget), one curve per algorithm.
 - :py:func:`plot_function_landscape` /
   :py:func:`plot_function_landscape_grid` — 2D contour plots of an
   objective function.
@@ -16,7 +18,7 @@ Entry points for diagnostic plots:
   comparison against a reference matrix.
 
 Adding a new panel: one ``PanelRegistry.register(...)`` call. See
-:py:mod:`src.plotting.standard_panels` for the four built-in algorithms.
+:py:mod:`declivity.plotting.standard_panels` for the four built-in algorithms.
 """
 
 # Importing standard_panels triggers all panel registrations as a side
@@ -26,6 +28,7 @@ from declivity.plotting import standard_panels  # noqa: F401
 from declivity.plotting.benchmark import (
     plot_benchmark_boxplot,
     plot_benchmark_convergence,
+    plot_benchmark_ecdf,
     plot_convergence_overlay,
 )
 from declivity.plotting.declarative import (
@@ -57,6 +60,7 @@ __all__ = [
     "draw_groups",
     "plot_benchmark_boxplot",
     "plot_benchmark_convergence",
+    "plot_benchmark_ecdf",
     "plot_comparison",
     "plot_convergence_overlay",
     "plot_evaluation_bars",

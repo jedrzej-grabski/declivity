@@ -2,7 +2,7 @@
 
 The math here mirrors Hansen's active-CMA-ES (eq. 49–56, p. 28) and
 matches the precomputed constants used by
-:class:`~src.algorithms.cmaes.cmaes_reference.CMA`, so the two
+:class:`~declivity.algorithms.cmaes.cmaes_reference.CMA`, so the two
 implementations stay numerically aligned on the cross-validation
 experiments under ``experiments/cross_validation/``.
 """
@@ -30,7 +30,7 @@ def compute_weights_and_rates(
     Returns ``(weights, mu, mu_eff, c1, cmu, c_sigma, d_sigma, cc)`` so that
     callers can fill out the config dataclass in one pass.  The formulas
     follow Hansen 2016 eqs. 49–56 and reproduce the reference
-    implementation in :mod:`src.algorithms.cmaes.cmaes_reference`.
+    implementation in :mod:`declivity.algorithms.cmaes.cmaes_reference`.
     """
     n_dim = dimensions
     lambda_ = population_size

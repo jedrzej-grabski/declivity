@@ -51,8 +51,8 @@ class BaseLogData:
     def get_series(self, name: str) -> list[Any] | None:
         """Return the per-step array for ``name``, or ``None`` if absent.
 
-        This is the :class:`~src.plotting.unified.RunSeries` contract — the
-        same one a persisted :class:`~src.benchmarking.run_trace.RunTrace`
+        This is the :class:`~declivity.plotting.unified.RunSeries` contract — the
+        same one a persisted :class:`~declivity.benchmarking.run_trace.RunTrace`
         satisfies. A full ``LogData`` simply exposes every attribute it
         holds (``sigma``, ``condition_number``, ... on the algorithm-specific
         subclasses) by name, so the panel plotter can read a live single-run

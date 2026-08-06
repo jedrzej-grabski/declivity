@@ -2,7 +2,7 @@
 
 External-language reference implementations of algorithms ported in
 this thesis, kept here for cross-validation. The Python ports in
-`src/algorithms/` are the canonical implementations — these are for
+`declivity/algorithms/` are the canonical implementations — these are for
 checking against.
 
 ## Files
@@ -15,18 +15,23 @@ checking against.
 The R source for DES lives at `thesis-experiments/des_comparison/DES.R`.
 Its literal Python port — used as the cross-validation oracle for the
 framework-native `DESOptimizer` — lives at
-`src/algorithms/des/des_reference.py`.
+`declivity/algorithms/des/des_reference.py`.
 
 The R source for MF-CMA-ES lives at
 `../../nm-cma-es-vectorized.R` (a bundled copy is in `mf_cmaes.r`).
 Its literal Python port lives at
-`src/algorithms/mfcmaes/mfcmaes_reference.py`.
+`declivity/algorithms/mfcmaes/mfcmaes_reference.py`.
 
 ## `outputs/`
 
 Historical CSVs from an earlier ad-hoc comparison of Python DES against
 hand-run R outputs. Superseded by the harness described below; kept for
 provenance only.
+
+Regenerated against `cecpy`. The earlier copies came from `opfunu`, whose
+CEC2017 transformations disagree with the reference definitions (see
+`docs/cec_provider_migration.md`), so anything derived from them is not
+comparable with current output. `just run-r` rewrites both files.
 
 | File                                  | Format                                            |
 |---------------------------------------|---------------------------------------------------|
@@ -50,7 +55,7 @@ provenance only.
 To run:
 
 ```bash
-PYTHONPATH=. pdm run python -m experiments.cross_validation.des_vs_reference
-PYTHONPATH=. pdm run python -m experiments.cross_validation.mfcmaes_vs_reference
-PYTHONPATH=. pdm run python -m experiments.cross_validation.cmaes_vs_reference
+PYTHONPATH=. uv run python -m experiments.cross_validation.des_vs_reference
+PYTHONPATH=. uv run python -m experiments.cross_validation.mfcmaes_vs_reference
+PYTHONPATH=. uv run python -m experiments.cross_validation.cmaes_vs_reference
 ```

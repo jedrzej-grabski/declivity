@@ -23,7 +23,7 @@ from enum import StrEnum
 class PanelKey(StrEnum):
     """Standard semantic keys for diagnostic panels.
 
-    These are the keys :py:mod:`src.plotting.standard_panels` registers
+    These are the keys :py:mod:`declivity.plotting.standard_panels` registers
     out of the box. Custom panels can use any string for their key — the
     enum is a convenience for the built-in vocabulary, not a hard
     constraint on the registry.

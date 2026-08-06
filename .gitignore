@@ -6,7 +6,6 @@ notes/
 # Tooling state — not part of the framework
 CLAUDE.md
 .claude/
-.pdm-python
 .DS_Store
 
 # Generated outputs — reproducible from the example scripts
@@ -48,9 +47,6 @@ htmlcov/
 
 # Jupyter Notebook
 .ipynb_checkpoints/
-
-# pyenv
-.python-version
 
 # mypy
 .mypy_cache/

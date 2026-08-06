@@ -1,23 +1,25 @@
-"""Cross-validation: framework-native L-BFGS-B vs SciPy's L-BFGS-B.
+"""Cross-validation: framework-native BFGS vs SciPy's BFGS.
 
 The SciPy reference is :func:`scipy.optimize.minimize` with
-``method="L-BFGS-B"`` — a Python wrapper over the Fortran v3.0
-implementation by Zhu, Byrd, Lu, and Nocedal.  This module pits it
-against :class:`~declivity.algorithms.lbfgsb.LBFGSBOptimizer`, the pure-Python
-reimplementation in declivity.
+``method="BFGS"`` — the pure-Python Broyden–Fletcher–Goldfarb–Shanno
+routine in ``scipy.optimize._optimize._minimize_bfgs``.  This module pits
+it against :class:`~declivity.algorithms.bfgs.BFGSOptimizer`, a faithful
+port of that routine into declivity's injected-strategy interface.
 
-Because L-BFGS-B is **deterministic** given an initial point, the
-notion of "seeds" used by the DES / MF-CMA-ES harnesses does not carry
-across cleanly.  Here a *seed* selects an initial point ``x0`` drawn
-uniformly from ``[lb, ub]^d`` — both implementations receive that same
-``x0`` for the run.  The parity claim is that, across many random
-``x0`` draws, the two implementations converge to indistinguishable
-distributions of final fitness.  Multimodal problems (Rastrigin,
-Ackley) additionally let us check that both impls get trapped at the
-*same* local minima, not merely that they hit the optimum on the easy
-seeds.
+BFGS is **deterministic** given an initial point and is **unconstrained**,
+so — unlike the L-BFGS-B harness — no box bounds are imposed on either
+implementation (the declivity optimizer runs with its ±inf default, where
+its projected-gradient convergence test degenerates to SciPy's plain
+``vecnorm(gfk, inf)`` test).  Here a *seed* selects an initial point ``x0``
+drawn uniformly from ``[lb, ub]^d`` — both implementations receive that
+same ``x0``.  The parity claim is that, across many random ``x0`` draws,
+the two implementations converge to indistinguishable distributions of
+final fitness and (on unimodal problems) the same minimizer.
 
-Output (under ``plots/cross_validation/lbfgsb_vs_scipy/``):
+Both implementations use **forward finite differences** for the gradient,
+matching SciPy's default, so the per-evaluation comparison is fair.
+
+Output (under ``plots/cross_validation/bfgs_vs_scipy/``):
 
 - ``convergence_<problem>.png`` — per-seed best-fitness overlay
 - ``distribution_<problem>.png`` — final-fitness boxplot with Wilcoxon/KS
@@ -26,7 +28,7 @@ Output (under ``plots/cross_validation/lbfgsb_vs_scipy/``):
 
 Run::
 
-    PYTHONPATH=. uv run python -m experiments.cross_validation.lbfgsb_vs_scipy --function rosenbrock_d10
+    PYTHONPATH=. uv run python -m experiments.cross_validation.bfgs_vs_scipy --function rosenbrock_d10
 """
 
 from __future__ import annotations
@@ -45,16 +47,15 @@ from numpy.typing import NDArray
 from scipy import stats
 from scipy.optimize import minimize as scipy_minimize
 
-from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
+from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
+from declivity.algorithms.bfgs.config import BFGSConfig
 from declivity.utils.gradient_strategies import ForwardFD
 from declivity.utils.stopping_conditions import MaxEvaluations
 from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 
 DEFAULT_PROBLEM = "ellipsoid_d10"
 DEFAULT_SEEDS = 25
-DEFAULT_OUTPUT_DIR = Path("plots/cross_validation/lbfgsb_vs_scipy")
+DEFAULT_OUTPUT_DIR = Path("plots/cross_validation/bfgs_vs_scipy")
 
 
 @dataclass
@@ -78,25 +79,16 @@ def _draw_x0(spec: ProblemSpec, seed: int) -> NDArray[np.float64]:
 
 def _run_framework(spec: ProblemSpec, seed: int, x0: NDArray[np.float64]) -> RunRecord:
     func = spec.fn_factory(spec.dim)
-    cfg = LBFGSBConfig(dimensions=spec.dim)
+    cfg = BFGSConfig(dimensions=spec.dim)
     cfg.enable_all_diagnostics()
 
-    # Use forward-FD strategy to match scipy's default gradient method;
-    # the framework's default (central FD) gives more accurate gradients
-    # but uses 2× the evaluations, which would skew the per-evaluation
-    # comparison.  The framework default is left unchanged elsewhere.
-    opt = LBFGSBOptimizer(
+    # Unbounded (±inf default) to match SciPy's unconstrained BFGS; forward FD
+    # to match SciPy's default gradient method.
+    opt = BFGSOptimizer(
         func=func,
         initial_point=x0,
         config=cfg,
         stopping_condition=MaxEvaluations(10_000 * spec.dim),
-        lower_bounds=spec.lower,
-        upper_bounds=spec.upper,
-        constraint_handler=BoxConstraintHandler(
-            BoxStrategy.CLAMP,
-            np.full(spec.dim, spec.lower),
-            np.full(spec.dim, spec.upper),
-        ),
         gradient_strategy=ForwardFD(),
     )
 
@@ -129,11 +121,10 @@ def _run_framework(spec: ProblemSpec, seed: int, x0: NDArray[np.float64]) -> Run
 def _run_scipy(spec: ProblemSpec, seed: int, x0: NDArray[np.float64]) -> RunRecord:
     func = spec.fn_factory(spec.dim)
 
-    # Record per-iteration best by snapshotting via callback.  SciPy's
-    # L-BFGS-B callback fires once per accepted iteration with the new
-    # ``xk`` — we re-evaluate ``func(xk)`` for plot trajectories.  Those
-    # evaluations are bookkeeping for the chart only and do not feed
-    # back into the algorithm.
+    # Record per-iteration best by snapshotting via callback.  SciPy's BFGS
+    # callback fires once per accepted iteration with the new ``xk`` — we
+    # re-evaluate ``func(xk)`` for plot trajectories.  Those evaluations are
+    # bookkeeping for the chart only and do not feed back into the algorithm.
     trajectory: list[tuple[int, float]] = []
     eval_counter = [0]
 
@@ -142,23 +133,21 @@ def _run_scipy(spec: ProblemSpec, seed: int, x0: NDArray[np.float64]) -> RunReco
         return float(func(x))
 
     def callback(xk: NDArray[np.float64]) -> None:
-        # snapshot the current best-so-far at the iteration boundary
         f_xk = float(func(xk))
         if trajectory and f_xk > trajectory[-1][1]:
             f_xk = trajectory[-1][1]
         trajectory.append((eval_counter[0], f_xk))
 
-    bounds = list(zip(np.full(spec.dim, spec.lower), np.full(spec.dim, spec.upper)))
-
     start = time.perf_counter()
-    result = scipy_minimize(
-        fun=wrapped,
-        x0=x0,
-        method="L-BFGS-B",
-        bounds=bounds,
-        callback=callback,
-        options={"maxiter": 10_000, "maxfun": 10_000 * spec.dim},
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = scipy_minimize(
+            fun=wrapped,
+            x0=x0,
+            method="BFGS",
+            callback=callback,
+            options={"maxiter": 10_000, "gtol": 1e-5},
+        )
     elapsed = time.perf_counter() - start
 
     iter_evals = [step[0] for step in trajectory]
@@ -190,8 +179,7 @@ def _plot_convergence(
     """Convergence overlay — per-evaluation x-axis.
 
     With both implementations using forward FD for the gradient, the
-    per-evaluation and per-iteration views are nearly equivalent.  A
-    single per-evaluation panel matches the DES / MF-CMA-ES harnesses.
+    per-evaluation and per-iteration views are nearly equivalent.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -209,9 +197,7 @@ def _plot_convergence(
         ax.plot(evals, fit, color="C3", alpha=0.45, lw=0.9, linestyle="--")
 
     ax.plot([], [], color="C0", lw=2, label="declivity (framework-native)")
-    ax.plot(
-        [], [], color="C3", lw=2, linestyle="--", label="scipy.optimize (Fortran v3.0)"
-    )
+    ax.plot([], [], color="C3", lw=2, linestyle="--", label="scipy.optimize BFGS")
     if spec.f_star > 0:
         ax.axhline(spec.f_star, color="gray", lw=0.8, linestyle=":", alpha=0.6)
         ax.annotate(
@@ -228,7 +214,7 @@ def _plot_convergence(
     ax.set_ylabel("najlepsza wartość funkcji celu")
     ax.set_yscale("log")
     ax.set_title(
-        f"{spec.name}, d = {spec.dim} — L-BFGS-B: declivity vs scipy "
+        f"{spec.name}, d = {spec.dim} — BFGS: declivity vs scipy "
         f"({len(fw_runs)} losowych punktów startowych)"
     )
     ax.grid(True, which="both", alpha=0.3)
@@ -290,7 +276,7 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
     fw_runs: list[RunRecord] = []
     ref_runs: list[RunRecord] = []
 
-    print(f"# L-BFGS-B parity audit on {spec.name} (d={spec.dim})")
+    print(f"# BFGS parity audit on {spec.name} (d={spec.dim})")
     for seed in seeds:
         x0 = _draw_x0(spec, seed)
         print(f"[seed {seed:2d}] framework…", end=" ", flush=True)
@@ -342,7 +328,7 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
     max_x_diff = float(np.max([r["x_diff_l2"] for r in rows]))
 
     report = [
-        f"# L-BFGS-B parity report — {spec.name}, d={spec.dim}, n={len(seeds)} seeds",
+        f"# BFGS parity report — {spec.name}, d={spec.dim}, n={len(seeds)} seeds",
         "",
         "## Descriptive statistics on final fitness",
         f"declivity:  mean={fw_finals.mean():.4e}  median={np.median(fw_finals):.4e}  "

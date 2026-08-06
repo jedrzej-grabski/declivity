@@ -39,7 +39,7 @@ language. For multi-series panels, only the first series participates
 in the overlay.
 
 Importing this module triggers all registrations as a side effect.
-``src/plotting/__init__.py`` imports it for that reason.
+``declivity/plotting/__init__.py`` imports it for that reason.
 """
 
 from declivity.algorithms.choices import AlgorithmChoice

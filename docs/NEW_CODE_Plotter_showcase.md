@@ -10,7 +10,7 @@ For the design rationale (why declarative, why semantic keys, why a curated
 default set) see [`framework_design.md`](framework_design.md) §"Premise 1".
 
 - **Script:** [`experiments/basic/plotter_showcase.py`](../experiments/basic/plotter_showcase.py)
-- **Run:** `PYTHONPATH=. pdm run python experiments/basic/plotter_showcase.py`
+- **Run:** `PYTHONPATH=. uv run python experiments/basic/plotter_showcase.py`
 - **Output:** `plots/basic/plotter_showcase/`
 
 | # | One-liner | Entry point | What it proves |
@@ -120,7 +120,7 @@ plot_metrics(
 **Why this is modular.** `PanelSet.ALL` renders every panel registered for
 the result's algorithm — 12 for CMA-ES — and the grid is laid out
 automatically. Each panel is **one line** in
-[`standard_panels.py`](../src/plotting/standard_panels.py); register a 13th
+[`standard_panels.py`](../declivity/plotting/standard_panels.py); register a 13th
 and it appears here for free, with no change to this call. (`panels=None`
 would render only the curated `default=True` headline subset; `"all"` is
 the string-equivalent of `PanelSet.ALL`, since these are `StrEnum`s.)
@@ -150,7 +150,7 @@ a pre-existing bug, **not** in the new code:
 `Ellipsoid`, …). L-BFGS-B then called the stub and blew up instead of
 falling back to finite differences.
 
-Fix in [`src/benchmarking/problem.py`](../src/benchmarking/problem.py): only
+Fix in [`declivity/benchmarking/problem.py`](../declivity/benchmarking/problem.py): only
 advertise an analytic gradient when the concrete class actually overrides
 the base method —
 

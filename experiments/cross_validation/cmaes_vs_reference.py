@@ -1,9 +1,9 @@
 """Cross-validation: framework-native CMA-ES vs the historical reference port.
 
-The framework-native :class:`~src.algorithms.cmaes.CMAESOptimizer` is a
+The framework-native :class:`~declivity.algorithms.cmaes.CMAESOptimizer` is a
 clean rewrite that uses the framework's
-:class:`~src.utils.repair_strategies.RepairStrategy` and
-:class:`~src.utils.population_initializers.PopulationInitializer` seams.
+:class:`~declivity.utils.repair_strategies.RepairStrategy` and
+:class:`~declivity.utils.population_initializers.PopulationInitializer` seams.
 In the *default* configuration the two implementations consume the RNG
 stream differently (the framework's
 ``MeanSigmaPopulationInitializer`` draws a ``(dim, λ)`` block at
@@ -37,7 +37,7 @@ Output (under ``plots/cross_validation/cmaes_vs_reference/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/cross_validation/cmaes_vs_reference.py
+    PYTHONPATH=. uv run python experiments/cross_validation/cmaes_vs_reference.py
 """
 
 from __future__ import annotations
@@ -57,10 +57,10 @@ from numpy.typing import NDArray
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
 from declivity.algorithms.cmaes.cmaes_reference import CMA
 from declivity.algorithms.cmaes.config import CMAESConfig
+from declivity.cec import CECEdition, CECProblem
 from declivity.utils.benchmark_functions import (
     Ackley,
     BenchmarkFunction,
-    CEC17Function,
     Ellipsoid,
     Rastrigin,
     Rosenbrock,
@@ -472,7 +472,7 @@ def _plot_diff_heatmap(rows: list[dict], out_path: Path) -> None:
 @dataclass
 class FunctionSpec:
     # ``cls`` may be a class (instantiated as ``cls(dim)``) or a zero-arg
-    # callable (e.g. a lambda that captures a configured CEC17 function).
+    # callable (e.g. a lambda that captures a configured CEC2017 problem).
     cls: Callable[..., BenchmarkFunction]
     dim: int
     initial: NDArray[np.float64]
@@ -510,7 +510,7 @@ def build_specs() -> list[FunctionSpec]:
     dim = 10
     specs.append(
         FunctionSpec(
-            cls=lambda d=dim: CEC17Function(dimensions=d, function_id=10),
+            cls=lambda d=dim: CECProblem(CECEdition.CEC2017, 10, d),
             dim=dim,
             initial=np.full(dim, 50.0),
             sigma=20.0,
@@ -532,8 +532,8 @@ def _instantiate(spec: FunctionSpec) -> tuple[str, BenchmarkFunction]:
         name = spec.cls.__name__
     else:
         name = fn.__class__.__name__
-        if isinstance(fn, CEC17Function):
-            name = f"CEC17_F{fn.function_id}"
+        if isinstance(fn, CECProblem):
+            name = fn.name
     return name, fn
 
 

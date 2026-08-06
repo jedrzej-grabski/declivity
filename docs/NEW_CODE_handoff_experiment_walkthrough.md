@@ -30,21 +30,21 @@ developer hits the decisions.
 ## The mental model
 
 > **An experiment is thin orchestration. Anything reusable — a function, a
-> scheme, a plot type — lives in `src/`, not in the experiment file.**
+> scheme, a plot type — lives in `declivity/`, not in the experiment file.**
 
 The experiment script's whole job is to *wire together* four things:
 
 ```
-Problem(s)          what you optimize        src/benchmarking/problem.py
-   │                                         + src/utils/benchmark_functions.py
+Problem(s)          what you optimize        declivity/benchmarking/problem.py
+   │                                         + declivity/utils/benchmark_functions.py
    ▼
-Algorithm specs     what you compare         src/benchmarking/algorithm_run.py
+Algorithm specs     what you compare         declivity/benchmarking/algorithm_run.py
    │   name · color · run(problem, x0, seed) -> RunTrace
    ▼
 Benchmark           runs every (problem × algo × seed), persists traces
    │   bench.traces : {(problem.name, algorithm.name): [RunTrace]}
    ▼
-Declarative plots   read traces, render      src/plotting/*
+Declarative plots   read traces, render      declivity/plotting/*
 ```
 
 Each step below is one of those arrows.
@@ -81,7 +81,7 @@ The SDP problem is two pieces — and only one of them is new code.
 ### 2a. The `BenchmarkFunction` contract
 
 A new objective subclasses `BenchmarkFunction`. The base class (in
-`src/utils/benchmark_functions.py`) defines exactly four things a subclass
+`declivity/utils/benchmark_functions.py`) defines exactly four things a subclass
 fills in — three required, one optional:
 
 ```python
@@ -117,7 +117,7 @@ full `BenchmarkFunction`. We implement `gradient` because it's cheap and
 closed-form, which lets L-BFGS-B use exact derivatives:
 
 ```python
-# src/utils/benchmark_functions.py
+# declivity/utils/benchmark_functions.py
 class DifferentPowers(BenchmarkFunction):
     """f(x) = Σ_i |x_i|^(2 + 4 i/(d-1))  — a smooth, single-basin, strongly
     ill-conditioned bowl. Global minimum f(0) = 0."""
@@ -187,7 +187,7 @@ Two things the *existing* wrapper gives us for free:
 > subtlety — captured by a constructor argument on the reused wrapper, not by
 > new code.
 
-The lesson: **new base function in `src/`, generic transform reused.** If
+The lesson: **new base function in `declivity/`, generic transform reused.** If
 you find yourself writing a `Shifted<Anything>` class in an experiment, stop —
 compose `ShiftedFunction` instead.
 
@@ -251,11 +251,11 @@ directly. That's Step 4.
 
 ---
 
-## Step 4 — Write the multi-phase scheme in `src/benchmarking/`
+## Step 4 — Write the multi-phase scheme in `declivity/benchmarking/`
 
 The interleaving scheme is reusable code, so it's an
 `InterleavedCMAESLBFGSB(BenchmarkAlgorithm)` in
-`src/benchmarking/algorithm_run.py` — **not** logic in the experiment. Its
+`declivity/benchmarking/algorithm_run.py` — **not** logic in the experiment. Its
 `run()` returns a standard `RunTrace` (the overall-best staircase), so it drops
 into `Benchmark` and the stock plotters like any other contender.
 
@@ -270,7 +270,7 @@ It leans on two capabilities the framework already provides:
   `(B, D)` into the probe's `B₀`. We reuse it rather than re-derive the math.
 
 ```python
-# src/benchmarking/algorithm_run.py
+# declivity/benchmarking/algorithm_run.py
 @dataclass
 class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
     name: str
@@ -399,7 +399,7 @@ two layers.
 
 ### What the `Panel` registry actually governs
 
-A `Panel` (`src/plotting/panel.py`) is a declarative spec read by
+A `Panel` (`declivity/plotting/panel.py`) is a declarative spec read by
 `plot_metrics(result)` and `plot_comparison(results)` — and **those two
 functions consume `OptimizationResult` objects** (single runs, with a full
 `LogData`/`diagnostic`). A panel says: *read field `f` (or several `Series`)
@@ -507,7 +507,7 @@ plot_convergence_overlay(
 ```
 
 The staircase is the bespoke function, following the three rules for a
-sanctioned custom plot: **(1)** it lives in `src/plotting/interleaved.py` and
+sanctioned custom plot: **(1)** it lives in `declivity/plotting/interleaved.py` and
 is exported; **(2)** it takes colours from arguments, never re-derives them
 from labels; **(3)** it consumes the richer dataclass the runner returns. So
 the runner exposes:
@@ -578,7 +578,7 @@ headline seed, since its detail isn't in `traces.json`.
 
 ## The finished experiment is *thin*
 
-After Steps 2–4 push the new pieces into `src/`, the experiment file itself is
+After Steps 2–4 push the new pieces into `declivity/`, the experiment file itself is
 just orchestration — `build_problem`, `build_algorithms`, a `Benchmark`, and a
 handful of `src.plotting` calls. The only module-level boilerplate is the
 headless-rendering setup (so a saved-figure run never tries to open a window):
@@ -592,7 +592,7 @@ COLORS = {"CMA-ES": "#c0392b", "L-BFGS-B": "#2980b9", ...}   # palette fed into 
 ```
 
 The interleaving scheme, the `DifferentPowers` base function, the bespoke
-plots — every genuinely reusable piece — live in `src/`. That's the whole
+plots — every genuinely reusable piece — live in `declivity/`. That's the whole
 game.
 
 ---
@@ -607,7 +607,7 @@ game.
       **narrowest** base class; configs come from a dimension-keyed
       `config_factory`.
 - [ ] A new multi-phase scheme is a `BenchmarkAlgorithm` subclass in
-      `src/benchmarking/`, returning a standard `RunTrace`; reuse existing
+      `declivity/benchmarking/`, returning a standard `RunTrace`; reuse existing
       optimizer capabilities (`CMAESState`, `initial_hessian_from_cmaes`)
       rather than re-deriving them.
 - [ ] Runs go through `Benchmark` (even single-seed).
@@ -615,7 +615,7 @@ game.
       (`plot_metrics` / `plot_comparison`). Multi-seed / RunTrace figures →
       the benchmark plotters. Don't try to force a `RunTrace`-layer figure
       through the Panel registry — it can't reach that data.
-- [ ] Any custom plot lives in `src/plotting/`, consumes
+- [ ] Any custom plot lives in `declivity/plotting/`, consumes
       `RunTrace` / a returned dataclass, and takes colours from the algorithms.
 - [ ] `experiments/README.md` row + `docs/NEW_CODE_*.md` write-up.
 
@@ -625,11 +625,11 @@ game.
 |---|---|---|
 | A `Shifted<X>` / `Rotated<X>` class in the experiment | re-implements a generic transform | compose `ShiftedFunction` / `RotatedFunction` |
 | Hand-rolled `(algo × seed)` loop + manual `save_traces_json` | loses fairness / persistence / parallelism | `Benchmark([...], seeds=[...]).run()` |
-| `matplotlib` figure-building inside the experiment | un-reusable, duplicates layout | a function in `src/plotting/`, exported |
+| `matplotlib` figure-building inside the experiment | un-reusable, duplicates layout | a function in `declivity/plotting/`, exported |
 | Forcing a multi-seed / staircase figure into a `Panel` | Panels read single-run LogData on one shared x-axis; can't reach `RunTrace`/`InterleaveResult` | a `RunTrace`-layer plotter, or a bespoke function consuming a returned dataclass |
 | Colours re-derived from string labels | symptom of bypassing the `algorithms` list | pass the algorithm objects; read `.color` |
 
-**Legitimate custom plots** (still in `src/plotting`, still reusable): a
+**Legitimate custom plots** (still in `declivity/plotting`, still reusable): a
 secondary-axis overlay (`plot_convergence_overlay`) and a single-run
 dissection that needs richer-than-`RunTrace` detail
 (`plot_interleaved_convergence` + `InterleaveResult`). Both are real gaps the

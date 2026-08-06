@@ -84,15 +84,15 @@ improves the framework's "framework-ness".
 
 ### 1. Delete dead code (~30 min)
 
-- [ ] Remove `src/utils/repair_strategy.py` — `RepairStrategy` is
+- [ ] Remove `declivity/utils/repair_strategy.py` — `RepairStrategy` is
       defined but **never imported anywhere**. Verified via
-      `grep -rn "RepairStrategy" src/ experiments/`. DES inlines its
+      `grep -rn "RepairStrategy" declivity/ experiments/`. DES inlines its
       own Lamarckism logic at `des_optimizer.py:249`.
 - [ ] Remove the duplicate `register_all_algorithms()` in
-      `src/algorithms/__init__.py` — it only registers DES and is
-      shadowed by the comprehensive registration in `src/__init__.py`.
+      `declivity/algorithms/__init__.py` — it only registers DES and is
+      shadowed by the comprehensive registration in `declivity/__init__.py`.
 - [ ] Replace the four `try/except ImportError: pass` blocks in
-      `src/__init__.py` with bare imports, or at least re-raise after
+      `declivity/__init__.py` with bare imports, or at least re-raise after
       logging. Bare-except hides real syntax/import errors until
       use-site, which is a debugging trap.
 
@@ -102,7 +102,7 @@ improves the framework's "framework-ness".
       F10 for 3 fixed seeds and asserts the convergence trace stays
       within tolerance of the saved R reference output in
       `reference/outputs/`. Same for the CMA-ES variants.
-- [ ] Wire into `pdm test` or a Makefile target.
+- [ ] Wire into a `just test` target.
 
   Why: every refactor risks subtle drift in the optimizer numerics.
   The supervisor experiments catch catastrophic breaks but not 1e-4
@@ -130,7 +130,7 @@ improves the framework's "framework-ness".
 ### 4. Auto-register optimizers via decorator (~2 h)
 
 - [ ] Replace the four `try/except` registration blocks in
-      `src/__init__.py` with a `@register(AlgorithmChoice.X)` decorator
+      `declivity/__init__.py` with a `@register(AlgorithmChoice.X)` decorator
       on each optimizer class.
 - [ ] Same for `LoggerFactory` — `@register_logger(AlgorithmChoice.X)`
       on each logger class.
@@ -141,7 +141,7 @@ improves the framework's "framework-ness".
 
 ### 5. Wire or delete `InitialPointGenerator` (~30 min)
 
-- [ ] Either delete `src/utils/initial_point_generator.py` (currently
+- [ ] Either delete `declivity/utils/initial_point_generator.py` (currently
       not used by `Benchmark.run` — `Problem.starting_point` is
       hardcoded to uniform), or
 - [ ] Plug it into `Problem` so experiments can pick a strategy.

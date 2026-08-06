@@ -27,7 +27,7 @@ any deviation.
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/cross_validation/geometry_seed_identity.py
+    PYTHONPATH=. uv run python experiments/cross_validation/geometry_seed_identity.py
 """
 
 import argparse

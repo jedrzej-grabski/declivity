@@ -5,13 +5,13 @@ Sits between :class:`BaseOptimizer` and the three evolutionary algorithms
 (DES, CMA-ES, MF-CMA-ES).  Adds a **required** ``repair_strategy``
 attribute that is structurally enforced at the constructor level:
 pyright/mypy reject a subclass whose ``__init__`` does not forward a
-concrete :class:`~src.utils.repair_strategies.RepairStrategy` instance
+concrete :class:`~declivity.utils.repair_strategies.RepairStrategy` instance
 to ``super().__init__``.
 
 Relationship to the logging layer
 ----------------------------------
-This mirrors the existing :class:`~src.logging.base_logger.BaseLogData` /
-:class:`~src.logging.base_logger.PopulationLogData` split: ``BaseOptimizer``
+This mirrors the existing :class:`~declivity.logging.base_logger.BaseLogData` /
+:class:`~declivity.logging.base_logger.PopulationLogData` split: ``BaseOptimizer``
 is paired with ``BaseLogData`` (single-point algorithms such as L-BFGS-B),
 and ``PopulationOptimizer`` is paired with ``PopulationLogData``
 (evolutionary algorithms).
@@ -92,7 +92,7 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
             ``MeanSigmaPopulationInitializer`` for CMA-ES and MF-CMA-ES)
             and allow callers to override.
         algorithm:
-            :class:`~src.algorithms.choices.AlgorithmChoice` enum value
+            :class:`~declivity.algorithms.choices.AlgorithmChoice` enum value
             forwarded to :class:`BaseOptimizer` for logging and result
             labelling.
         constraint_handler:

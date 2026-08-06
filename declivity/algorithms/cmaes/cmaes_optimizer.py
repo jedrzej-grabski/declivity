@@ -4,11 +4,11 @@ This file owns the full algorithm — mean / sigma / covariance / evolution
 paths / eigendecomposition all live on the optimizer instance and step
 forward inside ``optimize()`` using the framework's primitives:
 
-* :class:`~src.utils.constraint_handlers.ConstraintHandler` — feasibility
+* :class:`~declivity.utils.constraint_handlers.ConstraintHandler` — feasibility
   test and per-point repair.
-* :class:`~src.utils.repair_strategies.RepairStrategy` — population-level
+* :class:`~declivity.utils.repair_strategies.RepairStrategy` — population-level
   repair policy applied to every generation's λ candidates.
-* :class:`~src.utils.population_initializers.PopulationInitializer` —
+* :class:`~declivity.utils.population_initializers.PopulationInitializer` —
   seeds the iteration-0 population from ``N(m, σ²I)`` (matches the
   algorithm's natural starting distribution but routes through the
   swappable factory the rest of the framework uses).
@@ -98,13 +98,13 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
     """Hansen-style active CMA-ES, framework-native.
 
     Constraint handling is fully delegated to the injected
-    :class:`~src.utils.repair_strategies.RepairStrategy` (default:
-    :class:`~src.utils.repair_strategies.LamarckianRepair`, which
+    :class:`~declivity.utils.repair_strategies.RepairStrategy` (default:
+    :class:`~declivity.utils.repair_strategies.LamarckianRepair`, which
     routes the λ candidates through
     :meth:`ConstraintHandler.repair_batch`).  The iteration-0
     population is produced by the injected
-    :class:`~src.utils.population_initializers.PopulationInitializer`
-    (default: :class:`~src.utils.population_initializers.MeanSigmaPopulationInitializer`
+    :class:`~declivity.utils.population_initializers.PopulationInitializer`
+    (default: :class:`~declivity.utils.population_initializers.MeanSigmaPopulationInitializer`
     with the resolved initial sigma, which reproduces the canonical
     ``N(m, σ²I)`` start).  Both seams are live — swapping the defaults
     changes the algorithm's behaviour.

@@ -21,6 +21,8 @@ from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
+    from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
+    from declivity.algorithms.bfgs.config import BFGSConfig
     from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
     from declivity.algorithms.cmaes.config import CMAESConfig
     from declivity.algorithms.des.config import DESConfig
@@ -167,6 +169,22 @@ class AlgorithmFactory:
         seed: int | np.random.Generator | None = None,
         **kwargs,
     ) -> "NelderMeadOptimizer": ...
+
+    @overload
+    @classmethod
+    def create_optimizer(
+        cls,
+        algorithm: Literal[AlgorithmChoice.BFGS],
+        func: Callable[[NDArray[np.float64]], float],
+        initial_point: NDArray[np.float64],
+        config: BFGSConfig | None = None,
+        constraint_handler: ConstraintHandler | None = None,
+        stopping_condition: StoppingCondition | None = None,
+        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
+        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
+        seed: int | np.random.Generator | None = None,
+        **kwargs,
+    ) -> BFGSOptimizer: ...
 
     @classmethod
     def create_optimizer(

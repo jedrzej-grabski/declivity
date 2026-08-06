@@ -55,7 +55,7 @@ class Series:
         field: Attribute name on the LogData object for the y-values.
         label: Legend label. Empty string defaults to a humanized
             version of ``field``.
-        linestyle: A :class:`~src.plotting.types.LineStyle` enum (or any
+        linestyle: A :class:`~declivity.plotting.types.LineStyle` enum (or any
             raw matplotlib linestyle string).
         color: Matplotlib color string. ``None`` falls back to the
             default color cycle. Per-series colors are mainly useful in

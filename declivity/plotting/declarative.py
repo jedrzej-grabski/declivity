@@ -1,19 +1,19 @@
 """Declarative diagnostic plotting — single-run entry points.
 
 Two functions, both thin shells over the shared renderer in
-:py:mod:`src.plotting.unified`:
+:py:mod:`declivity.plotting.unified`:
 
 - :py:func:`plot_metrics` — every (or selected) panel for a single run.
-  Just :func:`~src.plotting.unified.plot_panels` handed one
+  Just :func:`~declivity.plotting.unified.plot_panels` handed one
   ``OptimizationResult``.
 - :py:func:`plot_comparison` — one panel per semantic key, every algorithm
   overlaid on the same axes.
 
 Both consume ``OptimizationResult``s and render through the same
 ``draw_groups`` / ``draw_single_run`` core that the benchmark plotters use,
-so a :class:`~src.plotting.panel.Panel` registered once drives single runs,
+so a :class:`~declivity.plotting.panel.Panel` registered once drives single runs,
 overlays, and multi-seed bands alike. Adding a new panel is one line in
-:py:mod:`src.plotting.standard_panels`.
+:py:mod:`declivity.plotting.standard_panels`.
 
 (``plot_evaluation_bars`` lives here too — a non-panel summary bar chart.)
 """
@@ -52,7 +52,7 @@ def plot_metrics(
     """Plot diagnostic panels for a single optimization run.
 
     A single run is the ``len(runs) == 1`` case of the unified plotter, so
-    this is :func:`~src.plotting.unified.plot_panels` over one
+    this is :func:`~declivity.plotting.unified.plot_panels` over one
     ``OptimizationResult``: each panel's series are drawn as lines (the
     best/mean/median convergence overlay, σ, condition number, ...). Run the
     *same* panels over a benchmark and they come out as aggregated bands.

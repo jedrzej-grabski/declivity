@@ -2,7 +2,7 @@
 Population-level repair strategy abstractions.
 
 A RepairStrategy is the *policy* layer that sits above
-:class:`~src.utils.constraint_handlers.ConstraintHandler`: it decides
+:class:`~declivity.utils.constraint_handlers.ConstraintHandler`: it decides
 whether to repair a population at all, leaving the per-point (and
 per-batch) projection mechanics to the handler.
 
@@ -98,7 +98,7 @@ class LamarckianRepair(RepairStrategy):
 
     Delegates straight through to
     :meth:`ConstraintHandler.repair_batch`.  For
-    :class:`~src.utils.constraint_handlers.BoxConstraintHandler` with
+    :class:`~declivity.utils.constraint_handlers.BoxConstraintHandler` with
     ``BoxStrategy.CLAMP`` that is a single vectorised ``np.clip`` plus
     a NaN/Inf strip; for other handlers it falls back to the per-row
     default in the ABC.

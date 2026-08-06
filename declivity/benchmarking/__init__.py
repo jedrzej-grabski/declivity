@@ -28,6 +28,13 @@ from declivity.benchmarking.algorithm_run import (
     initial_hessian_from_cmaes,
 )
 from declivity.benchmarking.benchmark import Benchmark
+from declivity.benchmarking.ecdf import (
+    DEFAULT_THRESHOLD_FLOOR,
+    aggregate_ecdf,
+    ecdf_auc,
+    run_ecdf,
+    threshold_grid,
+)
 from declivity.benchmarking.persistence import (
     load_traces_json,
     save_runs_csv,
@@ -38,6 +45,7 @@ from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace
 
 __all__ = [
+    "DEFAULT_THRESHOLD_FLOOR",
     "AlgorithmRun",
     "Benchmark",
     "BenchmarkAlgorithm",
@@ -50,9 +58,13 @@ __all__ = [
     "Problem",
     "RunTrace",
     "SingleAlgorithm",
+    "aggregate_ecdf",
+    "ecdf_auc",
     "initial_hessian_from_cmaes",
     "load_traces_json",
+    "run_ecdf",
     "save_runs_csv",
     "save_summary_csv",
     "save_traces_json",
+    "threshold_grid",
 ]

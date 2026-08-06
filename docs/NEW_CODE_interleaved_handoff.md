@@ -54,13 +54,13 @@ probe does **not** move CMA-ES's mean or reset its covariance. Consequences:
 
 | File | Addition |
 |---|---|
-| `src/utils/benchmark_functions.py` | **`ShiftedFunction`** — translation wrapper (the counterpart of `RotatedFunction`), with a `near_corner(...)` constructor. |
-| `src/algorithms/cmaes/cmaes_optimizer.py` | **`CMAESState`** dataclass + `initial_state=` ctor param + `get_state()` — explicit pause/resume for CMA-ES. |
-| `src/algorithms/cmaes/__init__.py` | Export `CMAESOptimizer`, `CMAESState`. |
-| `src/benchmarking/algorithm_run.py` | **`InterleavedCMAESLBFGSB`** (the scheme) + **`InterleaveResult`** (detailed record) + module-level **`initial_hessian_from_cmaes`** helper (de-duplicated out of `CMAESLBFGSBHandoff`). |
-| `src/benchmarking/__init__.py` | Export the three new symbols. |
-| `src/plotting/interleaved.py` | **`plot_interleaved_convergence`** — the staircase figure. |
-| `src/plotting/__init__.py` | Export `plot_interleaved_convergence`. |
+| `declivity/utils/benchmark_functions.py` | **`ShiftedFunction`** — translation wrapper (the counterpart of `RotatedFunction`), with a `near_corner(...)` constructor. |
+| `declivity/algorithms/cmaes/cmaes_optimizer.py` | **`CMAESState`** dataclass + `initial_state=` ctor param + `get_state()` — explicit pause/resume for CMA-ES. |
+| `declivity/algorithms/cmaes/__init__.py` | Export `CMAESOptimizer`, `CMAESState`. |
+| `declivity/benchmarking/algorithm_run.py` | **`InterleavedCMAESLBFGSB`** (the scheme) + **`InterleaveResult`** (detailed record) + module-level **`initial_hessian_from_cmaes`** helper (de-duplicated out of `CMAESLBFGSBHandoff`). |
+| `declivity/benchmarking/__init__.py` | Export the three new symbols. |
+| `declivity/plotting/interleaved.py` | **`plot_interleaved_convergence`** — the staircase figure. |
+| `declivity/plotting/__init__.py` | Export `plot_interleaved_convergence`. |
 | `experiments/handoff/interleaved.py` | The runnable experiment. |
 
 ### `ShiftedFunction` — move the optimum anywhere
@@ -191,13 +191,13 @@ covariance model often rather than over-committing to one probe.
 
 ```bash
 # Headline staircase + multi-seed comparison on the near-corner ellipsoid
-PYTHONPATH=. pdm run python experiments/handoff/interleaved.py
+PYTHONPATH=. uv run python experiments/handoff/interleaved.py
 
 # Multimodal variant
-PYTHONPATH=. pdm run python experiments/handoff/interleaved.py --problem rastrigin
+PYTHONPATH=. uv run python experiments/handoff/interleaved.py --problem rastrigin
 
 # Tunables
-PYTHONPATH=. pdm run python experiments/handoff/interleaved.py \
+PYTHONPATH=. uv run python experiments/handoff/interleaved.py \
     --dimensions 20 --num-seeds 25 --cmaes-interval 15 --probe-max-evals 60 \
     --corner-fraction 1.0          # optimum exactly on the corner
 ```
@@ -277,8 +277,8 @@ BFGS) without re-running via `--replot-from`.
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py --popsize 400 --tag pop4d
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 400 --tag pop4d
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
     # re-render from saved traces (instant), e.g. add the BFGS baseline back:
-    PYTHONPATH=. pdm run python experiments/handoff/cmabfgs_replication.py \
+    PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py \
         --replot-from plots/handoff/cmabfgs_replication/traces_pop4d.json --show-bfgs --tag pop4d

@@ -17,6 +17,7 @@ search is injected into the optimizer at construction time
 L-BFGS-B, Brent for Powell).
 """
 
+from declivity.utils.line_search.bounds import max_feasible_step
 from declivity.utils.line_search.derivative_free import (
     BracketError,
     BrentLineSearch,
@@ -58,5 +59,7 @@ __all__ = [
     "bounded_minimize",
     "bracket_minimum",
     "brent_minimize",
+    # Box-bound geometry (feeds stpmax for bound-constrained line searches)
+    "max_feasible_step",
     "more_thuente_search",
 ]
