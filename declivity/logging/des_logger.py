@@ -15,19 +15,16 @@ class DESLogData(PopulationLogData):
 
     ft: list[float] = field(default_factory=list)
     evolution_path: list[NDArray[np.float64]] = field(default_factory=list)
-    step_size: list[float] = field(default_factory=list)
 
     def clear(self) -> None:
         super().clear()
         self.ft.clear()
         self.evolution_path.clear()
-        self.step_size.clear()
 
     def to_dict(self) -> dict[str, list[Any]]:
         return super().to_dict() | {
             "ft": self.ft,
             "evolution_path": self.evolution_path,
-            "step_size": self.step_size,
         }
 
 
@@ -81,10 +78,7 @@ class DESLogger(BaseLogger[DESLogData]):
             if len(eigenvalues) > 0:
                 self.logs.condition_number.append(eigenvalues[0] / eigenvalues[-1])
 
-        if self.config.diag_ft:
-            self.logs.ft.append(ft)
-
         if evolution_path is not None:
             self.logs.evolution_path.append(evolution_path.copy())
 
-        self.logs.step_size.append(ft)
+        self.logs.ft.append(ft)

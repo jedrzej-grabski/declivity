@@ -415,3 +415,8 @@ class PopulationInitializerType(Enum):
                 return SimplexPopulationInitializer()
             case PopulationInitializerType.IDENTITY:
                 return IdentityPopulationInitializer()
+            case _:
+                # Exhaustive match — new members must extend this method.
+                raise NotImplementedError(
+                    f"No build() implementation for {self!r}"
+                )

@@ -46,6 +46,7 @@ from declivity.utils.line_search import (
     ScalarSearchResult,
     BrentLineSearch,
     GoldenSectionLineSearch,
+    DerivativeFreeLineSearchType,
 )
 from declivity.utils.initial_geometry import (
     InitialGeometry,
@@ -109,6 +110,7 @@ __all__ = [
     "ScalarSearchResult",
     "BrentLineSearch",
     "GoldenSectionLineSearch",
+    "DerivativeFreeLineSearchType",
     # Initial geometry surface (shared learned-curvature object)
     "InitialGeometry",
     "InitialHessian",

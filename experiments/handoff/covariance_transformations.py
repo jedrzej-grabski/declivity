@@ -126,7 +126,6 @@ def run_handoff_study(
         cmaes_config = CMAESConfig(
             dimensions=dimensions, sigma=10.0,
         )
-        cmaes_config.diag_sigma = True
         cmaes_config.diag_eigen = True
 
         optimizer_cmaes = AlgorithmFactory.create_optimizer(

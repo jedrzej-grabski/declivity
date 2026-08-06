@@ -105,7 +105,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
     population is produced by the injected
     :class:`~src.utils.population_initializers.PopulationInitializer`
     (default: :class:`~src.utils.population_initializers.MeanSigmaPopulationInitializer`
-    with ``sigma=config.sigma``, which reproduces the canonical
+    with the resolved initial sigma, which reproduces the canonical
     ``N(m, σ²I)`` start).  Both seams are live — swapping the defaults
     changes the algorithm's behaviour.
     """
@@ -129,10 +129,13 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
         # Resolve auto-sigma (config.sigma == 0.0) up-front so the default
         # population_initializer can be constructed with the final value.
-        if config.sigma == 0.0:
+        # The resolution stays local — the caller's config is never mutated,
+        # so one config can be reused across optimizers with different bounds.
+        initial_sigma = float(config.sigma)
+        if initial_sigma == 0.0:
             lb_array = BaseOptimizer._process_bounds(lower_bounds, len(initial_point))
             ub_array = BaseOptimizer._process_bounds(upper_bounds, len(initial_point))
-            config.sigma = float(np.mean(ub_array - lb_array) / 5.0)
+            initial_sigma = float(np.mean(ub_array - lb_array) / 5.0)
 
         super().__init__(
             func=func,
@@ -141,7 +144,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             repair_strategy=repair_strategy or LamarckianRepair(),
             population_initializer=(
                 population_initializer
-                or MeanSigmaPopulationInitializer(sigma=config.sigma)
+                or MeanSigmaPopulationInitializer(sigma=initial_sigma)
             ),
             algorithm=AlgorithmChoice.CMAES,
             constraint_handler=constraint_handler,
@@ -153,7 +156,14 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
         n = self.dimensions
         self._mean: NDArray[np.float64] = self.initial_point.copy()
-        self._sigma: float = float(self.config.sigma)
+        self._initial_sigma: float = initial_sigma
+        self._sigma: float = initial_sigma
+        # config.tolx is derived from config.sigma; when auto-sigma resolved
+        # locally (config.sigma == 0.0 → config.tolx == 0.0), re-derive it
+        # from the resolved value instead of writing back into the config.
+        self._tolx: float = (
+            self.config.tolx if self.config.sigma != 0.0 else 1e-12 * initial_sigma
+        )
         self._C: NDArray[np.float64] = np.eye(n)
         self._pc: NDArray[np.float64] = np.zeros(n)
         self._p_sigma: NDArray[np.float64] = np.zeros(n)
@@ -163,6 +173,10 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         self._generation = 0
         self._funhist_values = np.full(self.config.funhist_term * 2, np.inf)
 
+        # With a restored state, generation-0 sampling must honour the
+        # restored sigma/covariance instead of the construction-time
+        # PopulationInitializer (see _generate_population).
+        self._restored_from_state = initial_state is not None
         if initial_state is not None:
             self._apply_state(initial_state)
 
@@ -242,7 +256,6 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         self._begin_run()
         best_fitness = float("inf")
         best_solution = self._mean.copy()
-        worst_fitness: float | None = None
         message: str | None = None
 
         lambda_ = self.config.population_size
@@ -263,10 +276,13 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                     best_solution = population[k].copy()
 
             # ---- Bookkeeping for the iteration log -----------------------
-            iter_worst = float(np.max(fitness_values))
-            worst_fitness = iter_worst if worst_fitness is None else max(worst_fitness, iter_worst)
+            worst_fitness = float(np.max(fitness_values))
             median_fitness = float(np.median(fitness_values))
-            mean_fitness_value = self.evaluate(self.constraint_handler.repair(self._mean))
+            repaired_mean = self.constraint_handler.repair(self._mean)
+            mean_fitness_value = self.evaluate(repaired_mean)
+            if mean_fitness_value < best_fitness:
+                best_fitness = float(mean_fitness_value)
+                best_solution = repaired_mean.copy()
 
             # ---- Update distribution -------------------------------------
             self._tell(population, fitness_values)
@@ -282,7 +298,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                 fitness=fitness_values,
                 population=population if self.config.diag_pop else None,
                 best_fitness=best_fitness,
-                worst_fitness=worst_fitness if worst_fitness is not None else float("inf"),
+                worst_fitness=worst_fitness,
                 best_solution=best_solution,
                 mean_fitness=mean_fitness_value,
                 median_fitness=median_fitness,
@@ -317,14 +333,16 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
     def _generate_population(self, lambda_: int) -> NDArray[np.float64]:
         """Produce the λ candidates for the current generation.
 
-        Iteration 0 routes through the injected
+        Iteration 0 of a fresh run routes through the injected
         :class:`PopulationInitializer` so the initial sampling shape is
-        swappable.  Subsequent iterations sample from ``N(m, σ²C)`` using
-        the algorithm's current eigendecomposition — there is no
-        framework primitive that owns the correlated covariance, so this
-        stays internal.
+        swappable.  Subsequent iterations — and every iteration of a run
+        restored from a :class:`CMAESState` (whose sigma/covariance must
+        be honoured even at ``generation == 0``) — sample from
+        ``N(m, σ²C)`` using the algorithm's current eigendecomposition —
+        there is no framework primitive that owns the correlated
+        covariance, so this stays internal.
         """
-        if self._generation == 0:
+        if self._generation == 0 and not self._restored_from_state:
             return self.population_initializer.generate_population(
                 rng=self.rng,
                 x0=self._mean,
@@ -469,7 +487,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         ):
             return "Function value range below tolerance."
 
-        if np.all(sigma * dC < cfg.tolx) and np.all(sigma * self._pc < cfg.tolx):
+        if np.all(sigma * dC < self._tolx) and np.all(sigma * self._pc < self._tolx):
             return "All standard deviations smaller than tolerance."
 
         if sigma * float(np.max(D)) > cfg.tolxup:
