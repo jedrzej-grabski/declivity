@@ -31,6 +31,8 @@ from declivity.utils.population_initializers import (
     PopulationInitializer,
     NormalPopulationInitializer,
     MeanSigmaPopulationInitializer,
+    SimplexPopulationInitializer,
+    CovarianceSimplexInitializer,
     IdentityPopulationInitializer,
     PopulationInitializerType,
 )
@@ -93,6 +95,8 @@ __all__ = [
     "PopulationInitializer",
     "NormalPopulationInitializer",
     "MeanSigmaPopulationInitializer",
+    "SimplexPopulationInitializer",
+    "CovarianceSimplexInitializer",
     "IdentityPopulationInitializer",
     "PopulationInitializerType",
     # Line-search surface
