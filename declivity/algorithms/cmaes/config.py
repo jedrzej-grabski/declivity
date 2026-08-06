@@ -98,9 +98,6 @@ class CMAESConfig(PopulationBaseConfig):
     population_size: int = field(default=0)
     """Population size λ (``0`` → default ``4 + ⌊3 ln d⌋``)."""
 
-    diag_sigma: bool = False
-    """Log σ every generation."""
-
     diag_covariance_matrix: bool = False
     """Store the full covariance matrix every generation (memory-heavy)."""
 
@@ -155,7 +152,6 @@ class CMAESConfig(PopulationBaseConfig):
 
     def enable_all_diagnostics(self) -> None:
         super().enable_all_diagnostics()
-        self.diag_sigma = True
         self.diag_covariance_matrix = True
 
     def __str__(self) -> str:
