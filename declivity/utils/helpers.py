@@ -94,26 +94,3 @@ def delete_inf_nan(x: NDArray[np.float64]) -> NDArray[np.float64]:
     result[np.isnan(result)] = np.finfo(float).max
     result[np.isinf(result)] = np.finfo(float).max
     return result
-
-
-def sample_from_history(
-    history: list[NDArray[np.float64]],
-    history_sample: NDArray[np.float64],
-    lambda_: int,
-) -> NDArray[np.float64]:
-    """
-    Sample indices from history entries.
-
-    Args:
-        history: list of history entries
-        history_sample: Indices of history entries to sample from
-        lambda_: Number of samples to generate
-
-    Returns:
-        Array of sampled indices
-    """
-    result = np.zeros(lambda_, dtype=int)
-    for i in range(lambda_):
-        history_idx = history_sample[i]
-        result[i] = np.random.randint(0, history[history_idx].shape[1])
-    return result

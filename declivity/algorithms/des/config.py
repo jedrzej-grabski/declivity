@@ -51,26 +51,12 @@ def default_pathratio(obj: "DESConfig") -> float:
     return np.sqrt(obj.path_length)
 
 
-def default_ft_scale(obj: "DESConfig") -> float:
-    """Default Ft scaling factor."""
-    N = obj.dimensions
-    mu_eff = obj.mu_eff
-    return ((mu_eff + 2) / (N + mu_eff + 3)) / (
-        1
-        + 2 * max(0, np.sqrt((mu_eff - 1) / (N + 1)) - 1)
-        + (mu_eff + 2) / (N + mu_eff + 3)
-    )
-
-
 @dataclass
 class DESConfig(PopulationBaseConfig):
     """
     Configuration for the DES optimizer.
     Extends PopulationBaseConfig with DES-specific parameters.
     """
-
-    ft: float = 1.0
-    """Scaling factor of difference vectors"""
 
     init_ft: float = 1.0
     """Initial scaling factor"""
@@ -99,10 +85,6 @@ class DESConfig(PopulationBaseConfig):
     lamarckian: bool = False
     """Whether to use Lamarckian evolution"""
 
-    # DES-specific diagnostic logging
-    diag_ft: bool = False
-    """Log Ft values"""
-
     # Computed/derived parameters
     cp: float = field(init=False)
     """Evolution path decay factor"""
@@ -128,9 +110,6 @@ class DESConfig(PopulationBaseConfig):
     mu_eff: float = field(init=False)
     """Effective selection mass"""
 
-    ft_scale: float = field(init=False)
-    """Scaling factor for Ft"""
-
     def __post_init__(self) -> None:
         """Calculate derived parameters that depend on other params"""
         if self.population_size <= 0:
@@ -147,21 +126,13 @@ class DESConfig(PopulationBaseConfig):
         weights_sum_square = np.sum(self.weights**2)
         self.mu_eff = np.sum(self.weights) ** 2 / weights_sum_square
 
-        self.ft_scale = default_ft_scale(self)
-
         super().validate()
-
-    def enable_all_diagnostics(self) -> None:
-        """Enable all diagnostic logging options including DES-specific ones."""
-        super().enable_all_diagnostics()
-        self.diag_ft = True
 
     def __str__(self) -> str:
         """String representation of the DESConfig."""
         return (
             f"DESConfig(dimensions={self.dimensions}, "
-            f"population_size={self.population_size}, ft={self.ft}, "
+            f"population_size={self.population_size}, "
             f"init_ft={self.init_ft}, path_length={self.path_length}, "
-            f"c_ft={self.c_ft}, lamarckian={self.lamarckian}, "
-            f"diag_ft={self.diag_ft})"
+            f"c_ft={self.c_ft}, lamarckian={self.lamarckian})"
         )
