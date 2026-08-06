@@ -25,6 +25,7 @@ counter naturally.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Callable
 
 import numpy as np
@@ -47,6 +48,8 @@ class GradientStrategy(ABC):
         x: NDArray[np.float64],
         eps: float,
         f_at_x: float | None = None,
+        lower_bounds: NDArray[np.float64] | None = None,
+        upper_bounds: NDArray[np.float64] | None = None,
     ) -> NDArray[np.float64]:
         """Approximate ``∇f(x)``.
 
@@ -65,8 +68,17 @@ class GradientStrategy(ABC):
             forward FD uses ``eps`` one-sided).
         f_at_x:
             Optional cached value of ``f(x)``.  Forward FD can reuse it
-            and save one evaluation per gradient; symmetric schemes
-            ignore it.
+            and save one evaluation per gradient; central FD needs it
+            only for coordinates that fall back to a one-sided
+            difference at a bound.
+        lower_bounds, upper_bounds:
+            Optional box bounds, shape ``(dim,)``.  When supplied, a
+            perturbed point that would leave the box switches that
+            coordinate to a one-sided difference on the feasible side
+            (standard practice for bound-constrained solvers whose
+            iterates sit exactly on bounds).  ``None`` (or probes
+            strictly inside the box) reproduces the unconstrained
+            scheme exactly.
 
         Returns
         -------
@@ -96,15 +108,26 @@ class ForwardFD(GradientStrategy):
         x: NDArray[np.float64],
         eps: float,
         f_at_x: float | None = None,
+        lower_bounds: NDArray[np.float64] | None = None,
+        upper_bounds: NDArray[np.float64] | None = None,
     ) -> NDArray[np.float64]:
         if f_at_x is None:
             f_at_x = f(x)
         num_vars = len(x)
         gradient = np.zeros(num_vars)
         for i in range(num_vars):
-            x_forward = x.copy()
-            x_forward[i] += eps
-            gradient[i] = (f(x_forward) - f_at_x) / eps
+            step = eps
+            if (
+                upper_bounds is not None
+                and x[i] + eps > upper_bounds[i]
+                and (lower_bounds is None or x[i] - eps >= lower_bounds[i])
+            ):
+                # Forward probe would exit the box: difference backward
+                # instead (one-sided on the feasible side).
+                step = -eps
+            x_probe = x.copy()
+            x_probe[i] += step
+            gradient[i] = (f(x_probe) - f_at_x) / step
         return gradient
 
 
@@ -128,16 +151,64 @@ class CentralFD(GradientStrategy):
         x: NDArray[np.float64],
         eps: float,
         f_at_x: float | None = None,
+        lower_bounds: NDArray[np.float64] | None = None,
+        upper_bounds: NDArray[np.float64] | None = None,
     ) -> NDArray[np.float64]:
-        del f_at_x  # symmetric scheme does not reuse the centre value
         num_vars = len(x)
         gradient = np.zeros(num_vars)
         for i in range(num_vars):
-            x_forward = x.copy()
-            x_backward = x.copy()
-            x_forward[i] += eps
-            x_backward[i] -= eps
-            gradient[i] = (f(x_forward) - f(x_backward)) / (2.0 * eps)
+            forward_ok = upper_bounds is None or x[i] + eps <= upper_bounds[i]
+            backward_ok = lower_bounds is None or x[i] - eps >= lower_bounds[i]
+            if forward_ok == backward_ok:
+                # Both probes feasible: symmetric difference.  (Also the
+                # degenerate fallback when the box is narrower than 2*eps.)
+                x_forward = x.copy()
+                x_backward = x.copy()
+                x_forward[i] += eps
+                x_backward[i] -= eps
+                gradient[i] = (f(x_forward) - f(x_backward)) / (2.0 * eps)
+            elif forward_ok:
+                # Backward probe would exit the box: one-sided forward,
+                # anchored on the (lazily evaluated) centre value.
+                if f_at_x is None:
+                    f_at_x = f(x)
+                x_forward = x.copy()
+                x_forward[i] += eps
+                gradient[i] = (f(x_forward) - f_at_x) / eps
+            else:
+                if f_at_x is None:
+                    f_at_x = f(x)
+                x_backward = x.copy()
+                x_backward[i] -= eps
+                gradient[i] = (f_at_x - f(x_backward)) / eps
         return gradient
+
+
+class GradientStrategyType(Enum):
+    """
+    Discoverability enum listing all built-in gradient strategies.
+
+    Call ``.build()`` to obtain a ready-to-use :class:`GradientStrategy`
+    instance without importing concrete classes.
+    """
+
+    FORWARD_FD = "forward_fd"
+    CENTRAL_FD = "central_fd"
+
+    def build(self) -> GradientStrategy:
+        """
+        Construct the matching :class:`GradientStrategy`.
+
+        Returns
+        -------
+        GradientStrategy
+            Concrete strategy for this enum member.
+        """
+        if self is GradientStrategyType.FORWARD_FD:
+            return ForwardFD()
+        elif self is GradientStrategyType.CENTRAL_FD:
+            return CentralFD()
+        # Exhaustive match — new members must extend this method.
+        raise NotImplementedError(f"No build() implementation for {self!r}")
 
 

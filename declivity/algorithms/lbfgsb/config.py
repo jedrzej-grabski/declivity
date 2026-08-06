@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Union
 import numpy as np
 from numpy.typing import NDArray
@@ -59,14 +59,19 @@ class LBFGSBConfig(BaseConfig):
     if the interval of uncertainty is within xtol_ls of the current step."""
 
     max_ls_iter: int = 20
-    """Maximum number of function evaluations per line search call."""
+    """Maximum number of trial steps per line search call. Each trial costs
+    one or more function evaluations depending on the injected line search
+    and gradient mode (e.g., 3 per trial for More-Thuente in central-FD mode,
+    1 per trial for Armijo backtracking)."""
 
     fd_eps: float = 0.0
     """Finite-difference step size used by both the gradient strategy
-    and the optimizer's directional-derivative computation.  0 = auto
-    (``sqrt(machine_eps)`` — appropriate for the default ``CentralFD``).
-    Override per-strategy via the ``gradient_strategy`` ctor parameter
-    if a different step is needed (e.g., for ``ForwardFD``)."""
+    and the optimizer's directional-derivative computation.  0 = auto:
+    the optimizer resolves a strategy-appropriate step at construction —
+    ``machine_eps**(1/3)`` (~6e-6) for the default ``CentralFD``, whose
+    truncation/rounding trade-off is optimal at ``eps**(1/3)``, and
+    ``sqrt(machine_eps)`` (~1.5e-8) for ``ForwardFD``.  Explicit positive
+    values are passed through untouched."""
 
     # Diagnostic flags specific to L-BFGS-B
     diag_gradient_norm: bool = False
@@ -84,20 +89,7 @@ class LBFGSBConfig(BaseConfig):
     diag_line_search_iters: bool = False
     """Log number of line search function evaluations each iteration."""
 
-    # Derived parameters
-    _fd_eps_actual: float = field(init=False, repr=False)
-    """Actual finite difference epsilon (computed from fd_eps)."""
-
     def __post_init__(self) -> None:
-        self._recalculate_derived_params()
-
-    def _recalculate_derived_params(self) -> None:
-        eps = np.finfo(float).eps
-        if self.fd_eps <= 0:
-            self._fd_eps_actual = eps**0.5
-        else:
-            self._fd_eps_actual = self.fd_eps
-
         self.validate()
 
     def validate(self) -> None:
@@ -109,11 +101,6 @@ class LBFGSBConfig(BaseConfig):
             raise ValueError("factr must be non-negative.")
         if self.pgtol < 0:
             raise ValueError("pgtol must be non-negative.")
-
-    def __setattr__(self, name: str, value) -> None:
-        super().__setattr__(name, value)
-        if name == "fd_eps" and hasattr(self, "_fd_eps_actual"):
-            self._recalculate_derived_params()
 
     def enable_all_diagnostics(self) -> None:
         super().enable_all_diagnostics()
