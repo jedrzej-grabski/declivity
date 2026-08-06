@@ -79,8 +79,8 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
         Sized by the archive ``window`` (not the total budget): the table is
         only ever read through its first ``window`` entries — see
-        :meth:`_generate_population`, which slices
-        ``decay_table[window - 1 :: -1]`` — so ``window`` factors suffice
+        :meth:`_generate_population`, which reverses the full table
+        (``decay_table[::-1]``) — so ``window`` factors suffice
         regardless of how many generations the run lasts."""
         t = np.arange(1, self.config.window + 1)
         self.decay_table = (1 - self.config.c_cov) ** ((t - 1) / 2)
@@ -101,33 +101,38 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         return np.concatenate([arr[-n:], arr[:-n]])
 
     def _generate_population(self, generation: int) -> NDArray[np.float64]:
-        # Get decay factors for current generation
-        window_size = min(generation, self.config.window)
-        decay = self.decay_table[self.config.window - 1 :: -1][:window_size]
+        # Get decay factors for current generation.  Match the reference
+        # (R lines 136–138): always reverse the FULL window-length table
+        # and cyclically shift by ``generation - 1``; before the archive
+        # fills, its zero columns absorb the meaningless decay entries.
+        decay = self.decay_table[::-1].copy()  # length = window
         decay = self._shift_array(decay, generation - 1)
 
-        decay_rep = np.repeat(decay, self.config.mu)[: generation * self.config.mu]
-
-        w = np.tile(np.sqrt(self.config.weights), window_size)[: len(decay_rep)]
-
-        r_mu = self.rng.standard_normal((len(decay_rep), self.config.population_size))
-
-        relevant_d_size = min(generation * self.config.mu, self.d_history.shape[1])
-        d_relevant = self.d_history[:, :relevant_d_size]
-
-        weighted_d = d_relevant * (decay_rep[:relevant_d_size] * w[:relevant_d_size])
+        # decay index of archive column c is ``c // mu`` (its generation
+        # slot); weight index is ``c % mu`` (its selection rank) — the
+        # d_history layout is slot-major (see :meth:`_d_range`), so
+        # ``np.tile`` (not the reference's ``np.repeat``, which pairs the
+        # weight by ``c // window``) gives each column sqrt(weight of its
+        # rank).  Identical numerically under the uniform weights both
+        # implementations use.
+        decay_rep = np.repeat(decay, self.config.mu)  # length = window * mu
+        w = np.tile(np.sqrt(self.config.weights), self.config.window)
 
         # Late-iter decay-table underflow makes the matmul multiply
         # denormalised numbers — numpy reports spurious "divide by
         # zero" / "invalid" / "overflow" warnings even though the
         # accumulated result is mathematically well-defined.
         with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
-            rank_mu = np.sqrt(self.config.c_mu) * (weighted_d @ r_mu[:relevant_d_size, :])
+            r_mu = self.rng.standard_normal(
+                (self.config.window * self.config.mu, self.config.population_size)
+            )
+            rank_mu = np.sqrt(self.config.c_mu) * (
+                self.d_history @ (r_mu * decay_rep[:, np.newaxis] * w[:, np.newaxis])
+            )
 
-            r_1 = self.rng.standard_normal((window_size, self.config.population_size))
-            p_relevant = self.p_history[:, :window_size]
+            r_1 = self.rng.standard_normal((self.config.window, self.config.population_size))
             rank_1 = np.sqrt(self.config.c_1) * (
-                p_relevant @ (r_1 * decay[:window_size, np.newaxis])
+                self.p_history @ (r_1 * decay[:, np.newaxis])
             )
 
         if generation <= self.config.window:
@@ -154,7 +159,6 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         self._begin_run()
         best_fitness = float("inf")
         best_solution = self.initial_point.copy()
-        worst_fitness = float("inf")
         message = None
         generation = 0
 
@@ -176,6 +180,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         initial_pen = np.where(
             np.isfinite(initial_pen), initial_pen, np.finfo(np.float64).max / 2.0
         )
+        self.constraint_violations = int(np.sum(initial_pen > 1.0))
         initial_raw = np.array(
             [self.evaluate(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
         )
@@ -219,8 +224,30 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
 
         self._update_sigma_ppmf_first(initial_vx, initial_fitness)
 
+        self.logger.log_iteration(
+            iteration=1,
+            evaluations=self.evaluations,
+            best_fitness=best_fitness,
+            worst_fitness=float(np.max(initial_fitness)),
+            mean_fitness=float(np.mean(initial_fitness)),
+            sigma=self.sigma,
+            p_succ=self.p_succ,
+            midpoint_fitness=self.midpoint_fitness,
+            constraint_violations=self.constraint_violations,
+            fitness=initial_fitness,
+            population=initial_vx.T if self.config.diag_pop else None,
+            best_solution=best_solution,
+            pc=self.pc,
+            mean_vector=self.mean,
+        )
+
+        # Same algorithm-internal ``tolfun`` convergence test as the main
+        # loop (see below) — the reference applies it on iteration 1 too.
+        if float(initial_fitness[arindex[0]]) <= self.config.tolfun:
+            message = "Target fitness reached."
+
         generation = 1
-        while not self.should_stop(generation, best_fitness):
+        while message is None and not self.should_stop(generation, best_fitness):
             generation += 1
 
             d = self._generate_population(generation)
@@ -243,8 +270,6 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 if valid_raw[wb] < best_fitness:
                     best_fitness = float(valid_raw[wb])
                     best_solution = valid_vx[:, wb].copy()
-
-            worst_fitness = max(worst_fitness, float(np.max(fitness_values)))
 
             arindex = np.argsort(fitness_values)
             aripop = arindex[: self.config.mu]
@@ -271,7 +296,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 iteration=generation,
                 evaluations=self.evaluations,
                 best_fitness=best_fitness,
-                worst_fitness=worst_fitness,
+                worst_fitness=float(np.max(fitness_values)),
                 mean_fitness=float(np.mean(fitness_values)),
                 sigma=self.sigma,
                 p_succ=self.p_succ,
@@ -284,12 +309,12 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 mean_vector=self.mean,
             )
 
-            # Match R: ``terminate.stopfitness`` checks the best raw
+            # Match R: ``terminate.stopfitness`` checks the best penalised
             # fitness from this generation against ``stopfitness``.  The
             # shared evaluation / time / target budget is owned by the
             # injected stopping condition (the main-loop guard above); this
             # is the algorithm-internal ``tolfun`` convergence test only.
-            if float(fitness_values[0]) <= self.config.tolfun:
+            if float(fitness_values[arindex[0]]) <= self.config.tolfun:
                 message = "Target fitness reached."
                 break
 
@@ -333,9 +358,9 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         R for the rest of the run.
         """
         if not self.config.use_ppmf:
-            self.midpoint_fitness = np.inf
+            self.midpoint_fitness = float("nan")
             self.prev_midpoint_fitness = np.inf
-            self.p_succ = 0.0
+            self.p_succ = float("nan")
             return
 
         self._update_sigma_ppmf(vx, fitness_values)
@@ -349,14 +374,12 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         If use_ppmf is False, sigma remains constant.
         """
         if not self.config.use_ppmf:
-            # Keep sigma constant, just calculate p_succ for logging
-            population_midpoint = np.mean(vx, axis=1)
-            self.midpoint_fitness = self.evaluate(population_midpoint)
-
-            num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
-            self.p_succ = num_successes / self.config.population_size
-
-            self.prev_midpoint_fitness = self.midpoint_fitness
+            # Keep sigma constant.  The reference's ``sigma_updater =
+            # "identity"`` makes no midpoint call, so spend no evaluation
+            # here either — log NaN for the midpoint-derived fields to
+            # keep the diagnostic series aligned.
+            self.midpoint_fitness = float("nan")
+            self.p_succ = float("nan")
             return
 
         self.prev_midpoint_fitness = self.midpoint_fitness
