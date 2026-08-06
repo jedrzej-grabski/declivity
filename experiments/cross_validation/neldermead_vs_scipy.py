@@ -43,7 +43,7 @@ Output (under ``plots/cross_validation/neldermead_vs_scipy/``):
 
 Run::
 
-    PYTHONPATH=. pdm run python experiments/cross_validation/neldermead_vs_scipy.py
+    PYTHONPATH=. uv run python experiments/cross_validation/neldermead_vs_scipy.py
 """
 
 from __future__ import annotations
