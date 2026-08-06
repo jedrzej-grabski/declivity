@@ -206,8 +206,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 best_fitness=best_fitness,
                 evaluations=self.evaluations,
                 message=(
-                    f"Converged: gradient norm {grad_norm:.2e} <= "
-                    f"{config.gtol:.2e}"
+                    f"Converged: gradient norm {grad_norm:.2e} <= {config.gtol:.2e}"
                 ),
                 diagnostic=self.get_logs(),
                 algorithm=AlgorithmChoice.BFGS,
@@ -297,8 +296,8 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 gradient_new = self._cached_gradient
                 function_value_new = line_search_result.f_new
             else:
-                function_value_new, gradient_new = (
-                    self._evaluate_function_and_gradient(x_new)
+                function_value_new, gradient_new = self._evaluate_function_and_gradient(
+                    x_new
                 )
 
             gradient_difference = gradient_new - gradient
@@ -329,8 +328,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
 
             if grad_norm <= config.gtol:
                 termination_message = (
-                    f"Converged: gradient norm {grad_norm:.2e} <= "
-                    f"{config.gtol:.2e}"
+                    f"Converged: gradient norm {grad_norm:.2e} <= {config.gtol:.2e}"
                 )
                 break
 
@@ -351,16 +349,12 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
 
             # BFGS inverse-Hessian update (Sherman–Morrison), SciPy port.
             # rho = 1 / (yk . sk), guarded when the curvature vanishes.
-            if curvature == 0.0:
-                rho = 1000.0
-            else:
-                rho = 1.0 / curvature
+            rho = 1000.0 if curvature == 0.0 else 1.0 / curvature
 
             left = identity - rho * np.outer(step_vector, gradient_difference)
             right = identity - rho * np.outer(gradient_difference, step_vector)
-            inverse_hessian = (
-                left @ inverse_hessian @ right
-                + rho * np.outer(step_vector, step_vector)
+            inverse_hessian = left @ inverse_hessian @ right + rho * np.outer(
+                step_vector, step_vector
             )
 
             previous_function_value = function_value
