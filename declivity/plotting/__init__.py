@@ -23,7 +23,6 @@ Adding a new panel: one ``PanelRegistry.register(...)`` call. See
 # effect. Keep this before re-exports so downstream imports see a populated
 # registry.
 from declivity.plotting import standard_panels  # noqa: F401
-
 from declivity.plotting.benchmark import (
     plot_benchmark_boxplot,
     plot_benchmark_convergence,

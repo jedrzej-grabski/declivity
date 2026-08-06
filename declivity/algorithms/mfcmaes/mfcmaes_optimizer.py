@@ -1,18 +1,21 @@
 import math
-from typing import Callable, final, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Union, final
 
 import numpy as np
 from numpy.typing import NDArray
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
-from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.repair_strategies import RepairStrategy, LamarckianRepair
-from declivity.utils.population_initializers import PopulationInitializer, MeanSigmaPopulationInitializer
-from declivity.utils.stopping_conditions import StoppingCondition
+from declivity.core.algorithm_factory import register_optimizer
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.population_optimizer import PopulationOptimizer
-from declivity.core.algorithm_factory import register_optimizer
+from declivity.utils.constraint_handlers import ConstraintHandler
+from declivity.utils.population_initializers import (
+    MeanSigmaPopulationInitializer,
+    PopulationInitializer,
+)
+from declivity.utils.repair_strategies import LamarckianRepair, RepairStrategy
+from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
     from declivity.logging.mfcmaes_logger import MFCMAESLogData
@@ -45,7 +48,8 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             initial_point=initial_point,
             config=config,
             repair_strategy=repair_strategy or LamarckianRepair(),
-            population_initializer=population_initializer or MeanSigmaPopulationInitializer(sigma=config.sigma),
+            population_initializer=population_initializer
+            or MeanSigmaPopulationInitializer(sigma=config.sigma),
             algorithm=AlgorithmChoice.MFCMAES,
             constraint_handler=constraint_handler,
             stopping_condition=stopping_condition,
@@ -122,7 +126,9 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         # denormalised numbers — numpy reports spurious "divide by
         # zero" / "invalid" / "overflow" warnings even though the
         # accumulated result is mathematically well-defined.
-        with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
+        with np.errstate(
+            divide="ignore", invalid="ignore", over="ignore", under="ignore"
+        ):
             r_mu = self.rng.standard_normal(
                 (self.config.window * self.config.mu, self.config.population_size)
             )
@@ -130,7 +136,9 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 self.d_history @ (r_mu * decay_rep[:, np.newaxis] * w[:, np.newaxis])
             )
 
-            r_1 = self.rng.standard_normal((self.config.window, self.config.population_size))
+            r_1 = self.rng.standard_normal(
+                (self.config.window, self.config.population_size)
+            )
             rank_1 = np.sqrt(self.config.c_1) * (
                 self.p_history @ (r_1 * decay[:, np.newaxis])
             )
@@ -144,7 +152,9 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 * (1 - self.config.c_cov) ** (generation - self.config.window - 1)
             )
 
-        r_last = self.rng.standard_normal((self.config.dimensions, self.config.population_size))
+        r_last = self.rng.standard_normal(
+            (self.config.dimensions, self.config.population_size)
+        )
         last_term = last_decay * r_last
 
         # Combine all terms to get difference vectors
@@ -174,7 +184,9 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         )
         initial_arx = initial_pop.T  # (dim, pop_size)
         initial_d = (initial_arx - self.mean[:, np.newaxis]) / self.sigma
-        initial_vx = self.repair_strategy.repair_population(initial_arx.T, self.constraint_handler).T
+        initial_vx = self.repair_strategy.repair_population(
+            initial_arx.T, self.constraint_handler
+        ).T
 
         initial_pen = 1.0 + np.sum((initial_arx - initial_vx) ** 2, axis=0)
         initial_pen = np.where(
@@ -253,13 +265,17 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             d = self._generate_population(generation)
             arx = self.mean[:, np.newaxis] + self.sigma * d
 
-            vx = self.repair_strategy.repair_population(arx.T, self.constraint_handler).T
+            vx = self.repair_strategy.repair_population(
+                arx.T, self.constraint_handler
+            ).T
 
             pen = 1.0 + np.sum((arx - vx) ** 2, axis=0)
             pen = np.where(np.isfinite(pen), pen, np.finfo(np.float64).max / 2.0)
             self.constraint_violations = int(np.sum(pen > 1.0))
 
-            raw_fitness = np.array([self.evaluate(vx[:, i]) for i in range(vx.shape[1])])
+            raw_fitness = np.array(
+                [self.evaluate(vx[:, i]) for i in range(vx.shape[1])]
+            )
             fitness_values = raw_fitness * pen
 
             valid_mask = pen <= 1.0
@@ -327,8 +343,13 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                     2 + math.ceil(self.config.population_size / 4),
                 )
                 fitness_sorted = fitness_values[arindex]
-                if cmp_idx <= self.config.population_size and fitness_sorted[0] == fitness_sorted[cmp_idx - 1]:
-                    self.sigma = self.sigma * math.exp(0.2 + self.config.cs / self.config.damps)
+                if (
+                    cmp_idx <= self.config.population_size
+                    and fitness_sorted[0] == fitness_sorted[cmp_idx - 1]
+                ):
+                    self.sigma = self.sigma * math.exp(
+                        0.2 + self.config.cs / self.config.damps
+                    )
 
         if message is None:
             message = self.stop_message

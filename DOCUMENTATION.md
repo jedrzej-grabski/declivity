@@ -101,6 +101,16 @@ pip install -e .
 Requirements: Python 3.12, NumPy 2.x, SciPy 1.15+, Matplotlib 3.10+,
 opfunu (CEC2017), seaborn, joblib.
 
+Development tooling is driven by the `Justfile`, with tool versions pinned
+there so results are reproducible across machines: `just fmt` / `just fmt-check`
+(ruff format), `just lint` / `just lint-fix` (ruff check), `just types`
+(basedpyright). Bare `just` runs `fmt-check`, `lint` and `types` in sequence.
+The ruff rule set lives in `[tool.ruff.lint]` in `pyproject.toml`; the
+line-by-line ports (`*_reference.py`, `line_search/derivative_free.py`) carry
+narrow per-file ignores so they stay diffable against their original sources.
+`just types` reads `pyrightconfig.json`, which currently checks `declivity/`
+only — `experiments/` is not yet type-clean.
+
 ## Quick start
 
 ```python
@@ -150,8 +160,8 @@ ring buffer of successful steps.
 from src.algorithms.des.config import DESConfig
 
 config = DESConfig(dimensions=10)
-config.ft = 1.0            # initial scaling factor of difference vectors
-config.path_length = 6     # evolution-path history length
+config.ft = 1.0  # initial scaling factor of difference vectors
+config.path_length = 6  # evolution-path history length
 config.lamarckian = False  # if True, repaired coordinates inherit into individuals
 ```
 
@@ -174,8 +184,8 @@ for the migration story and convergence-equivalence evidence.
 from src.algorithms.cmaes.config import CMAESConfig
 
 config = CMAESConfig(dimensions=10)
-config.sigma = 0.0               # 0 ⇒ auto-derive from bounds
-config.population_size = 0       # 0 ⇒ default 4 + ⌊3 ln d⌋
+config.sigma = 0.0  # 0 ⇒ auto-derive from bounds
+config.population_size = 0  # 0 ⇒ default 4 + ⌊3 ln d⌋
 config.tolfun = 1e-12
 config.tolxup = 1e4
 config.tolconditioncov = 1e14
@@ -213,9 +223,9 @@ from src.algorithms.lbfgsb.config import LBFGSBConfig, LineSearchMethod
 
 config = LBFGSBConfig(
     dimensions=10,
-    m=10,                                       # number of correction pairs
-    pgtol=1e-8,                                 # projected-gradient tolerance
-    factr=1e7,                                  # function-value tolerance factor
+    m=10,  # number of correction pairs
+    pgtol=1e-8,  # projected-gradient tolerance
+    factr=1e7,  # function-value tolerance factor
     line_search=LineSearchMethod.MORE_THUENTE,  # or ARMIJO
 )
 ```
@@ -252,14 +262,15 @@ Every algorithm has a `*Config` dataclass extending `BaseConfig`:
 ```python
 from src.core.config_base import BaseConfig
 
+
 @dataclass
 class BaseConfig:
     dimensions: int
-    budget: int = 0          # 0 ⇒ algorithm-specific default
-    population_size: int = 0 # 0 ⇒ algorithm-specific default
+    budget: int = 0  # 0 ⇒ algorithm-specific default
+    population_size: int = 0  # 0 ⇒ algorithm-specific default
 
     # Diagnostic flags that actually gate logging behavior.
-    diag_pop: bool = False    # store the population each iter (memory-expensive)
+    diag_pop: bool = False  # store the population each iter (memory-expensive)
     diag_eigen: bool = False  # compute + log eigenvalues / condition number
 ```
 
@@ -279,7 +290,10 @@ per-algorithm class:
 
 ```python
 config = AlgorithmFactory.create_config(
-    AlgorithmChoice.LBFGSB, dimensions=10, m=15, pgtol=1e-9,
+    AlgorithmChoice.LBFGSB,
+    dimensions=10,
+    m=15,
+    pgtol=1e-9,
 )
 ```
 
@@ -304,11 +318,11 @@ Built-in classes live in `src/utils/benchmark_functions.py`:
 Every benchmark function exposes:
 
 ```python
-func.bounds              # (lower, upper)  — np.float64 arrays of length d
-func.global_minimum      # (x*, f*)
-func(x)                  # the objective value
-func.gradient(x)         # analytic gradient (where defined)
-func.hessian             # property (where defined)
+func.bounds  # (lower, upper)  — np.float64 arrays of length d
+func.global_minimum  # (x*, f*)
+func(x)  # the objective value
+func.gradient(x)  # analytic gradient (where defined)
+func.hessian  # property (where defined)
 ```
 
 Rotated functions live entirely in problem space — they construct a fixed
@@ -382,10 +396,12 @@ semantics.
 ```python
 from src.utils.repair_strategies import LamarckianRepair, RepairStrategyType
 from src.utils.population_initializers import (
-    NormalPopulationInitializer, PopulationInitializerType,
+    NormalPopulationInitializer,
+    PopulationInitializerType,
 )
 from src.utils.initial_point_generator import (
-    UniformInitialPointGenerator, InitialPointGeneratorType,
+    UniformInitialPointGenerator,
+    InitialPointGeneratorType,
 )
 
 # Direct instance construction:
@@ -432,11 +448,11 @@ directly without the population fields.
 
 ```python
 result = optimizer.optimize()
-log = result.diagnostic           # the per-algorithm LogData
-log.best_fitness                  # list[float] — per-iteration best fitness
-log.evaluations                   # list[int]   — eval counter per iteration
-log.iteration                     # list[int]   — iteration index
-log.to_dict()                     # all fields as a dict (for serialization)
+log = result.diagnostic  # the per-algorithm LogData
+log.best_fitness  # list[float] — per-iteration best fitness
+log.evaluations  # list[int]   — eval counter per iteration
+log.iteration  # list[int]   — iteration index
+log.to_dict()  # all fields as a dict (for serialization)
 ```
 
 Algorithm-specific fields are only populated when the matching `diag_*`
@@ -508,8 +524,8 @@ plot_comparison(
         PanelKey.PROJECTED_GRADIENT,
         PanelKey.STEP_SIZE_BY_ITER,
     ],
-    handoff_eval=2500,    # vertical dashed line on evaluations panels
-    handoff_iter=42,      # vertical dashed line on iteration panels
+    handoff_eval=2500,  # vertical dashed line on evaluations panels
+    handoff_iter=42,  # vertical dashed line on iteration panels
 )
 ```
 
@@ -519,13 +535,17 @@ plot_comparison(
 from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
 
 plot_benchmark_convergence(
-    bench.traces, problems=problems, algorithms=algorithms,
-    show_iqr=True,                # median + 25/75 percentile band
-    annotate_handoff=True,        # auto vertical lines from RunTrace.handoff_eval
+    bench.traces,
+    problems=problems,
+    algorithms=algorithms,
+    show_iqr=True,  # median + 25/75 percentile band
+    annotate_handoff=True,  # auto vertical lines from RunTrace.handoff_eval
     save_path="convergence.png",
 )
 plot_benchmark_boxplot(
-    bench.traces, problems=problems, algorithms=algorithms,
+    bench.traces,
+    problems=problems,
+    algorithms=algorithms,
     save_path="final_fitness.png",
 )
 ```
@@ -540,13 +560,13 @@ from src.plotting import Panel, PanelKey, PanelRegistry, YScale
 PanelRegistry.register(
     AlgorithmChoice.CMAES,
     Panel(
-        key=PanelKey.STEP_SIZE,    # or any string for custom keys
+        key=PanelKey.STEP_SIZE,  # or any string for custom keys
         title="Step Size",
         ylabel="σ",
-        field="sigma",             # attribute on the LogData
+        field="sigma",  # attribute on the LogData
         yscale=YScale.LOG,
-        floor=1e-30,               # clip below this for log scale
-        default=True,              # included in plot_metrics(panels=None)
+        floor=1e-30,  # clip below this for log scale
+        default=True,  # included in plot_metrics(panels=None)
     ),
 )
 ```
@@ -562,9 +582,9 @@ Panel(
     title="Convergence",
     ylabel="Fitness (log)",
     series=(
-        Series("best_fitness",   "Best",      color="tab:blue"),
-        Series("mean_fitness",   "Mean f(m)", linestyle=LineStyle.DASHED),
-        Series("median_fitness", "Median",    linestyle=LineStyle.DOTTED),
+        Series("best_fitness", "Best", color="tab:blue"),
+        Series("mean_fitness", "Mean f(m)", linestyle=LineStyle.DASHED),
+        Series("median_fitness", "Median", linestyle=LineStyle.DOTTED),
     ),
     yscale=YScale.LOG,
     floor=1e-30,
@@ -597,22 +617,27 @@ Outside the panel system (they don't fit the per-iteration time-series model):
 
 ```python
 from src.plotting import (
-    plot_function_landscape, plot_function_landscape_grid,
+    plot_function_landscape,
+    plot_function_landscape_grid,
     plot_matrix_diagonal_comparison,
 )
 
 # 2D contour with Hessian eigenvector arrows
 plot_function_landscape(
-    func, title="Rotated Ellipsoid",
-    extent=10.0, resolution=200,
-    show_eigenvectors=True, hessian=func.hessian,
+    func,
+    title="Rotated Ellipsoid",
+    extent=10.0,
+    resolution=200,
+    show_eigenvectors=True,
+    hessian=func.hessian,
     save_path="landscape.png",
 )
 
 # Several functions side-by-side
 plot_function_landscape_grid(
     {"None": ellipsoid, "Random rotation": rotated_ellipsoid},
-    extent=10.0, save_path="landscapes.png",
+    extent=10.0,
+    save_path="landscapes.png",
 )
 
 # Diagonal-profile comparison against a reference matrix
@@ -658,8 +683,11 @@ L-BFGS-B since the kwargs are only emitted when non-`None`.
 
 ```python
 from src.benchmarking import (
-    Benchmark, Problem,
-    SingleAlgorithm, CMAESLBFGSBHandoff, HandoffTransform,
+    Benchmark,
+    Problem,
+    SingleAlgorithm,
+    CMAESLBFGSBHandoff,
+    HandoffTransform,
 )
 from src.plotting import plot_benchmark_convergence, plot_benchmark_boxplot
 from src.utils.benchmark_functions import Rastrigin
@@ -671,20 +699,25 @@ problem = Problem.from_benchmark("Rastrigin-10D", Rastrigin(10))
 
 algorithms = [
     SingleAlgorithm(
-        name="CMA-ES", color="#e74c3c",
+        name="CMA-ES",
+        color="#e74c3c",
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(dimensions=d, budget=10000, sigma=2.0),
     ),
     SingleAlgorithm(
-        name="L-BFGS-B", color="#3498db",
+        name="L-BFGS-B",
+        color="#3498db",
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=10000),
     ),
     CMAESLBFGSBHandoff(
-        name="CMA-ES + L-BFGS-B", color="#2ecc71",
-        cmaes_config_factory=lambda d: CMAESConfig(dimensions=d, budget=2500, sigma=2.0),
+        name="CMA-ES + L-BFGS-B",
+        color="#2ecc71",
+        cmaes_config_factory=lambda d: CMAESConfig(
+            dimensions=d, budget=2500, sigma=2.0
+        ),
         lbfgsb_config_factory=lambda d: LBFGSBConfig(dimensions=d, budget=7500),
-        transform=HandoffTransform.INVERSE,    # or "inverse" (StrEnum)
+        transform=HandoffTransform.INVERSE,  # or "inverse" (StrEnum)
     ),
 ]
 
@@ -693,17 +726,21 @@ bench = Benchmark(
     algorithms=algorithms,
     seeds=list(range(25)),
     output_dir="plots/handoff/rastrigin_demo",
-    num_workers=4,             # >1 ⇒ joblib loky parallel execution
+    num_workers=4,  # >1 ⇒ joblib loky parallel execution
 )
 bench.run(verbose=True)
 bench.print_summary()
 
 plot_benchmark_convergence(
-    bench.traces, problems=[problem], algorithms=algorithms,
+    bench.traces,
+    problems=[problem],
+    algorithms=algorithms,
     save_path="plots/handoff/rastrigin_demo/convergence.png",
 )
 plot_benchmark_boxplot(
-    bench.traces, problems=[problem], algorithms=algorithms,
+    bench.traces,
+    problems=[problem],
+    algorithms=algorithms,
     save_path="plots/handoff/rastrigin_demo/final_fitness.png",
 )
 ```
@@ -719,21 +756,27 @@ Two worked examples in `experiments/basic/`:
 class DESLBFGSBHandoff(HandoffAlgorithm):
     name: str
     color: str
-    des_config_factory:    Callable[[int], DESConfig]
+    des_config_factory: Callable[[int], DESConfig]
     lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
 
     def run_phases(self, problem, x0, seed):
         des_result = AlgorithmFactory.create_optimizer(
-            AlgorithmChoice.DES, problem.function, x0,
+            AlgorithmChoice.DES,
+            problem.function,
+            x0,
             self.des_config_factory(problem.dimensions),
-            lower_bounds=problem.lower_bound, upper_bounds=problem.upper_bound,
+            lower_bounds=problem.lower_bound,
+            upper_bounds=problem.upper_bound,
             seed=seed,
         ).optimize()
 
         lbfgsb_result = AlgorithmFactory.create_optimizer(
-            AlgorithmChoice.LBFGSB, problem.function, des_result.best_solution,
+            AlgorithmChoice.LBFGSB,
+            problem.function,
+            des_result.best_solution,
             self.lbfgsb_config_factory(problem.dimensions),
-            lower_bounds=problem.lower_bound, upper_bounds=problem.upper_bound,
+            lower_bounds=problem.lower_bound,
+            upper_bounds=problem.upper_bound,
         ).optimize()
 
         return des_result, lbfgsb_result
@@ -819,13 +862,11 @@ from src.algorithms.choices import AlgorithmChoice
 
 
 @register_optimizer(AlgorithmChoice.DES)
-class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
-    ...
+class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]): ...
 
 
 @register_logger(AlgorithmChoice.DES)
-class DESLogger(BaseLogger[DESLogData]):
-    ...
+class DESLogger(BaseLogger[DESLogData]): ...
 ```
 
 The decorators wire `AlgorithmFactory` and `LoggerFactory` at module
@@ -892,7 +933,10 @@ class BenchmarkAlgorithm(ABC):
 class HandoffAlgorithm(BenchmarkAlgorithm):
     @abstractmethod
     def run_phases(
-        self, problem: Problem, x0: NDArray[np.float64], seed: int,
+        self,
+        problem: Problem,
+        x0: NDArray[np.float64],
+        seed: int,
     ) -> tuple[OptimizationResult, OptimizationResult]: ...
 
     # run() and _stitch_traces() are inherited — eval-count offsets,
@@ -969,10 +1013,28 @@ class HandoffTransform(StrEnum):
 
 # Plotting StrEnums
 class PanelKey(StrEnum): ...  # See src/plotting/types.py for all values
-class YScale(StrEnum): LINEAR = "linear"; LOG = "log"
-class XAxis(StrEnum): EVALUATIONS = "evaluations"; ITERATION = "iteration"
-class LineStyle(StrEnum): SOLID = "-"; DASHED = "--"; DOTTED = ":"; DASH_DOT = "-."
-class PanelSet(StrEnum): DEFAULT = "default"; ALL = "all"
+
+
+class YScale(StrEnum):
+    LINEAR = "linear"
+    LOG = "log"
+
+
+class XAxis(StrEnum):
+    EVALUATIONS = "evaluations"
+    ITERATION = "iteration"
+
+
+class LineStyle(StrEnum):
+    SOLID = "-"
+    DASHED = "--"
+    DOTTED = ":"
+    DASH_DOT = "-."
+
+
+class PanelSet(StrEnum):
+    DEFAULT = "default"
+    ALL = "all"
 ```
 
 ## License

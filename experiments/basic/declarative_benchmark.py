@@ -29,7 +29,6 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import Rosenbrock, Sphere
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -37,8 +36,8 @@ plt.switch_backend("Agg")
 OUTPUT_DIR = Path("plots/basic/declarative_benchmark")
 
 COLORS = {
-    "CMA-ES":             "#e74c3c",
-    "L-BFGS-B":           "#3498db",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
     "CMA-ES -> L-BFGS-B": "#2ecc71",
 }
 
@@ -52,7 +51,7 @@ def main() -> None:
     total_budget = 4000
 
     problems = [
-        Problem.from_benchmark("Sphere",     Sphere(dimensions=dimensions)),
+        Problem.from_benchmark("Sphere", Sphere(dimensions=dimensions)),
         Problem.from_benchmark("Rosenbrock", Rosenbrock(dimensions=dimensions)),
     ]
 

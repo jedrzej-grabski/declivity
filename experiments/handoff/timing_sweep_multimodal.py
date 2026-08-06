@@ -35,7 +35,6 @@ from declivity.plotting import plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Griewank, Rastrigin
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -52,7 +51,7 @@ HANDOFF_PALETTE = [
 ]
 
 REFERENCE_COLORS = {
-    "CMA-ES":   "#e74c3c",
+    "CMA-ES": "#e74c3c",
     "L-BFGS-B": "#3498db",
 }
 
@@ -103,7 +102,8 @@ def build_algorithms(
         color=REFERENCE_COLORS["CMA-ES"],
         algorithm=AlgorithmChoice.CMAES,
         config_factory=lambda d: CMAESConfig(
-            dimensions=d, sigma=initial_sigma,
+            dimensions=d,
+            sigma=initial_sigma,
         ),
         stopping_condition=MaxEvaluations(total_budget),
     )
@@ -115,8 +115,10 @@ def build_algorithms(
         color=REFERENCE_COLORS["L-BFGS-B"],
         algorithm=AlgorithmChoice.LBFGSB,
         config_factory=lambda d: LBFGSBConfig(
-            dimensions=d, m=memory_size,
-            pgtol=1e-10, factr=0,
+            dimensions=d,
+            m=memory_size,
+            pgtol=1e-10,
+            factr=0,
         ),
         line_search=armijo,
         stopping_condition=MaxEvaluations(total_budget),
@@ -131,11 +133,14 @@ def build_algorithms(
                 name=f"Handoff {label_suffix}",
                 color=color,
                 cmaes_config_factory=lambda d: CMAESConfig(
-                    dimensions=d, sigma=initial_sigma,
+                    dimensions=d,
+                    sigma=initial_sigma,
                 ),
                 lbfgsb_config_factory=lambda d: LBFGSBConfig(
-                    dimensions=d, m=memory_size,
-                    pgtol=1e-10, factr=0,
+                    dimensions=d,
+                    m=memory_size,
+                    pgtol=1e-10,
+                    factr=0,
                 ),
                 transform="inverse",
                 lbfgsb_line_search=armijo,
@@ -169,7 +174,7 @@ def run_handoff_timing_sweep(
 
     sub_settings = [
         ("Rastrigin", Rastrigin(dimensions), initial_sigma_rastrigin),
-        ("Griewank",  Griewank(dimensions),  initial_sigma_griewank),
+        ("Griewank", Griewank(dimensions), initial_sigma_griewank),
     ]
 
     all_problems: list[Problem] = []
@@ -179,13 +184,19 @@ def run_handoff_timing_sweep(
     # algorithm metadata (name, color) is the same across sigmas so this is
     # safe to use for plotting both panels.
     representative_algorithms = build_algorithms(
-        total_budget, warmup_pairs, initial_sigma_griewank, memory_size,
+        total_budget,
+        warmup_pairs,
+        initial_sigma_griewank,
+        memory_size,
     )
 
     for problem_name, function, initial_sigma in sub_settings:
         problem = Problem.from_benchmark(problem_name, function)
         algorithms = build_algorithms(
-            total_budget, warmup_pairs, initial_sigma, memory_size,
+            total_budget,
+            warmup_pairs,
+            initial_sigma,
+            memory_size,
         )
 
         bench = Benchmark(
@@ -216,7 +227,9 @@ def run_handoff_timing_sweep(
         show_iqr=False,
     )
 
-    print(f"\nPlot saved to: {(output_dir / 'handoff_timing_convergence.png').absolute()}")
+    print(
+        f"\nPlot saved to: {(output_dir / 'handoff_timing_convergence.png').absolute()}"
+    )
 
 
 def main() -> None:
@@ -224,7 +237,9 @@ def main() -> None:
     parser.add_argument("--dimensions", type=int, default=10)
     parser.add_argument("--total-budget", type=int, default=10000)
     parser.add_argument(
-        "--timing-unit", choices=("evaluations", "iterations"), default="evaluations",
+        "--timing-unit",
+        choices=("evaluations", "iterations"),
+        default="evaluations",
         help=(
             "Whether --handoff-timings is given in CMA-ES function evaluations "
             "or CMA-ES generations/iterations. Iterations are converted via "
@@ -232,7 +247,10 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--handoff-timings", type=int, nargs="+", default=None,
+        "--handoff-timings",
+        type=int,
+        nargs="+",
+        default=None,
         help=(
             "Warmup timings to sweep over. Interpreted in the unit given by "
             "--timing-unit. Defaults: [250, 500, 1000, 1500, 2500] evaluations "
@@ -244,11 +262,14 @@ def main() -> None:
     parser.add_argument("--sigma-rastrigin", type=float, default=2.0)
     parser.add_argument("--sigma-griewank", type=float, default=200.0)
     parser.add_argument(
-        "--num-workers", type=int, default=1,
+        "--num-workers",
+        type=int,
+        default=1,
         help="Process count for parallel run execution (>1 uses joblib loky backend).",
     )
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/timing_sweep_multimodal"),
     )
     args = parser.parse_args()

@@ -1,36 +1,45 @@
 from __future__ import annotations
 
-from typing import Callable, Type, TypeVar, Union, overload, Literal, TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    ClassVar,
+    Literal,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
+
 import numpy as np
 from numpy.typing import NDArray
 
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.core.base_optimizer import BaseOptimizer
-
 from declivity.core.config_base import BaseConfig
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
-    from declivity.algorithms.des.des_optimizer import DESOptimizer
-    from declivity.algorithms.des.config import DESConfig
-    from declivity.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
-    from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
     from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer
     from declivity.algorithms.cmaes.config import CMAESConfig
-    from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+    from declivity.algorithms.des.config import DESConfig
+    from declivity.algorithms.des.des_optimizer import DESOptimizer
     from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-    from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
-    from declivity.algorithms.powell.config import PowellConfig
-    from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
+    from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+    from declivity.algorithms.mfcmaes.mfcmaes_config import MFCMAESConfig
+    from declivity.algorithms.mfcmaes.mfcmaes_optimizer import MFCMAESOptimizer
     from declivity.algorithms.neldermead.config import NelderMeadConfig
+    from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
+    from declivity.algorithms.powell.config import PowellConfig
+    from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 
 
 class AlgorithmFactory:
     """Factory for creating optimization algorithm instances."""
 
-    _algorithms: dict[AlgorithmChoice, Type[BaseOptimizer]] = {}
-    _configs: dict[AlgorithmChoice, Type[BaseConfig]] = {}
+    _algorithms: ClassVar[dict[AlgorithmChoice, Type[BaseOptimizer]]] = {}
+    _configs: ClassVar[dict[AlgorithmChoice, Type[BaseConfig]]] = {}
 
     @classmethod
     def register_algorithm(
@@ -175,7 +184,7 @@ class AlgorithmFactory:
     ) -> BaseOptimizer:
         """Create an optimizer instance with proper typing."""
         if algorithm not in cls._algorithms:
-            available = ", ".join(str(k) for k in cls._algorithms.keys())
+            available = ", ".join(str(k) for k in cls._algorithms)
             raise ValueError(f"Unknown algorithm '{algorithm}'. Available: {available}")
 
         optimizer_class = cls._algorithms[algorithm]
@@ -207,7 +216,7 @@ class AlgorithmFactory:
     ) -> BaseConfig:
         """Create a configuration object for the specified algorithm."""
         if algorithm not in cls._configs:
-            available = ", ".join(str(k) for k in cls._configs.keys())
+            available = ", ".join(str(k) for k in cls._configs)
             raise ValueError(f"Unknown algorithm '{algorithm}'. Available: {available}")
 
         config_class = cls._configs[algorithm]

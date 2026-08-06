@@ -20,7 +20,6 @@ from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.plotting import plot_comparison, plot_metrics
 from declivity.utils.benchmark_functions import Sphere
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -29,8 +28,8 @@ OUTPUT_DIR = Path("plots/lbfgsb/sphere_benchmark")
 
 COLORS = {
     "L-BFGS-B (More-Thuente)": "#3498db",
-    "L-BFGS-B (Armijo)":       "#1abc9c",
-    "CMA-ES":                  "#e74c3c",
+    "L-BFGS-B (Armijo)": "#1abc9c",
+    "CMA-ES": "#e74c3c",
 }
 
 
@@ -61,7 +60,7 @@ def run_lbfgsb_benchmark() -> None:
         seed=seed,
     )
     result_mt = optimizer_mt.optimize()
-    print(f"L-BFGS-B (More-Thuente):")
+    print("L-BFGS-B (More-Thuente):")
     print(f"  Best fitness:  {result_mt.best_fitness:.12e}")
     print(f"  Evaluations:   {result_mt.evaluations}")
     print(f"  Message:       {result_mt.message}\n")
@@ -80,14 +79,15 @@ def run_lbfgsb_benchmark() -> None:
         line_search=ArmijoBacktracking(),
     )
     result_armijo = optimizer_armijo.optimize()
-    print(f"L-BFGS-B (Armijo):")
+    print("L-BFGS-B (Armijo):")
     print(f"  Best fitness:  {result_armijo.best_fitness:.12e}")
     print(f"  Evaluations:   {result_armijo.evaluations}")
     print(f"  Message:       {result_armijo.message}\n")
 
     # CMA-ES baseline
     config_cmaes = AlgorithmFactory.create_config(
-        AlgorithmChoice.CMAES, dimensions=dimensions,
+        AlgorithmChoice.CMAES,
+        dimensions=dimensions,
     )
     config_cmaes.enable_all_diagnostics()
     optimizer_cmaes = AlgorithmFactory.create_optimizer(
@@ -100,7 +100,7 @@ def run_lbfgsb_benchmark() -> None:
         seed=seed,
     )
     result_cmaes = optimizer_cmaes.optimize()
-    print(f"CMA-ES:")
+    print("CMA-ES:")
     print(f"  Best fitness:  {result_cmaes.best_fitness:.12e}")
     print(f"  Evaluations:   {result_cmaes.evaluations}")
     print(f"  Message:       {result_cmaes.message}\n")
@@ -109,8 +109,8 @@ def run_lbfgsb_benchmark() -> None:
 
     convergence_results = {
         "L-BFGS-B (More-Thuente)": result_mt,
-        "L-BFGS-B (Armijo)":       result_armijo,
-        "CMA-ES":                  result_cmaes,
+        "L-BFGS-B (Armijo)": result_armijo,
+        "CMA-ES": result_cmaes,
     }
     # plot_comparison defaults to the common keys, which on
     # (LBFGSB, CMAES) is [convergence, step_size] — both algorithms

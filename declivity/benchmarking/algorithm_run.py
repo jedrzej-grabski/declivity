@@ -30,8 +30,9 @@ inherit                         :class:`Protocol` — just expose ``name``,
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Protocol, cast, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -40,19 +41,19 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.utils.initial_geometry import (
-    HandoffTransform,
-    InitialGeometry,
-    covariance_to_hessian_matrix,
-)
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
-from declivity.utils.line_search import LineSearchStrategy
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace, capture_scalar_series
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.config_base import BaseConfig
 from declivity.utils.gradient_strategies import GradientStrategy
+from declivity.utils.initial_geometry import (
+    HandoffTransform,
+    InitialGeometry,
+    covariance_to_hessian_matrix,
+)
+from declivity.utils.line_search import LineSearchStrategy
 from declivity.utils.population_initializers import PopulationInitializer
 from declivity.utils.repair_strategies import RepairStrategy
 from declivity.utils.stopping_conditions import (
@@ -194,9 +195,7 @@ class BenchmarkAlgorithm(ABC):
             best_fitness=list(result.diagnostic.best_fitness),
             final_evaluations=result.evaluations,
             final_fitness=float(result.best_fitness),
-            series=capture_scalar_series(
-                result.diagnostic, retain=self.retain_series
-            ),
+            series=capture_scalar_series(result.diagnostic, retain=self.retain_series),
         )
 
 
@@ -481,7 +480,9 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         # and starting point respectively.
         eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()  # type: ignore[union-attr]
         initial_hessian = self._initial_hessian_from_cmaes(
-            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma,  # type: ignore[union-attr]
+            eigenvectors,
+            eigenvalues_sqrt,
+            cmaes_optimizer.sigma,  # type: ignore[union-attr]
         )
 
         # Phase 2: L-BFGS-B from the CMA-ES mean with the derived B_0.

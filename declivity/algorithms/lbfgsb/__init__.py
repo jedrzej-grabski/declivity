@@ -14,14 +14,14 @@ from declivity.algorithms.lbfgsb.line_search import (
 )
 
 __all__ = [
+    "ArmijoBacktracking",
+    "HandoffTransform",
+    "InitialGeometry",
+    "InitialHessian",
+    "InitialHessianMode",
     "LBFGSBConfig",
     "LBFGSBOptimizer",
     "LineSearchStrategy",
     "MoreThuenteLineSearch",
-    "ArmijoBacktracking",
-    "InitialGeometry",
-    "InitialHessian",
-    "InitialHessianMode",
-    "HandoffTransform",
     "covariance_to_hessian_matrix",
 ]

@@ -6,11 +6,11 @@ from typing import Callable, final, override
 import numpy as np
 
 __all__ = [
-    "ScalarSearchResult",
-    "DerivativeFreeLineSearch",
     "BrentLineSearch",
-    "GoldenSectionLineSearch",
+    "DerivativeFreeLineSearch",
     "DerivativeFreeLineSearchType",
+    "GoldenSectionLineSearch",
+    "ScalarSearchResult",
 ]
 
 

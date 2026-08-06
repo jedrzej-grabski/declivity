@@ -56,7 +56,6 @@ from declivity.utils.benchmark_functions import (
 )
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -68,8 +67,8 @@ NUM_SEEDS = 11
 # One palette, used for both the comparison overlay (keyed by label) and
 # the benchmark algorithms (carried on each AlgorithmRun.color).
 COLORS = {
-    "CMA-ES":             "#e74c3c",
-    "L-BFGS-B":           "#3498db",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
     "CMA-ES -> L-BFGS-B": "#2ecc71",
 }
 

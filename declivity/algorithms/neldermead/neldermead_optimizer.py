@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import Callable, Union, final, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Union, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -197,15 +197,9 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
             best_fitness = float(fsim[0])
             best_solution = sim[0].copy()
 
-            if config.diag_eigen:
-                eigenvalues = self._simplex_eigenvalues(sim)
-            else:
-                eigenvalues = None
+            eigenvalues = self._simplex_eigenvalues(sim) if config.diag_eigen else None
 
-            if config.diag_volume:
-                simplex_volume = self._simplex_volume(sim)
-            else:
-                simplex_volume = 0.0
+            simplex_volume = self._simplex_volume(sim) if config.diag_volume else 0.0
 
             self.logger.log_iteration(
                 iteration=iteration,

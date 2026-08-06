@@ -14,7 +14,6 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.plotting import plot_metrics
 from declivity.utils.benchmark_functions import Sphere
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 

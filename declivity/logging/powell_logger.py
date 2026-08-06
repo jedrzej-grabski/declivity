@@ -1,10 +1,11 @@
+from dataclasses import dataclass, field
 from typing import Any
+
 import numpy as np
 from numpy.typing import NDArray
-from dataclasses import dataclass, field
 
 from declivity.algorithms.choices import AlgorithmChoice
-from declivity.logging.base_logger import BaseLogger, BaseLogData
+from declivity.logging.base_logger import BaseLogData, BaseLogger
 from declivity.logging.logger_factory import register_logger
 
 

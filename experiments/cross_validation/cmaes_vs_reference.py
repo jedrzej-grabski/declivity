@@ -45,9 +45,9 @@ from __future__ import annotations
 import argparse
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -68,7 +68,6 @@ from declivity.utils.benchmark_functions import (
 )
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.stopping_conditions import MaxEvaluations
-
 
 # ---------------------------------------------------------------------------
 # Per-run records.
@@ -125,7 +124,12 @@ def _run_reference(
     Returns the run record and a per-generation snapshot list that the
     framework run can be diffed against.
     """
-    record = RunRecord(name="reference", fn_name=func.__class__.__name__, dim=len(initial_point), seed=seed)
+    record = RunRecord(
+        name="reference",
+        fn_name=func.__class__.__name__,
+        dim=len(initial_point),
+        seed=seed,
+    )
 
     bounds = np.column_stack((lower, upper))
     rng = np.random.default_rng(seed)
@@ -149,8 +153,7 @@ def _run_reference(
             f = func(x)
             evals += 1
             solutions.append((x, f))
-            if f < best_fitness:
-                best_fitness = f
+            best_fitness = min(best_fitness, f)
 
         # Mean evaluation matches what the framework optimizer does for logging
         # so both sides consume the budget at the same rate.
@@ -224,8 +227,12 @@ def _sample_reference_matched(
                 y = BD.dot(z)
             candidate = opt._mean + opt._sigma * y  # type: ignore[attr-defined]
             # Mirror CMA._repair_infeasible_params (np.where clamp; no inf/nan handling).
-            candidate = np.where(candidate < handler.lower_bounds, handler.lower_bounds, candidate)
-            candidate = np.where(candidate > handler.upper_bounds, handler.upper_bounds, candidate)
+            candidate = np.where(
+                candidate < handler.lower_bounds, handler.lower_bounds, candidate
+            )
+            candidate = np.where(
+                candidate > handler.upper_bounds, handler.upper_bounds, candidate
+            )
             chosen = candidate
         population[k] = chosen
     return population
@@ -243,7 +250,12 @@ def _run_framework(
 ) -> tuple[RunRecord, list[dict]]:
     """Run the framework-native ``CMAESOptimizer`` and harvest snapshots
     after each ``tell`` for direct diffing against the reference."""
-    record = RunRecord(name="framework", fn_name=func.__class__.__name__, dim=len(initial_point), seed=seed)
+    record = RunRecord(
+        name="framework",
+        fn_name=func.__class__.__name__,
+        dim=len(initial_point),
+        seed=seed,
+    )
 
     cfg = CMAESConfig(dimensions=len(initial_point))
     cfg.sigma = sigma
@@ -350,7 +362,9 @@ def _plot_convergence(
     fig, ax = plt.subplots(figsize=(8, 5))
 
     for r in fw_runs:
-        ax.plot(r.iter_evals, np.maximum(r.iter_best, 1e-300), color="C0", alpha=0.4, lw=1)
+        ax.plot(
+            r.iter_evals, np.maximum(r.iter_best, 1e-300), color="C0", alpha=0.4, lw=1
+        )
     for r in ref_runs:
         ax.plot(
             r.iter_evals,
@@ -390,7 +404,9 @@ def _plot_state_trajectories(
         ("σ (step size)", "‖mean‖₂", "tr(C)"),
     ):
         ax.plot(getattr(fw, key), label="framework", color="C0", lw=1.4)
-        ax.plot(getattr(ref, key), label="reference", color="C3", lw=1.2, linestyle="--")
+        ax.plot(
+            getattr(ref, key), label="reference", color="C3", lw=1.2, linestyle="--"
+        )
         ax.set_yscale("log")
         ax.set_xlabel("generation")
         ax.set_ylabel(label)
@@ -486,7 +502,9 @@ def build_specs() -> list[FunctionSpec]:
         lower = np.full(dim, -bound)
         upper = np.full(dim, bound)
         specs.append(
-            FunctionSpec(cls=cls, dim=dim, initial=init, sigma=sigma, lower=lower, upper=upper)
+            FunctionSpec(
+                cls=cls, dim=dim, initial=init, sigma=sigma, lower=lower, upper=upper
+            )
         )
     # One CEC2017 problem.
     dim = 10
@@ -505,7 +523,11 @@ def build_specs() -> list[FunctionSpec]:
 
 
 def _instantiate(spec: FunctionSpec) -> tuple[str, BenchmarkFunction]:
-    fn = spec.cls() if callable(spec.cls) and not isinstance(spec.cls, type) else spec.cls(spec.dim)
+    fn = (
+        spec.cls()
+        if callable(spec.cls) and not isinstance(spec.cls, type)
+        else spec.cls(spec.dim)
+    )
     if isinstance(spec.cls, type):
         name = spec.cls.__name__
     else:
@@ -519,7 +541,8 @@ def run(seeds: list[int], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_rows: list[dict] = []
 
-    population_size_for_dim = lambda d: 4 + math.floor(3 * math.log(d))
+    def population_size_for_dim(d: int) -> int:
+        return 4 + math.floor(3 * math.log(d))
 
     for spec in build_specs():
         name, _ = _instantiate(spec)
@@ -626,7 +649,14 @@ def run(seeds: list[int], output_dir: Path) -> None:
 
     print("\n=== Summary ===")
     grouped = df.groupby(["function", "dim"])[
-        ["abs_best_diff", "max_sigma_diff", "max_mean_diff", "max_C_diff", "max_pc_diff", "max_psigma_diff"]
+        [
+            "abs_best_diff",
+            "max_sigma_diff",
+            "max_mean_diff",
+            "max_C_diff",
+            "max_pc_diff",
+            "max_psigma_diff",
+        ]
     ].max()
     pd.set_option("display.float_format", lambda x: f"{x:.3e}")
     print(grouped.to_string())

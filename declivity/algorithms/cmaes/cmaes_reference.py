@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import math
-import numpy as np
-
 from typing import cast
-from typing import Optional
 
+import numpy as np
 
 _EPS = 1e-8
 _MEAN_MAX = 1e32
@@ -22,18 +20,18 @@ class CMA:
         self,
         mean: np.ndarray,
         sigma: float,
-        bounds: Optional[np.ndarray] = None,
+        bounds: np.ndarray | None = None,
         n_max_resampling: int = 100,
         seed: int | np.random.Generator | None = None,
-        population_size: Optional[int] = None,
-        cov: Optional[np.ndarray] = None,
+        population_size: int | None = None,
+        cov: np.ndarray | None = None,
         lr_adapt: bool = False,
     ):
         assert sigma > 0, "sigma must be non-zero positive value"
 
-        assert np.all(
-            np.abs(mean) < _MEAN_MAX
-        ), f"Abs of all elements of mean vector must be less than {_MEAN_MAX}"
+        assert np.all(np.abs(mean) < _MEAN_MAX), (
+            f"Abs of all elements of mean vector must be less than {_MEAN_MAX}"
+        )
 
         n_dim = len(mean)
         assert n_dim > 0, "The dimension of mean must be positive"
@@ -88,9 +86,9 @@ class CMA:
         # learning rate for the cumulation for the step-size control (eq.55)
         c_sigma = (mu_eff + 2) / (n_dim + mu_eff + 5)
         d_sigma = 1 + 2 * max(0, math.sqrt((mu_eff - 1) / (n_dim + 1)) - 1) + c_sigma
-        assert (
-            c_sigma < 1
-        ), "invalid learning rate for cumulation for the step-size control"
+        assert c_sigma < 1, (
+            "invalid learning rate for cumulation for the step-size control"
+        )
 
         # learning rate for cumulation for the rank-one update (eq.56)
         cc = (4 + mu_eff / n_dim) / (n_dim + 4 + 2 * mu_eff / n_dim)
@@ -128,8 +126,8 @@ class CMA:
             self._C = cov
 
         self._sigma = sigma
-        self._D: Optional[np.ndarray] = None
-        self._B: Optional[np.ndarray] = None
+        self._D: np.ndarray | None = None
+        self._B: np.ndarray | None = None
 
         # bounds contains low and high of each parameter.
         assert bounds is None or _is_valid_bounds(bounds, mean), "invalid bounds"
@@ -189,7 +187,7 @@ class CMA:
     def reseed_rng(self, seed: int) -> None:
         self._rng = np.random.default_rng(seed)
 
-    def set_bounds(self, bounds: Optional[np.ndarray]) -> None:
+    def set_bounds(self, bounds: np.ndarray | None) -> None:
         """Update boundary constraints"""
         assert bounds is None or _is_valid_bounds(bounds, self._mean), "invalid bounds"
         self._bounds = bounds
@@ -245,9 +243,9 @@ class CMA:
 
         assert len(solutions) == self._popsize, "Must tell popsize-length solutions."
         for s in solutions:
-            assert np.all(
-                np.abs(s[0]) < _MEAN_MAX
-            ), f"Abs of all param values must be less than {_MEAN_MAX} to avoid overflow errors"
+            assert np.all(np.abs(s[0]) < _MEAN_MAX), (
+                f"Abs of all param values must be less than {_MEAN_MAX} to avoid overflow errors"
+            )
 
         self._g += 1
         solutions.sort(key=lambda s: s[1])
@@ -365,7 +363,7 @@ class CMA:
         return False
 
 
-def _is_valid_bounds(bounds: Optional[np.ndarray], mean: np.ndarray) -> bool:
+def _is_valid_bounds(bounds: np.ndarray | None, mean: np.ndarray) -> bool:
     if bounds is None:
         return True
     if (mean.size, 2) != bounds.shape:

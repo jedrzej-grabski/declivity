@@ -22,8 +22,8 @@ from declivity.benchmarking.algorithm_run import (
     CMAESLocalHandoff,
     HandoffAlgorithm,
     HandoffTransform,
-    InterleaveResult,
     InterleavedCMAESLBFGSB,
+    InterleaveResult,
     SingleAlgorithm,
     initial_hessian_from_cmaes,
 )

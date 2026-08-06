@@ -11,8 +11,8 @@ Two entry points:
 - :py:func:`plot_function_landscape_grid` — several functions side-by-side.
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -59,10 +59,12 @@ def _draw_eigenvectors(
     with_legend: bool,
 ) -> None:
     """Overlay the two eigenvector directions of the dim1/dim2 Hessian sub-block."""
-    sub_hessian = np.array([
-        [hessian[dim1, dim1], hessian[dim1, dim2]],
-        [hessian[dim2, dim1], hessian[dim2, dim2]],
-    ])
+    sub_hessian = np.array(
+        [
+            [hessian[dim1, dim1], hessian[dim1, dim2]],
+            [hessian[dim2, dim1], hessian[dim2, dim2]],
+        ]
+    )
     eigenvalues, eigenvectors = np.linalg.eigh(sub_hessian)
 
     for k in range(2):
@@ -77,13 +79,15 @@ def _draw_eigenvectors(
                     center[dim2] + sign * arrow_scale * eigenvector[1],
                 ),
                 xytext=(center[dim1], center[dim2]),
-                arrowprops=dict(arrowstyle="->", color=color, lw=2.5),
+                arrowprops={"arrowstyle": "->", "color": color, "lw": 2.5},
             )
         if with_legend:
             ax.plot(
-                [], [],
-                color=color, lw=2.5,
-                label=rf"$\lambda_{k+1}$ = {eigenvalues[k]:.1e}",
+                [],
+                [],
+                color=color,
+                lw=2.5,
+                label=rf"$\lambda_{k + 1}$ = {eigenvalues[k]:.1e}",
             )
     if with_legend:
         ax.legend(loc="upper right", fontsize=10)
@@ -150,8 +154,13 @@ def plot_function_landscape(
 
     if show_eigenvectors and hessian is not None:
         _draw_eigenvectors(
-            ax, hessian, center, dim1, dim2,
-            arrow_scale=extent * 0.4, with_legend=True,
+            ax,
+            hessian,
+            center,
+            dim1,
+            dim2,
+            arrow_scale=extent * 0.4,
+            with_legend=True,
         )
 
     ax.set_xlabel(rf"$x_{{{dim1 + 1}}}$", fontsize=13)
@@ -222,8 +231,13 @@ def plot_function_landscape_grid(
 
         if hessians and label in hessians:
             _draw_eigenvectors(
-                ax, hessians[label], center, dim1, dim2,
-                arrow_scale=extent * 0.35, with_legend=False,
+                ax,
+                hessians[label],
+                center,
+                dim1,
+                dim2,
+                arrow_scale=extent * 0.35,
+                with_legend=False,
             )
 
         ax.set_xlabel(rf"$x_{{{dim1 + 1}}}$", fontsize=11)

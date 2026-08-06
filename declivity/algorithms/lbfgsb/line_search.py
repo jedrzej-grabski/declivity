@@ -18,11 +18,11 @@ from declivity.utils.line_search.gradient import (
 )
 
 __all__ = [
-    "LineSearchResult",
+    "ArmijoBacktracking",
     "GradientLineSearch",
+    "LineSearchResult",
     "LineSearchStrategy",
     "MoreThuenteLineSearch",
-    "ArmijoBacktracking",
-    "more_thuente_search",
     "armijo_search",
+    "more_thuente_search",
 ]

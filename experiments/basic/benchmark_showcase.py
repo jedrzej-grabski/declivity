@@ -27,9 +27,9 @@ all drawn from the same trace dict by the same single call.
 Output: ``plots/basic/benchmark_showcase/``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -52,7 +52,6 @@ from declivity.plotting import plot_benchmark_convergence
 from declivity.utils.benchmark_functions import Rastrigin, Rosenbrock
 from declivity.utils.stopping_conditions import MaxEvaluations, StoppingCondition
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -65,8 +64,8 @@ TOTAL_BUDGET = 4000
 # One palette, carried on each runner's `.color`. The plotter reads it off
 # the AlgorithmRun — same hue per algorithm across every figure.
 COLORS = {
-    "CMA-ES":             "#e74c3c",
-    "L-BFGS-B":           "#3498db",
+    "CMA-ES": "#e74c3c",
+    "L-BFGS-B": "#3498db",
     "CMA-ES -> L-BFGS-B": "#2ecc71",
     "Multi-start CMA-ES": "#9b59b6",
 }
@@ -81,6 +80,7 @@ COLORS = {
 # BenchmarkAlgorithm and implements run() directly — and then drops into the
 # same algorithm list as everything else.
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MultiStartCMAES(BenchmarkAlgorithm):

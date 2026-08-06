@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Callable, Union, final, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Union, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -222,8 +222,16 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         # resumed run reuses the exact same (B, D) rather than re-deriving
         # them from C (which drifts in the last bits). Falls back to a lazy
         # rebuild from C when the snapshot predates any decomposition.
-        self._B = None if state.eigenvectors is None else state.eigenvectors.astype(float, copy=True)
-        self._D = None if state.eigenvalues_sqrt is None else state.eigenvalues_sqrt.astype(float, copy=True)
+        self._B = (
+            None
+            if state.eigenvectors is None
+            else state.eigenvectors.astype(float, copy=True)
+        )
+        self._D = (
+            None
+            if state.eigenvalues_sqrt is None
+            else state.eigenvalues_sqrt.astype(float, copy=True)
+        )
 
     @property
     def sigma(self) -> float:

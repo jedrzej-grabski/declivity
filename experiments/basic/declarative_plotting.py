@@ -24,15 +24,14 @@ from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.plotting import PanelRegistry, plot_comparison, plot_metrics
 from declivity.utils.benchmark_functions import Sphere
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 OUTPUT_DIR = Path("plots/basic/declarative_plotting")
 COLORS = {
-    "CMA-ES":   "#e74c3c",
-    "DES":      "#f39c12",
+    "CMA-ES": "#e74c3c",
+    "DES": "#f39c12",
     "L-BFGS-B": "#3498db",
 }
 
@@ -40,9 +39,7 @@ COLORS = {
 def _run(algorithm: AlgorithmChoice, x0: np.ndarray, sphere: Sphere):
     """Build a config with deep diagnostics on and run the algorithm."""
     if algorithm == AlgorithmChoice.CMAES:
-        config: CMAESConfig | DESConfig | LBFGSBConfig = CMAESConfig(
-            dimensions=len(x0)
-        )
+        config: CMAESConfig | DESConfig | LBFGSBConfig = CMAESConfig(dimensions=len(x0))
     elif algorithm == AlgorithmChoice.DES:
         config = DESConfig(dimensions=len(x0))
     elif algorithm == AlgorithmChoice.LBFGSB:
@@ -77,9 +74,15 @@ def main() -> None:
     des_result = _run(AlgorithmChoice.DES, x0, sphere)
     lbfgsb_result = _run(AlgorithmChoice.LBFGSB, x0, sphere)
 
-    print(f"  CMA-ES   final: {cmaes_result.best_fitness:.3e}  ({cmaes_result.evaluations} evals)")
-    print(f"  DES      final: {des_result.best_fitness:.3e}  ({des_result.evaluations} evals)")
-    print(f"  L-BFGS-B final: {lbfgsb_result.best_fitness:.3e}  ({lbfgsb_result.evaluations} evals)")
+    print(
+        f"  CMA-ES   final: {cmaes_result.best_fitness:.3e}  ({cmaes_result.evaluations} evals)"
+    )
+    print(
+        f"  DES      final: {des_result.best_fitness:.3e}  ({des_result.evaluations} evals)"
+    )
+    print(
+        f"  L-BFGS-B final: {lbfgsb_result.best_fitness:.3e}  ({lbfgsb_result.evaluations} evals)"
+    )
 
     # 1. Single-algorithm deep dive — every panel registered for CMA-ES.
     print("\n1. plot_metrics: CMA-ES full diagnostics")
@@ -90,7 +93,13 @@ def main() -> None:
     )
 
     # 2. Single-algorithm with explicit panel selection (5 panels by key).
-    selected = ["convergence", "step_size", "condition_number", "mean_norm", "det_covariance"]
+    selected = [
+        "convergence",
+        "step_size",
+        "condition_number",
+        "mean_norm",
+        "det_covariance",
+    ]
     print(f"\n2. plot_metrics: CMA-ES selected {selected}")
     plot_metrics(
         cmaes_result,
@@ -110,9 +119,7 @@ def main() -> None:
     )
 
     # 3b. Side-by-side: CMA-ES vs L-BFGS-B (very few shared panels, by design).
-    cmaes_lbfgsb = PanelRegistry.common(
-        [AlgorithmChoice.CMAES, AlgorithmChoice.LBFGSB]
-    )
+    cmaes_lbfgsb = PanelRegistry.common([AlgorithmChoice.CMAES, AlgorithmChoice.LBFGSB])
     print(f"\n3b. plot_comparison(CMA-ES vs L-BFGS-B) — common keys: {cmaes_lbfgsb}")
     plot_comparison(
         {"CMA-ES": cmaes_result, "L-BFGS-B": lbfgsb_result},

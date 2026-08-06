@@ -139,17 +139,17 @@ where:
 The correction pairs are stored as Python lists:
 
 ```python
-self._S: list[NDArray]   # step vectors s = x_{k+1} - x_k
-self._Y: list[NDArray]   # gradient diffs y = g_{k+1} - g_k
-self._theta: float       # scaling factor
-self._col: int           # number of stored pairs (up to m)
+self._S: list[NDArray]  # step vectors s = x_{k+1} - x_k
+self._Y: list[NDArray]  # gradient diffs y = g_{k+1} - g_k
+self._theta: float  # scaling factor
+self._col: int  # number of stored pairs (up to m)
 ```
 
 After each update, we rebuild the inner-product matrices:
 
 ```python
-self._SY = S_mat.T @ Y_mat   # S'Y (col x col)
-self._SS = S_mat.T @ S_mat   # S'S (col x col)
+self._SY = S_mat.T @ Y_mat  # S'Y (col x col)
+self._SS = S_mat.T @ S_mat  # S'S (col x col)
 ```
 
 This is `O(m^2 * n)` but `m` is typically 3-20, so this is fast.
@@ -318,7 +318,7 @@ dd = z_proj - x
 gd = float(np.dot(g, dd))
 
 if gd <= 0:
-    return z_proj      # Good: projected step is still descent
+    return z_proj  # Good: projected step is still descent
 else:
     # Bad: projection ruined descent. Fall back to backtracking.
     ...
@@ -423,7 +423,7 @@ Instead, `_directional_derivative()` (line 132) computes the directional
 derivative directly:
 
 ```python
-dphi = (f(x + alpha*d + eps*d) - f(x + alpha*d - eps*d)) / (2*eps)
+dphi = (f(x + alpha * d + eps * d) - f(x + alpha * d - eps * d)) / (2 * eps)
 ```
 
 This costs only **2 extra evaluations** regardless of dimension, versus `2n`
@@ -621,7 +621,7 @@ Before accepting an `(s, y)` pair, we check:
 
 ```python
 if sy <= self._machine_eps * yy:
-    return False   # skip this update
+    return False  # skip this update
 ```
 
 This ensures `s'y > 0` (positive curvature). Without this, the Hessian

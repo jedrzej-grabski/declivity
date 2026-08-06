@@ -14,17 +14,17 @@ The ``initial_point_generator`` field is pluggable:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Callable, Optional
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
 
 from declivity.utils.benchmark_functions import BenchmarkFunction
 from declivity.utils.initial_point_generator import (
+    FixedInitialPointGenerator,
     InitialPointGenerator,
     UniformInitialPointGenerator,
-    FixedInitialPointGenerator,
 )
 
 
@@ -43,7 +43,7 @@ class Problem:
     lower_bound: float
     upper_bound: float
 
-    gradient: Optional[Callable[[NDArray[np.float64]], NDArray[np.float64]]] = None
+    gradient: Callable[[NDArray[np.float64]], NDArray[np.float64]] | None = None
     """Analytical gradient. If None, L-BFGS-B uses finite differences."""
 
     initial_point_generator: InitialPointGenerator | NDArray[np.float64] | None = None
@@ -70,12 +70,12 @@ class Problem:
         cls,
         name: str,
         function: BenchmarkFunction,
-        lower_bound: Optional[float] = None,
-        upper_bound: Optional[float] = None,
+        lower_bound: float | None = None,
+        upper_bound: float | None = None,
         initial_point_generator: InitialPointGenerator
         | NDArray[np.float64]
         | None = None,
-    ) -> "Problem":
+    ) -> Problem:
         """Build a Problem from a BenchmarkFunction.
 
         Picks up the function's bounds and ``gradient`` attribute (if any)

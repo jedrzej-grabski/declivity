@@ -9,15 +9,15 @@ The n=50, m=5 regime is the decisive case: the L-BFGS corrections can only
 span 10 of 50 directions, so the remaining 40 rely on B_0.
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
+from numpy.typing import NDArray
 
 from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
-from declivity.utils.stopping_conditions import MaxEvaluations
 from declivity.plotting import (
     PanelKey,
     plot_comparison,
@@ -25,7 +25,8 @@ from declivity.plotting import (
     plot_function_landscape,
     plot_function_landscape_grid,
 )
-
+from declivity.utils.benchmark_functions import Ellipsoid, RotatedEllipsoid
+from declivity.utils.stopping_conditions import MaxEvaluations
 
 # 4-panel L-BFGS-B comparison layout (convergence by evals, by iteration,
 # projected gradient, line search step).
@@ -40,12 +41,18 @@ plt.ioff()
 plt.switch_backend("Agg")
 
 
-def run_single(func, x0, config, gradient_fn, lower_bounds, upper_bounds, stopping_condition):
+def run_single(
+    func, x0, config, gradient_fn, lower_bounds, upper_bounds, stopping_condition
+):
     config.diag_gradient_norm = True
     config.diag_step_length = True
     optimizer = AlgorithmFactory.create_optimizer(
-        AlgorithmChoice.LBFGSB, func, x0, config,
-        lower_bounds=lower_bounds, upper_bounds=upper_bounds,
+        AlgorithmChoice.LBFGSB,
+        func,
+        x0,
+        config,
+        lower_bounds=lower_bounds,
+        upper_bounds=upper_bounds,
         gradient_fn=gradient_fn,
         stopping_condition=stopping_condition,
     )
@@ -57,10 +64,10 @@ def run_rotation_study():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rotations = [
-        ("none",       "No rotation (axis-aligned)"),
+        ("none", "No rotation (axis-aligned)"),
         ("uniform_45", "Uniform 45-degree chain"),
-        ("golden",     "Golden angle chain"),
-        ("random",     "Random orthogonal"),
+        ("golden", "Golden angle chain"),
+        ("random", "Random orthogonal"),
     ]
 
     # Landscape plots: show the contour shape for each rotation (using n=10 for clarity)
@@ -110,13 +117,13 @@ def run_rotation_study():
     # Two regimes: n=m (corrections span full space) and n>>m (they can't)
     regimes = [
         {"n": 10, "m": 10, "budget": 15000, "label": "10D_m10"},
-        {"n": 50, "m": 5,  "budget": 10000, "label": "50D_m5"},
+        {"n": 50, "m": 5, "budget": 10000, "label": "50D_m5"},
     ]
 
     hessian_colors = {
-        "Identity":         "#e74c3c",
+        "Identity": "#e74c3c",
         "Hessian diagonal": "#f39c12",
-        "Full Hessian":     "#2ecc71",
+        "Full Hessian": "#2ecc71",
     }
 
     for regime in regimes:
@@ -125,9 +132,9 @@ def run_rotation_study():
         budget = regime["budget"]
         regime_label = regime["label"]
 
-        print(f"{'='*60}")
-        print(f"Regime: n={n}, m={m} (corrections cover {2*m} of {n} directions)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
+        print(f"Regime: n={n}, m={m} (corrections cover {2 * m} of {n} directions)")
+        print(f"{'=' * 60}")
         print()
 
         # Collect results for the summary bar chart
@@ -138,7 +145,13 @@ def run_rotation_study():
             if rotation_mode == "none":
                 func = Ellipsoid(n)
                 scales = 10.0 ** (6.0 * np.arange(n) / max(n - 1, 1))
-                gradient_fn = lambda x, s=scales: 2.0 * s * x
+
+                def ellipsoid_gradient(
+                    x: NDArray[np.float64], s: NDArray[np.float64] = scales
+                ) -> NDArray[np.float64]:
+                    return 2.0 * s * x
+
+                gradient_fn = ellipsoid_gradient
                 hessian_diag = 2.0 * scales
                 full_hessian = np.diag(hessian_diag)
                 diag_fraction = 1.0
@@ -147,8 +160,8 @@ def run_rotation_study():
                 gradient_fn = func.gradient
                 hessian_diag = func.hessian_diagonal
                 full_hessian = func.hessian
-                diag_fraction = (
-                    np.sum(np.diag(func.hessian) ** 2) / np.sum(func.hessian ** 2)
+                diag_fraction = np.sum(np.diag(func.hessian) ** 2) / np.sum(
+                    func.hessian**2
                 )
 
             rng = np.random.default_rng(42)
@@ -158,19 +171,26 @@ def run_rotation_study():
 
             results = {}
             hessian_choices = [
-                ("Identity",         None),
+                ("Identity", None),
                 ("Hessian diagonal", hessian_diag),
-                ("Full Hessian",     full_hessian),
+                ("Full Hessian", full_hessian),
             ]
 
             for label, h in hessian_choices:
                 config = LBFGSBConfig(
-                    dimensions=n, initial_hessian=h, m=m,
-                    pgtol=1e-8, factr=1e7,
+                    dimensions=n,
+                    initial_hessian=h,
+                    m=m,
+                    pgtol=1e-8,
+                    factr=1e7,
                 )
                 result = run_single(
-                    func, x0, config, gradient_fn,
-                    lower_bounds=-100.0, upper_bounds=100.0,
+                    func,
+                    x0,
+                    config,
+                    gradient_fn,
+                    lower_bounds=-100.0,
+                    upper_bounds=100.0,
                     stopping_condition=MaxEvaluations(budget),
                 )
                 results[label] = result
@@ -207,7 +227,11 @@ def run_rotation_study():
 
         # Summary grouped bar chart: all rotations side by side
         _plot_rotation_summary(
-            summary_data, rotations, hessian_colors, n, m,
+            summary_data,
+            rotations,
+            hessian_colors,
+            n,
+            m,
             save_path=output_dir / f"{regime_label}_summary.png",
         )
 
@@ -221,7 +245,6 @@ def _plot_rotation_summary(summary_data, rotations, colors, n, m, save_path):
     rotation_labels = [desc for _, desc in rotations]
     hessian_labels = ["Identity", "Hessian diagonal", "Full Hessian"]
     num_rotations = len(rotation_labels)
-    num_hessians = len(hessian_labels)
     bar_width = 0.25
     x_positions = np.arange(num_rotations)
 
@@ -231,17 +254,24 @@ def _plot_rotation_summary(summary_data, rotations, colors, n, m, save_path):
             evals = summary_data[rotation_mode].get(hessian_label, 0)
             values.append(evals)
         bars = ax.bar(
-            x_positions + i * bar_width, values, bar_width,
-            label=hessian_label, color=colors[hessian_label],
-            edgecolor="white", linewidth=0.5,
+            x_positions + i * bar_width,
+            values,
+            bar_width,
+            label=hessian_label,
+            color=colors[hessian_label],
+            edgecolor="white",
+            linewidth=0.5,
         )
         for bar, val in zip(bars, values):
             if val > 0:
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + max(values) * 0.01,
-                    f"{val:,}", ha="center", va="bottom",
-                    fontsize=8, fontweight="bold",
+                    f"{val:,}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    fontweight="bold",
                 )
 
     ax.set_xticks(x_positions + bar_width)

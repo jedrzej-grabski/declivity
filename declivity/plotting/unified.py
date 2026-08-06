@@ -25,9 +25,10 @@ benchmark (a :class:`RunGroup` of many seeds, or a dict of them) and the same
 panels come out as aggregated bands. Same panel, same call.
 """
 
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Protocol, Sequence, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,7 +44,6 @@ from declivity.benchmarking.aggregation import (
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.plotting.panel import Panel, PanelRegistry
 from declivity.plotting.types import PanelKey, PanelSet
-
 
 # Accepted shapes for the ``panels=`` argument across the public API. Defined
 # here (not in types.py) because it references Panel, which would cycle.
@@ -149,7 +149,7 @@ def apply_floor(values: list[float] | None, floor: float | None) -> list[float]:
         return []
     if floor is None:
         return list(values)
-    return [value if value > floor else floor for value in values]
+    return [max(floor, value) for value in values]
 
 
 def draw_line(
@@ -193,7 +193,9 @@ def decorate_axes(
     grid_alpha: float = 0.3,
 ) -> None:
     """Apply title, labels, scale, grid to an axes from a :class:`Panel`."""
-    ax.set_xlabel(xlabel if xlabel is not None else panel.x_field.replace("_", " ").title())
+    ax.set_xlabel(
+        xlabel if xlabel is not None else panel.x_field.replace("_", " ").title()
+    )
     ax.set_ylabel(ylabel if ylabel is not None else panel.ylabel)
     ax.set_title(title if title is not None else panel.title)
     ax.set_yscale(str(panel.yscale))
@@ -287,8 +289,15 @@ def draw_groups(
         if finite.size == 0 or bool(np.all(np.isnan(finite))):
             continue  # no run retained this field — skip rather than draw all-NaN
         median, low, high = percentile_band(matrix)
-        if draw_line(ax, grid.tolist(), median.tolist(), label=label, color=color,
-                     linewidth=linewidth, alpha=0.95):
+        if draw_line(
+            ax,
+            grid.tolist(),
+            median.tolist(),
+            label=label,
+            color=color,
+            linewidth=linewidth,
+            alpha=0.95,
+        ):
             drew = True
         if show_band and matrix.shape[0] > 1:
             ax.fill_between(grid, low, high, color=color, alpha=iqr_alpha)
@@ -392,8 +401,10 @@ def _resolve_panel_list(
     through, so a study can plot an ad-hoc panel without registering it).
     """
     # Explicit Panel objects pass straight through.
-    if isinstance(panels, (list, tuple)) and panels and all(
-        isinstance(p, Panel) for p in panels
+    if (
+        isinstance(panels, (list, tuple))
+        and panels
+        and all(isinstance(p, Panel) for p in panels)
     ):
         return [(str(p.key), p) for p in panels]  # type: ignore[union-attr]
 

@@ -205,8 +205,8 @@ def run_declivity_neldermead(
 # Plotting.
 # ---------------------------------------------------------------------------
 
-_OURS_STYLE = dict(color="tab:blue", lw=1.8, label="declivity")
-_SCIPY_STYLE = dict(color="tab:orange", lw=1.8, ls="--", label="scipy")
+_OURS_STYLE = {"color": "tab:blue", "lw": 1.8, "label": "declivity"}
+_SCIPY_STYLE = {"color": "tab:orange", "lw": 1.8, "ls": "--", "label": "scipy"}
 
 
 def plot_convergence(logs, trace: ScipyNMTrace, title: str, path: Path) -> None:
@@ -303,15 +303,13 @@ def compute_diffs(logs, trace: ScipyNMTrace) -> dict[str, float]:
     }
 
 
-def trace_deviation_series(
-    a: ScipyNMTrace, b: ScipyNMTrace
-) -> tuple[NDArray, NDArray]:
+def trace_deviation_series(a: ScipyNMTrace, b: ScipyNMTrace) -> tuple[NDArray, NDArray]:
     """Per-iteration deviation between two SciPy traces (used for the
     chaos sensitivity reference: scipy vs scipy with perturbed x0)."""
     n = min(len(a.fsim), len(b.fsim))
-    f_diff = np.abs(
-        np.asarray(a.best[:n]) - np.asarray(b.best[:n])
-    ) / np.maximum(np.abs(np.asarray(b.best[:n])), 1e-12)
+    f_diff = np.abs(np.asarray(a.best[:n]) - np.asarray(b.best[:n])) / np.maximum(
+        np.abs(np.asarray(b.best[:n])), 1e-12
+    )
     sim_diff = np.array(
         [float(np.max(np.abs(p - q))) for p, q in zip(a.sim[:n], b.sim[:n])]
     )
@@ -351,22 +349,43 @@ def plot_divergence(
         and np.max(evals_diff, initial=0) == 0
     )
     ours_label_suffix = "  (≡ 0, exact)" if exact else ""
-    ax.semilogy(iters, np.maximum(f_diff, floor),
-                label=f"declivity vs scipy: |f best diff| (rel){ours_label_suffix}",
-                color="tab:blue", lw=2.0)
-    ax.semilogy(iters, np.maximum(sim_diff, floor),
-                label=f"declivity vs scipy: max |simplex diff|{ours_label_suffix}",
-                color="tab:cyan", lw=2.0, ls="-.")
+    ax.semilogy(
+        iters,
+        np.maximum(f_diff, floor),
+        label=f"declivity vs scipy: |f best diff| (rel){ours_label_suffix}",
+        color="tab:blue",
+        lw=2.0,
+    )
+    ax.semilogy(
+        iters,
+        np.maximum(sim_diff, floor),
+        label=f"declivity vs scipy: max |simplex diff|{ours_label_suffix}",
+        color="tab:cyan",
+        lw=2.0,
+        ls="-.",
+    )
 
     if chaos_reference is not None:
         cf, csim = chaos_reference
         c_iters = np.arange(1, len(cf) + 1)
-        ax.semilogy(c_iters, np.maximum(cf, floor),
-                    label="chaos ref — scipy vs scipy(x0+1e-12): |f best diff| (rel)",
-                    color="tab:red", lw=1.4, ls="--", alpha=0.8)
-        ax.semilogy(c_iters, np.maximum(csim, floor),
-                    label="chaos ref — scipy vs scipy(x0+1e-12): max |simplex diff|",
-                    color="tab:orange", lw=1.4, ls=":", alpha=0.8)
+        ax.semilogy(
+            c_iters,
+            np.maximum(cf, floor),
+            label="chaos ref — scipy vs scipy(x0+1e-12): |f best diff| (rel)",
+            color="tab:red",
+            lw=1.4,
+            ls="--",
+            alpha=0.8,
+        )
+        ax.semilogy(
+            c_iters,
+            np.maximum(csim, floor),
+            label="chaos ref — scipy vs scipy(x0+1e-12): max |simplex diff|",
+            color="tab:orange",
+            lw=1.4,
+            ls=":",
+            alpha=0.8,
+        )
 
     if exact:
         ax.annotate(
@@ -374,8 +393,10 @@ def plot_divergence(
             "(flat line at the plot floor). The dashed reference shows the same\n"
             "probe detecting a 1e-12 x0 perturbation, which grows by orders of\n"
             "magnitude — the zero is not for lack of sensitivity.",
-            xy=(0.02, 0.03), xycoords="axes fraction", fontsize=9,
-            bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.9),
+            xy=(0.02, 0.03),
+            xycoords="axes fraction",
+            fontsize=9,
+            bbox={"boxstyle": "round", "facecolor": "lightyellow", "alpha": 0.9},
         )
 
     ax.set_xlabel("Iteration")
@@ -394,7 +415,12 @@ def plot_agreement_matrix(summary: pd.DataFrame, path: Path, title: str) -> None
     per (function x dim) row and metric column.  All-zero cells are the
     headline result — annotated '0 (exact)'."""
     metrics = ["max_f_rel_diff", "max_sim_diff", "max_fsim_diff", "max_evals_diff"]
-    labels = ["|f best diff| (rel)", "max |simplex diff|", "max |f(vertex) diff|", "|evals diff|"]
+    labels = [
+        "|f best diff| (rel)",
+        "max |simplex diff|",
+        "max |f(vertex) diff|",
+        "|evals diff|",
+    ]
 
     grouped = summary.groupby(["function", "dim"])[metrics].max()
     values = grouped.to_numpy(dtype=float)
@@ -460,12 +486,14 @@ def main() -> None:
                 tag = f"{fn_name}_d{dim}"
                 if seed == 0:
                     plot_convergence(
-                        logs, scipy_trace,
+                        logs,
+                        scipy_trace,
                         f"Nelder-Mead — {fn_cls.__name__} d={dim} (seed 0)",
                         PLOTS_DIR / f"convergence_{tag}.png",
                     )
                     plot_state_trajectories(
-                        logs, scipy_trace,
+                        logs,
+                        scipy_trace,
                         f"Nelder-Mead internal state — {fn_cls.__name__} d={dim} (seed 0)",
                         PLOTS_DIR / f"state_{tag}.png",
                     )
@@ -485,7 +513,9 @@ def main() -> None:
                         scipy_trace_pert, scipy_trace
                     )
                     diffs = plot_divergence(
-                        logs, scipy_trace, chaos_reference,
+                        logs,
+                        scipy_trace,
+                        chaos_reference,
                         f"Nelder-Mead deviation — {fn_cls.__name__} d={dim} (seed 0)",
                         PLOTS_DIR / f"divergence_{tag}_s{seed}.png",
                     )

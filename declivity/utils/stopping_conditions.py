@@ -55,19 +55,19 @@ from enum import Enum
 from typing import final, override
 
 __all__ = [
-    "OptimizationState",
-    "StoppingCondition",
+    "DEFAULT_EVALUATIONS_PER_DIMENSION",
+    "AllStoppingCondition",
+    "AnyStoppingCondition",
     "MaxEvaluations",
     "MaxIterations",
     "MaxTime",
-    "TargetFitness",
+    "OptimizationState",
     "Stagnation",
     "StagnationUnit",
-    "AnyStoppingCondition",
-    "AllStoppingCondition",
+    "StoppingCondition",
     "StoppingConditionType",
+    "TargetFitness",
     "default_stopping_condition",
-    "DEFAULT_EVALUATIONS_PER_DIMENSION",
 ]
 
 
@@ -85,7 +85,7 @@ class OptimizationState:
     algorithm-specific internals.
     """
 
-    __slots__ = ("evaluations", "iterations", "best_fitness", "elapsed_seconds")
+    __slots__ = ("best_fitness", "elapsed_seconds", "evaluations", "iterations")
 
     def __init__(
         self,
@@ -339,8 +339,7 @@ class Stagnation(StoppingCondition):
 
     def __repr__(self) -> str:
         return (
-            f"Stagnation(patience={self.patience}, tol={self.tol!r}, "
-            f"unit={self.unit})"
+            f"Stagnation(patience={self.patience}, tol={self.tol!r}, unit={self.unit})"
         )
 
 

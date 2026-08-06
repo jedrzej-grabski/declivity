@@ -21,9 +21,9 @@ CMA-ES on Rastrigin (which is multimodal — restarts help) so you can see
 the lift.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,7 +43,6 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import Rastrigin
 from declivity.utils.stopping_conditions import MaxEvaluations, StoppingCondition
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -59,6 +58,7 @@ OUTPUT_DIR = Path("plots/basic/custom_algorithm")
 # BenchmarkAlgorithm and implement run() — that's the most general
 # extension point.
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MultiStartCMAES(BenchmarkAlgorithm):
@@ -153,6 +153,7 @@ class MultiStartCMAES(BenchmarkAlgorithm):
 # with no special handling.
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -189,7 +190,7 @@ def main() -> None:
         output_dir=OUTPUT_DIR / "_bench",
         save_artifacts=False,
     )
-    print(f"Running 1 problem x 2 algorithms x 10 seeds...")
+    print("Running 1 problem x 2 algorithms x 10 seeds...")
     bench.run(verbose=True)
     bench.print_summary()
 

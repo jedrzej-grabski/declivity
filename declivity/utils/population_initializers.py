@@ -162,7 +162,9 @@ class UniformPopulationInitializer(PopulationInitializer):
         # R's ``replicate(lambda, runif(N, low, high))`` draws (N, lambda)
         # column-by-column.  Preserve that draw order so a side-by-side
         # NumPy-seeded reference port consumes the same RNG stream.
-        out = rng.uniform(low=low[:, None], high=high[:, None], size=(len(low), pop_size))
+        out = rng.uniform(
+            low=low[:, None], high=high[:, None], size=(len(low), pop_size)
+        )
         return out.T  # (pop_size, dim)
 
 
@@ -339,8 +341,12 @@ class CovarianceSimplexInitializer(PopulationInitializer):
             # Reflect off both bounds (signed edges can overshoot either way),
             # then clip — plain clipping could collapse the edge onto a face.
             with np.errstate(invalid="ignore"):
-                vertex = np.where(vertex > upper_bounds, 2 * upper_bounds - vertex, vertex)
-                vertex = np.where(vertex < lower_bounds, 2 * lower_bounds - vertex, vertex)
+                vertex = np.where(
+                    vertex > upper_bounds, 2 * upper_bounds - vertex, vertex
+                )
+                vertex = np.where(
+                    vertex < lower_bounds, 2 * lower_bounds - vertex, vertex
+                )
             vertex = np.clip(vertex, lower_bounds, upper_bounds)
             # Degeneracy fallback: a vertex clipped back onto x0 collapses the
             # simplex. Nudge along coordinate k by min_step (into the interior).
@@ -417,6 +423,4 @@ class PopulationInitializerType(Enum):
                 return IdentityPopulationInitializer()
             case _:
                 # Exhaustive match — new members must extend this method.
-                raise NotImplementedError(
-                    f"No build() implementation for {self!r}"
-                )
+                raise NotImplementedError(f"No build() implementation for {self!r}")

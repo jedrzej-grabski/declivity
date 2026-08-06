@@ -30,7 +30,6 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import cho_factor, cho_solve
 
-
 # Numeric floor applied to (squared) eigenvalues before inversion, so a
 # collapsed covariance direction does not blow the reciprocal up to inf. This is
 # the *numeric* floor for the matrix math — distinct from the *practical* simplex
@@ -92,9 +91,7 @@ def covariance_to_hessian_matrix(
             return inverse / (sigma * sigma)
 
     valid = ", ".join(repr(value.value) for value in HandoffTransform)
-    raise ValueError(
-        f"Unknown handoff transform: {transform!r}. Use one of {valid}."
-    )
+    raise ValueError(f"Unknown handoff transform: {transform!r}. Use one of {valid}.")
 
 
 class InitialHessianMode(Enum):

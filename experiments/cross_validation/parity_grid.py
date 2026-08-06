@@ -21,19 +21,18 @@ Run::
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 from experiments.cross_validation import des_vs_reference as des_h
 from experiments.cross_validation import mfcmaes_vs_reference as mf_h
-
+from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 
 DEFAULT_PROBLEMS = ("ellipsoid_d10", "rosenbrock_d10", "rastrigin_d10")
 DEFAULT_SEEDS = 15
@@ -64,15 +63,30 @@ ALGOS = [
 ]
 
 
-def _draw_panel(ax, spec: ProblemSpec, fw_runs, ref_runs, algo: _Algo, p_w: float, p_ks: float) -> None:
+def _draw_panel(
+    ax, spec: ProblemSpec, fw_runs, ref_runs, algo: _Algo, p_w: float, p_ks: float
+) -> None:
     for r in fw_runs:
         if not r.iter_best:
             continue
-        ax.plot(r.iter_evals, np.maximum(r.iter_best, spec.floor), color="C0", alpha=0.4, lw=0.9)
+        ax.plot(
+            r.iter_evals,
+            np.maximum(r.iter_best, spec.floor),
+            color="C0",
+            alpha=0.4,
+            lw=0.9,
+        )
     for r in ref_runs:
         if not r.iter_best:
             continue
-        ax.plot(r.iter_evals, np.maximum(r.iter_best, spec.floor), color="C3", alpha=0.4, lw=0.9, linestyle="--")
+        ax.plot(
+            r.iter_evals,
+            np.maximum(r.iter_best, spec.floor),
+            color="C3",
+            alpha=0.4,
+            lw=0.9,
+            linestyle="--",
+        )
 
     if spec.f_star > 0:
         ax.axhline(spec.f_star, color="gray", lw=0.7, linestyle=":", alpha=0.6)
@@ -80,8 +94,7 @@ def _draw_panel(ax, spec: ProblemSpec, fw_runs, ref_runs, algo: _Algo, p_w: floa
     ax.set_yscale("log")
     ax.grid(True, which="both", alpha=0.25)
     ax.set_title(
-        f"{algo.name} · {spec.name}    "
-        f"W p={p_w:.2f}  KS p={p_ks:.2f}",
+        f"{algo.name} · {spec.name}    W p={p_w:.2f}  KS p={p_ks:.2f}",
         fontsize=10,
     )
 
@@ -110,16 +123,20 @@ def run(problem_keys: list[str], seeds: list[int], output_dir: Path) -> None:
     for i, algo in enumerate(ALGOS):
         for j, problem_key in enumerate(problem_keys):
             spec = PROBLEMS[problem_key]
-            print(f"[{algo.name} · {spec.name}] running {len(seeds)} seeds…", flush=True)
+            print(
+                f"[{algo.name} · {spec.name}] running {len(seeds)} seeds…", flush=True
+            )
             fw_runs = [algo.framework_runner(spec, s) for s in seeds]
             ref_runs = [algo.reference_runner(spec, s) for s in seeds]
 
             fw_finals = np.array([r.best_fit for r in fw_runs])
             ref_finals = np.array([r.best_fit for r in ref_runs])
             try:
-                w_stat, p_w = stats.wilcoxon(fw_finals, ref_finals, zero_method="zsplit")
+                _w_stat, p_w = stats.wilcoxon(
+                    fw_finals, ref_finals, zero_method="zsplit"
+                )
             except ValueError:
-                w_stat, p_w = 0.0, 1.0  # all pairs equal — treat as match
+                _w_stat, p_w = 0.0, 1.0  # all pairs equal — treat as match
             ks_stat, p_ks = stats.ks_2samp(fw_finals, ref_finals)
 
             ax = axes[i, j]

@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, Union, final, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Union, final
 
 import numpy as np
 from numpy.typing import NDArray

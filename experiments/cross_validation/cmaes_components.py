@@ -51,7 +51,6 @@ from declivity.utils.population_initializers import NormalPopulationInitializer
 from declivity.utils.repair_strategies import IdentityRepair
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
@@ -66,12 +65,13 @@ def main() -> None:
     budget = 4000
 
     problems = [
-        Problem.from_benchmark("Sphere",     Sphere(dimensions=dimensions)),
+        Problem.from_benchmark("Sphere", Sphere(dimensions=dimensions)),
         Problem.from_benchmark("Rosenbrock", Rosenbrock(dimensions=dimensions)),
-        Problem.from_benchmark("Rastrigin",  Rastrigin(dimensions=dimensions)),
+        Problem.from_benchmark("Rastrigin", Rastrigin(dimensions=dimensions)),
     ]
 
-    config_factory = lambda d: CMAESConfig(dimensions=d)
+    def config_factory(d: int) -> CMAESConfig:
+        return CMAESConfig(dimensions=d)
 
     algorithms: list[AlgorithmRun] = [
         SingleAlgorithm(
@@ -118,9 +118,7 @@ def main() -> None:
         bench.traces,
         problems=problems,
         algorithms=algorithms,
-        title=(
-            f"CMA-ES component variants — {dimensions}D, 5 seeds, budget={budget}"
-        ),
+        title=(f"CMA-ES component variants — {dimensions}D, 5 seeds, budget={budget}"),
         save_path=OUTPUT_DIR / "convergence.png",
     )
     print(f"\nSaved: {OUTPUT_DIR / 'convergence.png'}")

@@ -1,7 +1,7 @@
+import math
+
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any
-import math
 
 
 def norm(vector: NDArray[np.float64]) -> float:

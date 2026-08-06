@@ -46,7 +46,6 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.plotting.panel import Panel, PanelRegistry, Series
 from declivity.plotting.types import LineStyle, PanelKey, XAxis, YScale
 
-
 # Floor used for log-scale fitness plots — runs that converge to (effectively)
 # zero would otherwise blow up on log axes.
 _FITNESS_FLOOR = 1e-30
@@ -64,7 +63,9 @@ PanelRegistry.register(
         ylabel="Fitness (log)",
         series=(
             Series("best_fitness", "Best", color="tab:blue"),
-            Series("mean_fitness", "Mean", linestyle=LineStyle.DASHED, color="tab:green"),
+            Series(
+                "mean_fitness", "Mean", linestyle=LineStyle.DASHED, color="tab:green"
+            ),
         ),
         yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
@@ -120,9 +121,16 @@ PanelRegistry.register(
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
-            Series("best_fitness",   "Best",      color="tab:blue"),
-            Series("mean_fitness",   "Mean f(m)", linestyle=LineStyle.DASHED, color="tab:green"),
-            Series("median_fitness", "Median",    linestyle=LineStyle.DOTTED, color="tab:red"),
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "mean_fitness",
+                "Mean f(m)",
+                linestyle=LineStyle.DASHED,
+                color="tab:green",
+            ),
+            Series(
+                "median_fitness", "Median", linestyle=LineStyle.DOTTED, color="tab:red"
+            ),
         ),
         yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
@@ -160,8 +168,10 @@ PanelRegistry.register(
         title="Evolution Paths",
         ylabel="Path Norm",
         series=(
-            Series("pc_norm", "||p_c||",     color="tab:blue"),
-            Series("ps_norm", "||p_sigma||", linestyle=LineStyle.DASHED, color="tab:red"),
+            Series("pc_norm", "||p_c||", color="tab:blue"),
+            Series(
+                "ps_norm", "||p_sigma||", linestyle=LineStyle.DASHED, color="tab:red"
+            ),
         ),
         yscale=YScale.LINEAR,
     ),
@@ -230,9 +240,14 @@ PanelRegistry.register(
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
-            Series("best_fitness",     "Best",          color="tab:blue"),
-            Series("midpoint_fitness", "Midpoint f(m)", linestyle=LineStyle.DASHED, color="tab:green"),
-            Series("mean_fitness",     "Mean",          linestyle=LineStyle.DOTTED, color="tab:red"),
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "midpoint_fitness",
+                "Midpoint f(m)",
+                linestyle=LineStyle.DASHED,
+                color="tab:green",
+            ),
+            Series("mean_fitness", "Mean", linestyle=LineStyle.DOTTED, color="tab:red"),
         ),
         yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
@@ -318,8 +333,10 @@ PanelRegistry.register(
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
-            Series("best_fitness",   "Best", color="tab:blue"),
-            Series("function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"),
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"
+            ),
         ),
         yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
@@ -330,7 +347,9 @@ PanelRegistry.register(
         ylabel="Norm (log)",
         series=(
             Series("projected_gradient_norm", "||proj g||_inf", color="tab:red"),
-            Series("gradient_norm",           "||g||_2",        linestyle=LineStyle.DASHED, color="tab:blue"),
+            Series(
+                "gradient_norm", "||g||_2", linestyle=LineStyle.DASHED, color="tab:blue"
+            ),
         ),
         yscale=YScale.LOG,
     ),
@@ -440,8 +459,10 @@ PanelRegistry.register(
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
-            Series("best_fitness",   "Best", color="tab:blue"),
-            Series("function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"),
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"
+            ),
         ),
         yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,
@@ -521,9 +542,13 @@ PanelRegistry.register(
         title="Convergence",
         ylabel="Fitness (log)",
         series=(
-            Series("best_fitness",  "Best",  color="tab:blue"),
-            Series("mean_fitness",  "Mean",  linestyle=LineStyle.DASHED, color="tab:green"),
-            Series("worst_fitness", "Worst", linestyle=LineStyle.DOTTED, color="tab:red"),
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "mean_fitness", "Mean", linestyle=LineStyle.DASHED, color="tab:green"
+            ),
+            Series(
+                "worst_fitness", "Worst", linestyle=LineStyle.DOTTED, color="tab:red"
+            ),
         ),
         yscale=YScale.LOG,
         floor=_FITNESS_FLOOR,

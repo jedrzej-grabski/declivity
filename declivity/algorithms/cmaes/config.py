@@ -7,8 +7,8 @@ implementations stay numerically aligned on the cross-validation
 experiments under ``experiments/cross_validation/``.
 """
 
-from dataclasses import dataclass, field
 import math
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -39,10 +39,7 @@ def compute_weights_and_rates(
     # eq. 49 — preliminary weights for *all* λ individuals, half positive,
     # half negative (active CMA-ES).
     weights_prime = np.array(
-        [
-            math.log((lambda_ + 1) / 2) - math.log(i + 1)
-            for i in range(lambda_)
-        ]
+        [math.log((lambda_ + 1) / 2) - math.log(i + 1) for i in range(lambda_)]
     )
     mu_eff = (np.sum(weights_prime[:mu]) ** 2) / np.sum(weights_prime[:mu] ** 2)
     mu_eff_minus = (np.sum(weights_prime[mu:]) ** 2) / np.sum(weights_prime[mu:] ** 2)
@@ -76,7 +73,9 @@ def compute_weights_and_rates(
 
     # eq. 55–56 — cumulation rates.
     c_sigma = (mu_eff + 2.0) / (n_dim + mu_eff + 5.0)
-    d_sigma = 1.0 + 2.0 * max(0.0, math.sqrt((mu_eff - 1.0) / (n_dim + 1.0)) - 1.0) + c_sigma
+    d_sigma = (
+        1.0 + 2.0 * max(0.0, math.sqrt((mu_eff - 1.0) / (n_dim + 1.0)) - 1.0) + c_sigma
+    )
     cc = (4.0 + mu_eff / n_dim) / (n_dim + 4.0 + 2.0 * mu_eff / n_dim)
 
     return weights, mu, mu_eff, c1, cmu, c_sigma, d_sigma, cc

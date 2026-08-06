@@ -42,14 +42,13 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy import stats
 
-from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.des.config import DESConfig
 from declivity.algorithms.des.des_reference import des_reference
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.utils.constraint_handlers import BoxConstraintHandler, BoxStrategy
 from declivity.utils.stopping_conditions import MaxEvaluations
-
+from experiments.cross_validation._problems import PROBLEMS, ProblemSpec
 
 # Default problem: CEC2017 F10 in 10 dimensions, the existing parity
 # anchor in the thesis (§3.6) and the R harness in ``DES.R``.
@@ -215,7 +214,9 @@ def _plot_distribution(
 
     box_data = [fw_finals, ref_finals]
     labels = ["declivity", "port DES.R"]
-    bp = ax.boxplot(box_data, tick_labels=labels, widths=0.4, patch_artist=True, showfliers=False)
+    bp = ax.boxplot(
+        box_data, tick_labels=labels, widths=0.4, patch_artist=True, showfliers=False
+    )
     for patch, color in zip(bp["boxes"], ["C0", "C3"]):
         patch.set_facecolor(color)
         patch.set_alpha(0.4)
@@ -230,8 +231,14 @@ def _plot_distribution(
     if spec.f_star > 0:
         ax.axhline(spec.f_star, color="gray", lw=0.8, linestyle=":", alpha=0.6)
     # Use log scale when fitness spans several orders of magnitude.
-    finite = np.concatenate([fw_finals[np.isfinite(fw_finals)], ref_finals[np.isfinite(ref_finals)]])
-    if finite.size and finite.min() > 0 and finite.max() / max(finite.min(), 1e-300) > 1e3:
+    finite = np.concatenate(
+        [fw_finals[np.isfinite(fw_finals)], ref_finals[np.isfinite(ref_finals)]]
+    )
+    if (
+        finite.size
+        and finite.min() > 0
+        and finite.max() / max(finite.min(), 1e-300) > 1e3
+    ):
         ax.set_yscale("log")
     ax.set_ylabel("najlepsza wartość funkcji celu (koniec uruchomienia)")
     ax.set_title(
@@ -244,7 +251,9 @@ def _plot_distribution(
     plt.close(fig)
 
 
-def _plot_state(spec: ProblemSpec, fw: RunRecord, ref: RunRecord, out_path: Path) -> None:
+def _plot_state(
+    spec: ProblemSpec, fw: RunRecord, ref: RunRecord, out_path: Path
+) -> None:
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
 
     ax = axes[0]
@@ -293,7 +302,11 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
     for seed in seeds:
         print(f"[seed {seed:2d}] framework…", end=" ", flush=True)
         fw = _run_framework(spec, seed)
-        print(f"f={fw.best_fit:.3e} (evals={fw.evaluations}, t={fw.wall_time:.1f}s)", end="  ", flush=True)
+        print(
+            f"f={fw.best_fit:.3e} (evals={fw.evaluations}, t={fw.wall_time:.1f}s)",
+            end="  ",
+            flush=True,
+        )
         print("reference…", end=" ", flush=True)
         ref = _run_reference(spec, seed)
         print(f"f={ref.best_fit:.3e} (evals={ref.evaluations}, t={ref.wall_time:.1f}s)")
@@ -347,7 +360,11 @@ def run(seeds: list[int], spec: ProblemSpec, output_dir: Path) -> None:
     fn_tag = f"{spec.name}_d{spec.dim}"
     _plot_convergence(spec, fw_runs, ref_runs, output_dir / f"convergence_{fn_tag}.png")
     _plot_distribution(
-        spec, fw_finals, ref_finals, float(p_wilcoxon), float(p_ks),
+        spec,
+        fw_finals,
+        ref_finals,
+        float(p_wilcoxon),
+        float(p_ks),
         output_dir / f"distribution_{fn_tag}.png",
     )
     _plot_state(spec, fw_runs[0], ref_runs[0], output_dir / f"state_{fn_tag}.png")

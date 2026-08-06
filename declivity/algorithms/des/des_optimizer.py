@@ -1,20 +1,24 @@
 from collections import deque
-from typing import Callable, final, Union, TYPE_CHECKING
+from typing import Callable, Union, final
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy.special import gamma
+
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.des.config import DESConfig
-from declivity.logging.des_logger import DESLogData
-from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.helpers import delete_inf_nan, calculate_ft
-from declivity.utils.repair_strategies import RepairStrategy, LamarckianRepair
-from declivity.utils.population_initializers import PopulationInitializer, NormalPopulationInitializer
-from declivity.utils.stopping_conditions import StoppingCondition
-
+from declivity.core.algorithm_factory import register_optimizer
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.population_optimizer import PopulationOptimizer
-from declivity.core.algorithm_factory import register_optimizer
+from declivity.logging.des_logger import DESLogData
+from declivity.utils.constraint_handlers import ConstraintHandler
+from declivity.utils.helpers import calculate_ft, delete_inf_nan
+from declivity.utils.population_initializers import (
+    NormalPopulationInitializer,
+    PopulationInitializer,
+)
+from declivity.utils.repair_strategies import LamarckianRepair, RepairStrategy
+from declivity.utils.stopping_conditions import StoppingCondition
 
 
 @final
@@ -45,7 +49,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             initial_point=initial_point,
             config=config,
             repair_strategy=repair_strategy or LamarckianRepair(),
-            population_initializer=population_initializer or NormalPopulationInitializer(),
+            population_initializer=population_initializer
+            or NormalPopulationInitializer(),
             algorithm=AlgorithmChoice.DES,
             constraint_handler=constraint_handler,
             stopping_condition=stopping_condition,
@@ -98,7 +103,9 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
 
         cumulative_mean = (self.upper_bounds + self.lower_bounds) / 2
 
-        population_repaired = self.repair_strategy.repair_population(population, self.constraint_handler)
+        population_repaired = self.repair_strategy.repair_population(
+            population, self.constraint_handler
+        )
 
         if lamarckian:
             population = population_repaired
@@ -114,9 +121,9 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         if np.any(finite):
             init_best = int(np.argmin(np.where(finite, fitness, np.inf)))
             best_fitness = float(fitness[init_best])
-            best_solution = (
-                population if lamarckian else population_repaired
-            )[init_best].copy()
+            best_solution = (population if lamarckian else population_repaired)[
+                init_best
+            ].copy()
 
         old_mean = np.zeros(N)
         # Matches DES.R line 215: ``newMean <- par`` — the algorithm
@@ -245,8 +252,11 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 x2 = history[hist_idx][:, x2_sample[i]]
 
                 diffs[:, i] = (
-                    np.sqrt(c_cum) * (x1 - x2 + self.rng.standard_normal() * d_mean[:, hist_idx])
-                    + np.sqrt(1 - c_cum) * self.rng.standard_normal() * pc[:, history_sample2[i]]
+                    np.sqrt(c_cum)
+                    * (x1 - x2 + self.rng.standard_normal() * d_mean[:, hist_idx])
+                    + np.sqrt(1 - c_cum)
+                    * self.rng.standard_normal()
+                    * pc[:, history_sample2[i]]
                 )
 
             # Generate new population — DES.R line 299.  The ``tol``
@@ -266,10 +276,14 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             population = delete_inf_nan(population)
 
             # Check constraints violations and repair if necessary
-            population_repaired = self.repair_strategy.repair_population(population, self.constraint_handler)
+            population_repaired = self.repair_strategy.repair_population(
+                population, self.constraint_handler
+            )
 
             # Count repaired individuals
-            counter_repaired = int(np.any(population != population_repaired, axis=1).sum())
+            counter_repaired = int(
+                np.any(population != population_repaired, axis=1).sum()
+            )
 
             if lamarckian:
                 population = population_repaired

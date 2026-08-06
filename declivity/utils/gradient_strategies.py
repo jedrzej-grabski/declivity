@@ -210,5 +210,3 @@ class GradientStrategyType(Enum):
             return CentralFD()
         # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")
-
-

@@ -50,24 +50,27 @@ from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergenc
 from declivity.utils.benchmark_functions import RotatedEllipsoid
 from declivity.utils.stopping_conditions import MaxEvaluations
 
-
 plt.ioff()
 plt.switch_backend("Agg")
 
 
 # One color scheme reused across optimizers (the four roles are the same).
 COLORS = {
-    "cmaes":      "#e74c3c",
+    "cmaes": "#e74c3c",
     "standalone": "#95a5a6",
     "covariance": "#2ecc71",
-    "identity":   "#9b59b6",
+    "identity": "#9b59b6",
 }
 
 # (display label, factory choice, config factory) for each local optimizer.
 LOCAL_SPECS = [
-    ("L-BFGS-B",    AlgorithmChoice.LBFGSB,     lambda d: LBFGSBConfig(dimensions=d)),
-    ("Powell",      AlgorithmChoice.POWELL,     lambda d: PowellConfig(dimensions=d)),
-    ("Nelder-Mead", AlgorithmChoice.NELDERMEAD, lambda d: NelderMeadConfig(dimensions=d)),
+    ("L-BFGS-B", AlgorithmChoice.LBFGSB, lambda d: LBFGSBConfig(dimensions=d)),
+    ("Powell", AlgorithmChoice.POWELL, lambda d: PowellConfig(dimensions=d)),
+    (
+        "Nelder-Mead",
+        AlgorithmChoice.NELDERMEAD,
+        lambda d: NelderMeadConfig(dimensions=d),
+    ),
 ]
 
 
@@ -150,8 +153,12 @@ def run(
 
     for label, local_algorithm, local_config_factory in LOCAL_SPECS:
         algorithms = build_algorithms(
-            label, local_algorithm, local_config_factory,
-            initial_sigma, warmup_budget, total_budget,
+            label,
+            local_algorithm,
+            local_config_factory,
+            initial_sigma,
+            warmup_budget,
+            total_budget,
         )
         sub_dir = output_dir / label.lower().replace("-", "")
         bench = Benchmark(
@@ -190,7 +197,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dimensions", type=int, default=10)
     parser.add_argument(
-        "--rotation", type=str, default="random",
+        "--rotation",
+        type=str,
+        default="random",
         choices=["none", "uniform_45", "golden", "random"],
         help="Rotation applied to the ellipsoid (anisotropy is only "
         "'un-axis-aligned' for the rotated cases — see the rotation study).",
@@ -201,7 +210,8 @@ def main() -> None:
     parser.add_argument("--num-seeds", type=int, default=15)
     parser.add_argument("--num-workers", type=int, default=1)
     parser.add_argument(
-        "--output-dir", type=Path,
+        "--output-dir",
+        type=Path,
         default=Path("plots/handoff/local_geometry_seed"),
     )
     args = parser.parse_args()

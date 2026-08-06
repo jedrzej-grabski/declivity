@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
-import numpy as np
 import math
+from dataclasses import dataclass, field
+
+import numpy as np
 from numpy.typing import NDArray
 
 from declivity.core.config_base import PopulationBaseConfig
@@ -39,7 +40,7 @@ def compute_weights(population_size: int, mu: int) -> tuple[NDArray[np.float64],
     choice.
     """
     weights = np.ones(mu, dtype=np.float64) / mu
-    mu_eff = (weights.sum() ** 2) / np.sum(weights ** 2)
+    mu_eff = (weights.sum() ** 2) / np.sum(weights**2)
     return weights, mu_eff
 
 
@@ -128,19 +129,19 @@ class MFCMAESConfig(PopulationBaseConfig):
         # Covariance update split — R: derive ``ccov`` first, then split
         # into rank-1 and rank-mu shares.  ``mucov`` is just ``mu_eff``.
         mucov = self.mu_eff
-        c_cov = (
-            (1.0 / mucov) * 2.0 / (n_dim + 1.4) ** 2
-            + (1.0 - 1.0 / mucov)
-            * ((2.0 * mucov - 1.0) / ((n_dim + 2.0) ** 2 + 2.0 * mucov))
+        c_cov = (1.0 / mucov) * 2.0 / (n_dim + 1.4) ** 2 + (1.0 - 1.0 / mucov) * (
+            (2.0 * mucov - 1.0) / ((n_dim + 2.0) ** 2 + 2.0 * mucov)
         )
         self.c_cov = c_cov
         self.c_mu = c_cov * (1.0 - 1.0 / mucov)
         self.c_1 = c_cov - self.c_mu
 
         # Damping factor (used by flatland-escape only).
-        self.damps = 1.0 + 2.0 * max(
-            0.0, math.sqrt((self.mu_eff - 1.0) / (n_dim + 1.0)) - 1.0
-        ) + self.cs
+        self.damps = (
+            1.0
+            + 2.0 * max(0.0, math.sqrt((self.mu_eff - 1.0) / (n_dim + 1.0)) - 1.0)
+            + self.cs
+        )
 
         self.validate()
 
