@@ -135,7 +135,17 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         if initial_sigma == 0.0:
             lb_array = BaseOptimizer._process_bounds(lower_bounds, len(initial_point))
             ub_array = BaseOptimizer._process_bounds(upper_bounds, len(initial_point))
-            initial_sigma = float(np.mean(ub_array - lb_array) / 5.0)
+            span = ub_array - lb_array
+            # An unbounded (or half-bounded) box gives an infinite span, and
+            # ``sigma = inf`` makes generation 0 sample non-finite candidates
+            # that trip the overflow guard in ``_tell``.  Derive the scale from
+            # the finite dimensions when there are any, else from the magnitude
+            # of the starting point.
+            finite_span = span[np.isfinite(span)]
+            if finite_span.size > 0:
+                initial_sigma = float(np.mean(finite_span) / 5.0)
+            else:
+                initial_sigma = max(1.0, float(np.max(np.abs(initial_point))) / 5.0)
 
         super().__init__(
             func=func,
@@ -275,6 +285,14 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                 population, self.constraint_handler
             )
 
+            # Divergence guard.  A run whose distribution has blown past the
+            # representable range cannot recover; report it as a termination
+            # reason rather than raising, so one bad seed in a sweep does not
+            # abort the whole benchmark.
+            if not np.all(np.abs(population) < _MEAN_MAX):
+                message = "Diverged: sampled parameters exceeded the safe range."
+                break
+
             # ---- Evaluate -----------------------------------------------
             fitness_values = np.empty(lambda_)
             for k in range(lambda_):
@@ -391,7 +409,6 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         fitness_values: NDArray[np.float64],
     ) -> None:
         assert population.shape == (self.config.population_size, self.dimensions)
-        assert np.all(np.abs(population) < _MEAN_MAX), "Param overflow"
 
         self._generation += 1
 

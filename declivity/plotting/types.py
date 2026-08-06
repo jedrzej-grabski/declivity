@@ -61,6 +61,10 @@ class PanelKey(StrEnum):
     CONVERGENCE_BY_ITER = "convergence_by_iter"
     STEP_SIZE_BY_ITER = "step_size_by_iter"
 
+    # BFGS specific
+    CURVATURE = "curvature"
+    HESSIAN_CONDITION = "hessian_condition"
+
     # MF-CMA-ES specific
     SUCCESS_PROBABILITY = "success_probability"
     CONSTRAINT_VIOLATIONS = "constraint_violations"

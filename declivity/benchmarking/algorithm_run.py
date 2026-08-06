@@ -239,14 +239,14 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     and MF-CMA-ES)."""
 
     line_search: LineSearchStrategy | None = None
-    """Line-search strategy for L-BFGS-B; ignored for evolutionary
-    algorithms. ``None`` keeps the optimizer's default
+    """Line-search strategy for the gradient-based algorithms (L-BFGS-B,
+    BFGS); ignored for the others. ``None`` keeps the optimizer's default
     (``MoreThuenteLineSearch``)."""
 
     gradient_strategy: GradientStrategy | None = None
-    """Gradient-approximation strategy for L-BFGS-B; ignored for
-    evolutionary algorithms. ``None`` keeps the optimizer's default
-    (``CentralFD``)."""
+    """Gradient-approximation strategy for the gradient-based algorithms
+    (L-BFGS-B, BFGS); ignored for the others. ``None`` keeps the
+    optimizer's default (``CentralFD``)."""
 
     stopping_condition: StoppingCondition | None = None
     """When to stop. ``None`` keeps the optimizer default
@@ -268,7 +268,11 @@ class SingleAlgorithm(BenchmarkAlgorithm):
         kwargs: dict = {}
         if self.stopping_condition is not None:
             kwargs["stopping_condition"] = self.stopping_condition
-        if self.algorithm == AlgorithmChoice.LBFGSB:
+        # Both gradient-based optimizers take the same three seams. Wiring
+        # them uniformly is what keeps the comparison fair: otherwise BFGS
+        # would silently burn 2n extra evaluations per iteration on finite
+        # differences while L-BFGS-B got the problem's analytic gradient.
+        if self.algorithm in (AlgorithmChoice.LBFGSB, AlgorithmChoice.BFGS):
             if problem.gradient is not None:
                 kwargs["gradient_fn"] = problem.gradient
             if self.line_search is not None:
@@ -525,12 +529,15 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     the uniform ``initial_geometry=`` seam:
 
     - ``LBFGSB``     — the geometry is the initial Hessian ``B_0`` (``= C^{-1}``).
+    - ``BFGS``       — the same curvature, inverted once more: BFGS tracks the
+      *inverse* Hessian, so it seeds ``H_0 = B_0^{-1}``.
     - ``POWELL``     — its eigenvectors become the initial search-direction set.
     - ``NELDERMEAD`` — its principal axes shape the initial simplex.
 
     ``transform=INVERSE`` (curvature ``C^{-1}``) is the correct default for all
-    three: L-BFGS-B needs the inverse, while Powell / Nelder-Mead read only the
-    eigenvectors / anisotropy ratios (invariant to the inversion).  ``IDENTITY``
+    four: the quasi-Newton pair needs the inverse, while Powell / Nelder-Mead
+    read only the eigenvectors / anisotropy ratios (invariant to the
+    inversion).  ``IDENTITY``
     is the control — an isotropic geometry (identity ``B_0`` / coordinate
     directions / isotropic simplex) that still flows through the same seam, so it
     isolates "covariance information" from "shared warm-up ``x0``".
@@ -565,12 +572,14 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     derives it from the bounds. Ignored by the other targets."""
 
     local_line_search: LineSearchStrategy | None = None
-    """L-BFGS-B only: line-search strategy for the refinement phase. ``None``
-    keeps the optimizer default (``MoreThuenteLineSearch``)."""
+    """Gradient-based targets (L-BFGS-B, BFGS) only: line-search strategy for
+    the refinement phase. ``None`` keeps the optimizer default
+    (``MoreThuenteLineSearch``)."""
 
     local_gradient_strategy: GradientStrategy | None = None
-    """L-BFGS-B only: gradient-approximation strategy for the refinement phase.
-    ``None`` keeps the optimizer default (``CentralFD``)."""
+    """Gradient-based targets (L-BFGS-B, BFGS) only: gradient-approximation
+    strategy for the refinement phase. ``None`` keeps the optimizer default
+    (``CentralFD``)."""
 
     def run_phases(
         self,
@@ -580,6 +589,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     ) -> tuple[OptimizationResult, OptimizationResult]:
         valid_targets = (
             AlgorithmChoice.LBFGSB,
+            AlgorithmChoice.BFGS,
             AlgorithmChoice.POWELL,
             AlgorithmChoice.NELDERMEAD,
         )
@@ -625,7 +635,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
                 setattr(local_config, flag, True)
 
         local_kwargs: dict = {"initial_geometry": geometry}
-        if self.local_algorithm == AlgorithmChoice.LBFGSB:
+        if self.local_algorithm in (AlgorithmChoice.LBFGSB, AlgorithmChoice.BFGS):
             if problem.gradient is not None:
                 local_kwargs["gradient_fn"] = problem.gradient
             if self.local_line_search is not None:

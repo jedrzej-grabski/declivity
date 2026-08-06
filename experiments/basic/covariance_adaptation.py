@@ -15,7 +15,11 @@ from matplotlib.patches import Ellipse
 
 from declivity import AlgorithmFactory
 from declivity.algorithms.choices import AlgorithmChoice
-from declivity.utils.benchmark_functions import BenchmarkFunction, Ellipsoid
+from declivity.utils.benchmark_functions import (
+    BenchmarkFunction,
+    Ellipsoid,
+    Rosenbrock,
+)
 from declivity.utils.covariance import CovarianceMatrix, empirical_covariance
 
 plt.ioff()
@@ -208,5 +212,7 @@ def _draw_ellipse(
 
 
 if __name__ == "__main__":
+    # Ill-conditioned but separable: the covariance should learn the axis
+    # scales.  Then a curved valley, where it has to learn the rotation too.
     run()
-    run(func=Ellipse(dimensions=10))
+    run(func=Rosenbrock(dimensions=10))

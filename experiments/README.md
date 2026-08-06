@@ -63,8 +63,9 @@ plots), where custom code belongs, and the anti-patterns to avoid.
 The headline contribution of the thesis: hand the CMA-ES learned covariance to a
 local optimizer as its starting geometry. Originally L-BFGS-B (as the initial
 Hessian `B₀ = C⁻¹`); now **generalized** through one shared `InitialGeometry`
-object to Powell (initial directions = eigenvectors of `C`) and Nelder-Mead
-(initial simplex shaped by `C`) via the uniform `CMAESLocalHandoff`.
+object to BFGS (inverse Hessian `H₀ = C`), Powell (initial directions =
+eigenvectors of `C`) and Nelder-Mead (initial simplex shaped by `C`) via the
+uniform `CMAESLocalHandoff`.
 
 | Script                          | What it does                                                                                                 | Output                                            |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------|---------------------------------------------------|

@@ -101,7 +101,14 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             upper_bounds=self.upper_bounds,
         )
 
-        cumulative_mean = (self.upper_bounds + self.lower_bounds) / 2
+        # DES.R seeds the running mean at the centre of the box.  Unbounded
+        # dimensions have no centre, so those fall back to the starting point
+        # — otherwise ``(inf + -inf)/2`` is NaN and poisons every subsequent
+        # mean evaluation.  Bounded dimensions keep the reference value.
+        box_centre = (self.upper_bounds + self.lower_bounds) / 2
+        cumulative_mean = np.where(
+            np.isfinite(box_centre), box_centre, self.initial_point
+        )
 
         population_repaired = self.repair_strategy.repair_population(
             population, self.constraint_handler
@@ -143,6 +150,14 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         # Calculate chi_N
         chi_N = np.sqrt(2) * gamma((N + 1) / 2) / gamma(N / 2)
         hist_norm = 1 / np.sqrt(2)
+        # Decay base of the auxiliary-noise term (DES.R line 299).  At N = 1
+        # the reference expression ``1 - 2/N**2`` is -1, and Python's float
+        # power returns a *complex* number for a negative base with the
+        # fractional exponent ``iter/2`` — which then propagates through the
+        # whole population.  Clamping at zero keeps every N >= 2 bit-identical
+        # to the reference and makes the 1-D case degrade to "no auxiliary
+        # noise after the first iteration" instead of crashing.
+        noise_decay_base = max(0.0, 1 - 2 / N**2)
         counter_repaired = 0
 
         # Allocate buffers
@@ -268,7 +283,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 new_mean.reshape(1, -1)
                 + ft * diffs.T
                 + tol
-                * (1 - 2 / N**2) ** (iter_count / 2)
+                * noise_decay_base ** (iter_count / 2)
                 * self.rng.standard_normal(size=(lambda_, N))
                 / chi_N
             )

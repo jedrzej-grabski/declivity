@@ -79,6 +79,11 @@ class NormalPopulationInitializer(PopulationInitializer):
     The ``scale_factor`` parameter controls the number of standard deviations
     that span the search range; the DES default is ``6`` so that ~99.7 % of
     the initial samples fall inside ``[lb, ub]``.
+
+    Unbounded dimensions have no range to scale by; those fall back to a
+    magnitude derived from ``x0`` so an unbounded problem yields a finite
+    starting population instead of ``inf`` samples.  Dimensions with finite
+    bounds are unaffected.
     """
 
     def __init__(self, scale_factor: float = 6.0) -> None:
@@ -92,7 +97,11 @@ class NormalPopulationInitializer(PopulationInitializer):
         lower_bounds: NDArray[np.float64],
         upper_bounds: NDArray[np.float64],
     ) -> NDArray[np.float64]:
-        scale = (upper_bounds - lower_bounds) / self.scale_factor
+        span = upper_bounds - lower_bounds
+        if not np.all(np.isfinite(span)):
+            fallback = max(1.0, float(np.max(np.abs(x0)))) if len(x0) else 1.0
+            span = np.where(np.isfinite(span), span, fallback * self.scale_factor)
+        scale = span / self.scale_factor
         return rng.normal(loc=x0, scale=scale, size=(pop_size, len(x0)))
 
 

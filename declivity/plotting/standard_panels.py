@@ -443,6 +443,93 @@ PanelRegistry.register(
 
 
 # ===========================================================================
+# BFGS
+#
+# Single-point and gradient-based, like L-BFGS-B, so it registers the same
+# semantic keys (CONVERGENCE, STEP_SIZE, GRADIENT_NORM) — that is what makes
+# ``plot_comparison({...})`` overlay BFGS against L-BFGS-B / Powell /
+# Nelder-Mead without an explicit ``panels=``. Everything except CONVERGENCE
+# is gated by a diag_* flag, so an empty axes means the flag is off.
+# ===========================================================================
+
+PanelRegistry.register(
+    AlgorithmChoice.BFGS,
+    Panel(
+        key=PanelKey.CONVERGENCE,
+        title="Convergence",
+        ylabel="Fitness (log)",
+        series=(
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "function_value", "f(x)", linestyle=LineStyle.DASHED, color="tab:green"
+            ),
+        ),
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+    ),
+    Panel(
+        key=PanelKey.GRADIENT_NORM,
+        title="Gradient Norm",
+        ylabel="||proj g||",
+        field="gradient_norm",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.STEP_SIZE,
+        title="Line Search Step",
+        ylabel="alpha",
+        field="step_length",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.CURVATURE,
+        title="BFGS Curvature y.s",
+        ylabel="y . s",
+        field="curvature",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.HESSIAN_CONDITION,
+        title="Inverse-Hessian Condition Number",
+        ylabel="kappa(H_k)",
+        field="hessian_condition",
+        yscale=YScale.LOG,
+    ),
+    # Non-default — subsumed by the convergence overlay / an iteration-axis
+    # variant for line-search comparisons (an evals axis penalizes the
+    # variant that spends more evaluations inside the line search).
+    Panel(
+        key=PanelKey.FUNCTION_VALUE,
+        title="Function Value",
+        ylabel="f(x)",
+        field="function_value",
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.CONVERGENCE_BY_ITER,
+        title="Convergence (by iteration)",
+        ylabel="Best Fitness (log)",
+        field="best_fitness",
+        x_field=XAxis.ITERATION,
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.STEP_SIZE_BY_ITER,
+        title="Line Search Step (by iteration)",
+        ylabel="alpha",
+        field="step_length",
+        x_field=XAxis.ITERATION,
+        yscale=YScale.LOG,
+        default=False,
+    ),
+)
+
+
+# ===========================================================================
 # Powell
 #
 # Single-point and derivative-free — no population, no gradients. One

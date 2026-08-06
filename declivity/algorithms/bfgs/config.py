@@ -52,8 +52,8 @@ class BFGSConfig(BaseConfig):
         - float: ``scalar * I``
         - 1D array of length n: diagonal ``diag(array)`` (entries > 0)
         - 2D array (n, n): full symmetric positive-definite matrix (Cholesky-checked)
-    A supplied ``initial_geometry`` (curvature ``B_0``) overrides this, seeding
-    ``H_0 = B_0^{-1}``."""
+    Mutually exclusive with the optimizer's ``initial_geometry=`` argument
+    (curvature ``B_0``, which seeds ``H_0 = B_0^{-1}``); passing both raises."""
 
     fd_eps: float = 0.0
     """Finite-difference step size used by both the gradient strategy and the

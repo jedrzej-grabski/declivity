@@ -256,8 +256,10 @@ def plot_benchmark_boxplot(
             ax.set_visible(False)
             continue
 
+        # ``tick_labels`` replaced ``labels`` in Matplotlib 3.9; the old
+        # spelling was removed in 3.11, which is the version this repo pins.
         box_artists = ax.boxplot(
-            boxes, labels=labels, patch_artist=True, showmeans=True, meanline=True
+            boxes, tick_labels=labels, patch_artist=True, showmeans=True, meanline=True
         )
         for patch, color in zip(box_artists["boxes"], colors):
             patch.set_facecolor(color)

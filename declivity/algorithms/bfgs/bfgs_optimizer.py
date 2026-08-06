@@ -97,7 +97,14 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         # A supplied InitialGeometry stores the curvature B_0; BFGS tracks the
         # inverse Hessian H_0 = B_0^{-1}, so seed it via ``solve`` (this also
         # gives the CMA-ES covariance shape back for a from_covariance handoff,
-        # symmetric with the L-BFGS-B B_0 handoff).
+        # symmetric with the L-BFGS-B B_0 handoff).  It and
+        # ``config.initial_inverse_hessian`` are mutually exclusive seams —
+        # same contract as L-BFGS-B, Powell, and Nelder-Mead.
+        if initial_geometry is not None and config.initial_inverse_hessian is not None:
+            raise ValueError(
+                "Pass either config.initial_inverse_hessian or initial_geometry, "
+                "not both."
+            )
         self._initial_geometry = initial_geometry
         self._cached_gradient: NDArray[np.float64] | None = None
 
@@ -160,6 +167,27 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             return 0.0
         return float(np.linalg.norm(pg, ord=self.config.norm))
 
+    # Bound geometry
+
+    def _project_onto_active_bounds(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """Zero the components of ``direction`` that point out of the box.
+
+        A coordinate sitting on a bound with a direction component pushing
+        further outward contributes nothing but a zero
+        :func:`~declivity.utils.line_search.max_feasible_step`.  Dropping it
+        leaves the step along the still-free coordinates, which is what
+        L-BFGS-B does when it fixes a variable at its bound.  With infinite
+        bounds no coordinate is ever active, so the returned direction is the
+        input unchanged and SciPy parity is untouched.
+        """
+        projected = np.array(direction, dtype=np.float64, copy=True)
+        at_lower = (x <= self.lower_bounds) & (projected < 0)
+        at_upper = (x >= self.upper_bounds) & (projected > 0)
+        projected[at_lower | at_upper] = 0.0
+        return projected
+
     # Initial inverse Hessian
 
     def _build_initial_inverse_hessian(self) -> NDArray[np.float64]:
@@ -221,18 +249,22 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             iteration += 1
 
             direction = np.asarray(-(inverse_hessian @ gradient), dtype=np.float64)
+
+            # Bound projection: a component pushing outward at an already
+            # active bound cannot move, and leaving it in makes the largest
+            # feasible step exactly zero — which would end the run even though
+            # every other coordinate is still free.  Zeroing those components
+            # is the same projection L-BFGS-B applies to its steepest-descent
+            # fallback.  No-op when unbounded (the SciPy-parity regime), since
+            # no coordinate can then sit on a bound.
+            direction = self._project_onto_active_bounds(x, direction)
             directional_derivative = float(np.dot(gradient, direction))
 
             # Ascent-direction guard: if bound clamping (or a degenerate Hk)
             # made ``direction`` non-descent, fall back to projected steepest
             # descent with active-bound components zeroed (as in L-BFGS-B).
             if directional_derivative >= 0:
-                direction = -gradient.copy()
-                for i in range(n):
-                    if x[i] <= self.lower_bounds[i] and direction[i] < 0:
-                        direction[i] = 0.0
-                    if x[i] >= self.upper_bounds[i] and direction[i] > 0:
-                        direction[i] = 0.0
+                direction = self._project_onto_active_bounds(x, -gradient)
                 directional_derivative = float(np.dot(gradient, direction))
                 if directional_derivative >= 0:
                     termination_message = "Cannot find descent direction"
@@ -289,10 +321,17 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 break
 
             step_vector = accepted_step * direction
-            x_new = self.constraint_handler.repair(x + step_vector)
+            x_line_search = x + step_vector
+            x_new = self.constraint_handler.repair(x_line_search)
             step_vector = x_new - x
 
-            if self._cached_gradient is not None:
+            if not np.array_equal(x_new, x_line_search):
+                # The line search's f / gradient describe the unrepaired trial
+                # point; a handler that moved it invalidates both.
+                function_value_new, gradient_new = self._evaluate_function_and_gradient(
+                    x_new
+                )
+            elif self._cached_gradient is not None:
                 gradient_new = self._cached_gradient
                 function_value_new = line_search_result.f_new
             else:

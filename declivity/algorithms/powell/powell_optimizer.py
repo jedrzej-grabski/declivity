@@ -26,6 +26,19 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
     L-BFGS-B.  The direction set starts as the identity (coordinate
     descent) unless ``initial_directions`` overrides it, and evolves via
     Powell's replacement heuristic.
+
+    Constraint handling
+    -------------------
+    Powell enforces the box *geometrically*: :meth:`_feasible_step_interval`
+    clips the line-search interval so no trial point can leave the box in the
+    first place.  The injected
+    :class:`~declivity.utils.constraint_handlers.ConstraintHandler` therefore
+    only has repair work to do on the initial point, and its ``penalty`` hook
+    (applied by :meth:`BaseOptimizer.evaluate`) on every evaluation.  Repairing
+    accepted points on top of the interval clipping would perturb the last bits
+    of a trajectory that is validated bit-identical against SciPy
+    (``experiments/cross_validation/powell_vs_scipy.py``), so it is deliberately
+    not done — use a handler's ``penalty`` to express non-box constraints here.
     """
 
     def __init__(
@@ -149,13 +162,15 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         x = self.initial_point.copy()
         # SciPy clips an out-of-bounds initial guess into the box (with a
         # warning) before the first evaluation; feasible starts are
-        # untouched, keeping trajectories byte-identical.
+        # untouched, keeping trajectories byte-identical.  The projection
+        # itself goes through the injected handler, whose default CLAMP
+        # strategy *is* the clip SciPy performs.
         if np.any(x < self.lower_bounds) or np.any(x > self.upper_bounds):
             warnings.warn(
                 "Initial guess is not within the specified bounds",
                 stacklevel=2,
             )
-            x = np.clip(x, self.lower_bounds, self.upper_bounds)
+            x = self.constraint_handler.repair(x)
         direc = self._initial_directions.copy()
 
         fval = self.evaluate(x)
