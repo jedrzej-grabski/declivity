@@ -158,9 +158,9 @@ class CMAESLogger(BaseLogger[CMAESLogData]):
                 self.logs.max_eigenvalue.append(float(eigenvalues[-1]))
                 self.logs.min_eigenvalue.append(float(eigenvalues[0]))
 
-        # Step-size
-        if self.config.diag_sigma:
-            self.logs.sigma.append(sigma)
+        # Step-size (cheap scalar — always logged so the default Step Size
+        # panel is never blank)
+        self.logs.sigma.append(sigma)
 
         # Evolution paths
         if pc is not None:

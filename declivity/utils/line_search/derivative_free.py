@@ -1,13 +1,14 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import final, override
+from enum import Enum
+from typing import Callable, final, override
 
 import numpy as np
 
 __all__ = [
     "BrentLineSearch",
     "DerivativeFreeLineSearch",
+    "DerivativeFreeLineSearchType",
     "GoldenSectionLineSearch",
     "ScalarSearchResult",
 ]
@@ -192,6 +193,46 @@ class GoldenSectionLineSearch(DerivativeFreeLineSearch):
             )
 
         return _golden_section(phi, lower, upper, xatol=tol / 100.0, maxiter=maxiter)
+
+
+class DerivativeFreeLineSearchType(Enum):
+    """
+    Discoverability enum listing all built-in derivative-free line searches.
+
+    Call ``.build()`` to obtain a ready-to-use
+    ``DerivativeFreeLineSearch`` instance without importing concrete
+    classes directly.
+
+    Members
+    -------
+    BRENT
+        SciPy-faithful Brent search: automatic downhill bracketing on
+        unbounded intervals, golden section + parabolic interpolation on
+        bounded ones.  Powell's default.
+    GOLDEN_SECTION
+        Pure golden-section shrinking — no parabolic acceleration.
+        Linear convergence, but unconditionally safe on noisy or kinked
+        objectives.
+    """
+
+    BRENT = "brent"
+    GOLDEN_SECTION = "golden_section"
+
+    def build(self) -> DerivativeFreeLineSearch:
+        """
+        Construct and return a fresh ``DerivativeFreeLineSearch`` instance.
+
+        Returns
+        -------
+        DerivativeFreeLineSearch
+            A concrete line search for this enum member.
+        """
+        if self is DerivativeFreeLineSearchType.BRENT:
+            return BrentLineSearch()
+        elif self is DerivativeFreeLineSearchType.GOLDEN_SECTION:
+            return GoldenSectionLineSearch()
+        # Exhaustive match — new members must extend this method.
+        raise NotImplementedError(f"No build() implementation for {self!r}")
 
 
 # ---------------------------------------------------------------------------

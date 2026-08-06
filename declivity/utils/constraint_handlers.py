@@ -145,8 +145,8 @@ class BoxConstraintHandler(ConstraintHandler):
         keeps the per-row fallback.
         """
         if self.strategy is BoxStrategy.CLAMP:
-            clipped = np.clip(population, self.lower_bounds, self.upper_bounds)
-            return self._remove_inf_nan(clipped)
+            sanitized = self._remove_inf_nan(population)
+            return np.clip(sanitized, self.lower_bounds, self.upper_bounds)
         return super().repair_batch(population)
 
     @override
@@ -160,9 +160,13 @@ class BoxConstraintHandler(ConstraintHandler):
     # ------------------------------------------------------------------
 
     def _repair_clamp(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Clamp repair — mirrors ClampBoundaryHandler.repair (lines 132–143)."""
-        x_repaired = np.clip(x, self.lower_bounds, self.upper_bounds)
-        return self._remove_inf_nan(x_repaired)
+        """Clamp repair — sanitize non-finite values, then clip into the box.
+
+        Sanitizing must come first: ``np.clip`` propagates NaN, and a
+        post-clip replacement would land far outside the bounds.
+        """
+        x_repaired = self._remove_inf_nan(x)
+        return np.clip(x_repaired, self.lower_bounds, self.upper_bounds)
 
     def _repair_bounce_back(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
         """Bounce-back repair — mirrors BounceBackBoundaryHandler.repair (lines 66–106)."""
@@ -171,8 +175,15 @@ class BoxConstraintHandler(ConstraintHandler):
 
         x_repaired = x.copy()
 
+        # Zero-width dimensions have no interior to bounce within — the
+        # modulo below would divide by zero (NaN).  Pin them to the unique
+        # feasible value and exclude them from the bounce loops.
+        degenerate = self.upper_bounds == self.lower_bounds
+        if np.any(degenerate):
+            x_repaired[degenerate] = self.lower_bounds[degenerate]
+
         # Fix lower bound violations
-        lower_violations = x < self.lower_bounds
+        lower_violations = (x < self.lower_bounds) & ~degenerate
         if np.any(lower_violations):
             indices = np.where(lower_violations)[0]
             for i in indices:
@@ -181,7 +192,7 @@ class BoxConstraintHandler(ConstraintHandler):
                 )
 
         # Fix upper bound violations
-        upper_violations = x > self.upper_bounds
+        upper_violations = (x > self.upper_bounds) & ~degenerate
         if np.any(upper_violations):
             indices = np.where(upper_violations)[0]
             for i in indices:
@@ -199,10 +210,16 @@ class BoxConstraintHandler(ConstraintHandler):
         return x_repaired
 
     def _remove_inf_nan(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Replace NaN / Inf with np.finfo(float).max — mirrors both handler classes."""
+        """Replace non-finite values with the extreme finite floats.
+
+        NaN and ``+inf`` map to ``np.finfo(float).max``; ``-inf`` maps to
+        ``np.finfo(float).min`` — direction-preserving, so a subsequent
+        clip lands each value on the correct bound.
+        """
         result = x.copy()
         result[np.isnan(result)] = np.finfo(float).max
-        result[np.isinf(result)] = np.finfo(float).max
+        result[np.isposinf(result)] = np.finfo(float).max
+        result[np.isneginf(result)] = np.finfo(float).min
         return result
 
 

@@ -71,12 +71,6 @@ class MFCMAESConfig(PopulationBaseConfig):
     tolfun: float = 1e-12
     """Tolerance for function value differences"""
 
-    tolx: float = field(init=False)
-    """Tolerance for changes in x"""
-
-    tolxup: float = 1e4
-    """Upper tolerance for step size"""
-
     # Computed/derived parameters
     mu: int = field(init=False)
     """Number of parents"""
@@ -121,8 +115,6 @@ class MFCMAESConfig(PopulationBaseConfig):
     def _recalculate_derived_params(self) -> None:
         """Recalculate derived parameters using the R reference formulas
         (``nm-cma-es-vectorized.R`` lines 54–68)."""
-        self.tolx = 1e-12 * self.sigma
-
         self.mu = default_mu(self.population_size)
 
         # Compute weights and mu_eff (uniform weights, mu_eff == mu).

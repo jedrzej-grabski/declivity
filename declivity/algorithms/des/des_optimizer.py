@@ -1,7 +1,5 @@
-import math
 from collections import deque
-from collections.abc import Callable
-from typing import final
+from typing import Callable, Union, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -37,8 +35,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         population_initializer: PopulationInitializer | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
-        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
+        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
+        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
     ) -> None:
         """Initialize the DES optimizer."""
@@ -85,10 +83,12 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         best_fitness = float("inf")
         best_solution = self.initial_point.copy()
         worst_fitness = None
-        message = None
         iter_count = 0
 
-        hist_head = 0
+        # Matches DES.R: histHead starts one slot before the first write
+        # and is advanced at the top of every iteration, so iteration 1
+        # writes slot 0.
+        hist_head = -1
         history: list[NDArray[np.float64]] = []
         ft = init_ft
 
@@ -114,6 +114,16 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         fitness = self.evaluate_population(
             population if lamarckian else population_repaired
         )
+
+        # Track the best of the initial population.  This feeds only
+        # logging, should_stop, and the result — not the sampling math.
+        finite = np.isfinite(fitness)
+        if np.any(finite):
+            init_best = int(np.argmin(np.where(finite, fitness, np.inf)))
+            best_fitness = float(fitness[init_best])
+            best_solution = (population if lamarckian else population_repaired)[
+                init_best
+            ].copy()
 
         old_mean = np.zeros(N)
         # Matches DES.R line 215: ``newMean <- par`` — the algorithm
@@ -146,10 +156,6 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             iter_count += 1
             hist_head = (hist_head + 1) % hist_size
 
-            mu = math.floor(lambda_ / 2)
-            weights = np.log(mu + 1) - np.log(np.arange(1, mu + 1))
-            weights = weights / np.sum(weights)
-
             self.logger.log_iteration(
                 iteration=iter_count,
                 evaluations=self.evaluations,
@@ -162,8 +168,12 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 ),
                 best_solution=best_solution,
                 mean_fitness=float(np.mean(fitness)),
+                # pc[:, hist_head] is written later this iteration; the
+                # freshest column is the previous slot (negative index
+                # wraps the ring, zeros before the first write).
+                evolution_path=pc[:, hist_head - 1].copy(),
                 eigenvalues=(
-                    np.sort(np.linalg.eigvals(np.cov(population.T)))[::-1]
+                    np.linalg.eigvalsh(np.cov(population.T))[::-1]
                     if self.config.diag_eigen
                     else None
                 ),
@@ -174,7 +184,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             selected_points = population[selection]
 
             # Save selected population in history buffer
-            if len(history) < hist_size:
+            if len(history) <= hist_head:
                 history.append(selected_points.T * hist_norm / ft)
             else:
                 history[hist_head] = selected_points.T * hist_norm / ft
@@ -220,7 +230,9 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     mu * cp * (2 - cp)
                 ) * step
 
-            # Sample from history
+            # Sample from history — equals the reference's
+            # ``histHead + 1 if iter < histSize else histSize`` since
+            # hist_head == (iter_count - 1) % hist_size.
             limit = min(iter_count, hist_size)
             history_sample = self.rng.choice(limit, lambda_, replace=True)
             history_sample2 = self.rng.choice(limit, lambda_, replace=True)
@@ -291,31 +303,31 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     population_repaired[best_idx]
                     if not lamarckian
                     else population[best_idx]
-                )
+                ).copy()
 
             # Check worst fitness
             worst_idx = np.argmax(fitness)
-            if (
-                fitness[worst_idx] > worst_fitness
-                if worst_fitness is not None
-                else float("-inf")
+            if fitness[worst_idx] > (
+                worst_fitness if worst_fitness is not None else float("-inf")
             ):
                 worst_fitness = fitness[worst_idx]
 
-            # Check if the mean point is better
+            # Check if the mean point is better — skipped when a hard
+            # evaluation cap is already exhausted.
             cumulative_mean = 0.8 * cumulative_mean + 0.2 * new_mean
             cumulative_mean_repaired = self.constraint_handler.repair(cumulative_mean)
-            mean_fitness = self.evaluate(cumulative_mean_repaired)
-
-            if mean_fitness < best_fitness:
-                best_fitness = mean_fitness
-                best_solution = cumulative_mean_repaired
+            remaining = self.stopping_condition.remaining_evaluations(self.evaluations)
+            if remaining is None or remaining > 0:
+                mean_fitness = self.evaluate(cumulative_mean_repaired)
+                if mean_fitness < best_fitness:
+                    best_fitness = mean_fitness
+                    best_solution = cumulative_mean_repaired.copy()
 
         result: OptimizationResult[DESLogData] = OptimizationResult(
             best_solution=best_solution,
             best_fitness=best_fitness,
             evaluations=self.evaluations,
-            message=message if message else self.stop_message,
+            message=self.stop_message,
             diagnostic=self.get_logs(),
             algorithm=AlgorithmChoice.DES,
         )

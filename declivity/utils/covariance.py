@@ -127,15 +127,18 @@ def weighted_covariance(
             f"population rows ({population.shape[0]})"
         )
 
+    internal_mean = mean is None
     if mean is None:
         mean = population.T @ weights
 
     centered = population - mean
     cov = (centered.T * weights) @ centered
 
-    # Weighted case: rank is at most min(n, d) since mean may be external
+    # Weighted case: an external mean keeps rank at most min(n, d), but
+    # centering on the internally computed weighted mean costs one degree
+    # of freedom (mirrors empirical_covariance) — rank at most n - 1.
     n = population.shape[0]
-    rank = min(n, population.shape[1])
+    rank = min(n - 1 if internal_mean else n, population.shape[1])
 
     return _decompose(cov, mean, rank)
 

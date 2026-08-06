@@ -33,6 +33,7 @@ from declivity.utils.line_search import (
     ArmijoBacktracking,
     BrentLineSearch,
     DerivativeFreeLineSearch,
+    DerivativeFreeLineSearchType,
     GoldenSectionLineSearch,
     GradientLineSearch,
     LineSearchResult,
@@ -41,11 +42,13 @@ from declivity.utils.line_search import (
     ScalarSearchResult,
 )
 from declivity.utils.population_initializers import (
+    CovarianceSimplexInitializer,
     IdentityPopulationInitializer,
     MeanSigmaPopulationInitializer,
     NormalPopulationInitializer,
     PopulationInitializer,
     PopulationInitializerType,
+    SimplexPopulationInitializer,
 )
 from declivity.utils.repair_strategies import (
     IdentityRepair,
@@ -79,7 +82,9 @@ __all__ = [
     "CEC17Function",
     "ConstraintHandler",
     "ConstraintHandlerType",
+    "CovarianceSimplexInitializer",
     "DerivativeFreeLineSearch",
+    "DerivativeFreeLineSearchType",
     "FixedInitialPointGenerator",
     "GeometryMode",
     "GoldenSectionLineSearch",
@@ -115,6 +120,7 @@ __all__ = [
     "RepairStrategyType",
     "Rosenbrock",
     "ScalarSearchResult",
+    "SimplexPopulationInitializer",
     # Benchmark functions
     "Sphere",
     "Stagnation",

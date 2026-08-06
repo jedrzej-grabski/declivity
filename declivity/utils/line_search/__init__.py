@@ -21,6 +21,7 @@ from declivity.utils.line_search.derivative_free import (
     BracketError,
     BrentLineSearch,
     DerivativeFreeLineSearch,
+    DerivativeFreeLineSearchType,
     GoldenSectionLineSearch,
     ScalarSearchResult,
     bounded_minimize,
@@ -30,6 +31,7 @@ from declivity.utils.line_search.derivative_free import (
 from declivity.utils.line_search.gradient import (
     ArmijoBacktracking,
     GradientLineSearch,
+    GradientLineSearchType,
     LineSearchResult,
     LineSearchStrategy,
     MoreThuenteLineSearch,
@@ -43,9 +45,11 @@ __all__ = [
     "BrentLineSearch",
     # Derivative-free branch
     "DerivativeFreeLineSearch",
+    "DerivativeFreeLineSearchType",
     "GoldenSectionLineSearch",
     # Gradient-based branch
     "GradientLineSearch",
+    "GradientLineSearchType",
     "LineSearchResult",
     "LineSearchStrategy",
     "MoreThuenteLineSearch",

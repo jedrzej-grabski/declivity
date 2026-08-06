@@ -1,5 +1,5 @@
-from collections.abc import Callable
-from typing import TYPE_CHECKING, final
+import warnings
+from typing import TYPE_CHECKING, Callable, Union, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -35,8 +35,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         config: PowellConfig | None = None,
         constraint_handler: ConstraintHandler | None = None,
         stopping_condition: StoppingCondition | None = None,
-        lower_bounds: float | NDArray[np.float64] | list[float] = -100.0,
-        upper_bounds: float | NDArray[np.float64] | list[float] = 100.0,
+        lower_bounds: Union[float, NDArray[np.float64], list[float]] = -100.0,
+        upper_bounds: Union[float, NDArray[np.float64], list[float]] = 100.0,
         seed: int | np.random.Generator | None = None,
         line_search: DerivativeFreeLineSearch | None = None,
         initial_directions: NDArray[np.float64] | None = None,
@@ -147,6 +147,15 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         n = self.dimensions
 
         x = self.initial_point.copy()
+        # SciPy clips an out-of-bounds initial guess into the box (with a
+        # warning) before the first evaluation; feasible starts are
+        # untouched, keeping trajectories byte-identical.
+        if np.any(x < self.lower_bounds) or np.any(x > self.upper_bounds):
+            warnings.warn(
+                "Initial guess is not within the specified bounds",
+                stacklevel=2,
+            )
+            x = np.clip(x, self.lower_bounds, self.upper_bounds)
         direc = self._initial_directions.copy()
 
         fval = self.evaluate(x)
@@ -213,6 +222,13 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     f"Converged: sweep decrease {relative_decrease:.2e} within "
                     f"ftol bound {decrease_bound:.2e}"
                 )
+                break
+            # Budget check placed exactly where SciPy tests maxfun/maxiter:
+            # after the ftol test, before the extrapolated point spends
+            # another evaluation.  ``termination_message`` stays None so the
+            # final-message logic falls through to ``self.stop_message``,
+            # identical to the top-of-loop exit.
+            if self.should_stop(iteration, best_fitness):
                 break
             if np.isnan(fx) and np.isnan(fval):
                 termination_message = "NaN region encountered"

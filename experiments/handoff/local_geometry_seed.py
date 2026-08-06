@@ -1,13 +1,14 @@
-"""Covariance-seeded local optimizers: CMA-ES -> {L-BFGS-B, Powell}.
+"""Covariance-seeded local optimizers: CMA-ES -> {L-BFGS-B, Powell, Nelder-Mead}.
 
-The generalization of the CMA-ES -> L-BFGS-B covariance handoff to any
-single-point local optimizer, through one shared ``InitialGeometry`` object and
+The generalization of the CMA-ES -> L-BFGS-B covariance handoff to *all three*
+single-point local optimizers, through one shared ``InitialGeometry`` object and
 the uniform ``CMAESLocalHandoff``. After a CMA-ES warm-up the learned covariance
 seeds each local optimizer via its natural mechanism:
 
-- **L-BFGS-B** — initial Hessian ``B_0 = C^{-1}``.
-- **Powell**   — initial search-direction set = the eigenvectors of ``C``
+- **L-BFGS-B**    — initial Hessian ``B_0 = C^{-1}``.
+- **Powell**      — initial search-direction set = the eigenvectors of ``C``
   (un-rotates coordinate descent onto the landscape's principal axes).
+- **Nelder-Mead** — the initial simplex is shaped by ``C``'s principal axes.
 
 For each optimizer we compare, on an anisotropic *rotated* (non-axis-aligned)
 benchmark where directional curvature matters most:
@@ -37,6 +38,7 @@ import matplotlib.pyplot as plt
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
+from declivity.algorithms.neldermead.config import NelderMeadConfig
 from declivity.algorithms.powell.config import PowellConfig
 from declivity.benchmarking import (
     Benchmark,
@@ -64,6 +66,11 @@ COLORS = {
 LOCAL_SPECS = [
     ("L-BFGS-B", AlgorithmChoice.LBFGSB, lambda d: LBFGSBConfig(dimensions=d)),
     ("Powell", AlgorithmChoice.POWELL, lambda d: PowellConfig(dimensions=d)),
+    (
+        "Nelder-Mead",
+        AlgorithmChoice.NELDERMEAD,
+        lambda d: NelderMeadConfig(dimensions=d),
+    ),
 ]
 
 

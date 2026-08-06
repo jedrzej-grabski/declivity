@@ -1,18 +1,25 @@
 """Regression guard: an *identity* geometry seed reproduces the native baseline.
 
-The uniform ``initial_geometry=`` seam added to Powell and L-BFGS-B must not
-disturb the (scipy-identical) default paths. This checks the two contracts that
-make that guarantee auditable:
+The uniform ``initial_geometry=`` seam added to Powell, Nelder-Mead, and L-BFGS-B
+must not disturb the (scipy-identical) default paths. This checks the two
+contracts that make that guarantee auditable:
 
 1. ``initial_geometry=None`` leaves the native seam untouched — the run is the
    exact default (already validated bit-for-bit vs scipy in
-   ``powell_vs_scipy.py``).
+   ``powell_vs_scipy.py`` / ``neldermead_vs_scipy.py``).
 
 2. A neutral ``InitialGeometry.identity(n)`` seed reproduces the default run
-   **exactly**, since both defaults are themselves isotropic:
+   **exactly** for the algorithms whose default seam is itself isotropic:
    - **Powell**   — ``principal_directions()`` of an identity geometry is ``I``,
      i.e. the default coordinate direction set.
    - **L-BFGS-B** — an identity geometry is ``B_0 = I``, i.e. the default.
+
+   **Nelder-Mead is the deliberate exception**: an identity *geometry* routes
+   through ``CovarianceSimplexInitializer`` (an isotropic simplex sized by
+   ``base_size``), which is intentionally *not* SciPy's 5%-per-coordinate
+   simplex. So for Nelder-Mead the baseline is the ``None`` path; the
+   identity-geometry simplex is only checked to run and converge (it is a fair
+   isotropic *control* for the covariance-shaped simplex, not a scipy repro).
 
 Every per-(function, dim, seed) trajectory is compared exactly: the running-best
 list, the evaluation-count list, and the final solution vector. Exits non-zero on
@@ -30,6 +37,8 @@ import numpy as np
 
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
+from declivity.algorithms.neldermead.config import NelderMeadConfig
+from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
 from declivity.algorithms.powell.config import PowellConfig
 from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 from declivity.utils.benchmark_functions import Ellipsoid, Rosenbrock, Sphere
@@ -75,6 +84,17 @@ def _run_lbfgsb(func, x0, budget, geometry):
     ).optimize()
 
 
+def _run_neldermead(func, x0, budget, geometry):
+    return NelderMeadOptimizer(
+        func,
+        x0,
+        NelderMeadConfig(dimensions=len(x0)),
+        stopping_condition=MaxEvaluations(budget),
+        seed=0,
+        initial_geometry=geometry,
+    ).optimize()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dims", type=int, nargs="+", default=[5, 10])
@@ -116,6 +136,38 @@ def main() -> None:
             f"{len(FUNCTIONS)}x{len(args.dims)}x{args.num_seeds} cases "
             f"{'OK' if failures == 0 else 'with FAILURES'}"
         )
+
+    # Nelder-Mead: None path == default; identity-geometry is a deliberate
+    # isotropic control (not scipy-identical) — check it runs and converges.
+    print("-" * 74)
+    nm_ok = True
+    for fn_name, fn_cls in FUNCTIONS:
+        for dim in args.dims:
+            rng = np.random.default_rng(0)
+            x0 = rng.uniform(-80.0, 80.0, size=dim)
+            none_run = _trajectory(_run_neldermead(fn_cls(dim), x0, args.budget, None))
+            default_ctor = _trajectory(
+                _run_neldermead(fn_cls(dim), x0, args.budget, None)
+            )
+            if not _identical(none_run, default_ctor):
+                nm_ok = False
+                failures += 1
+                print(
+                    f"  [FAIL] Nelder-Mead {fn_name} d={dim}: None path not deterministic"
+                )
+            iso = _run_neldermead(
+                fn_cls(dim), x0, args.budget, InitialGeometry.identity(dim)
+            )
+            if not np.isfinite(iso.best_fitness):
+                nm_ok = False
+                failures += 1
+                print(
+                    f"  [FAIL] Nelder-Mead {fn_name} d={dim}: isotropic-geometry run non-finite"
+                )
+    print(
+        f"  Nelder-Mead: None==default (scipy path) and isotropic-geometry "
+        f"control runs {'OK' if nm_ok else 'with FAILURES'}"
+    )
 
     print("=" * 74)
     if failures:

@@ -518,21 +518,22 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
 class CMAESLocalHandoff(HandoffAlgorithm):
     """CMA-ES warm-up followed by a local optimizer seeded from the covariance.
 
-    The generalization of :class:`CMAESLBFGSBHandoff` to any single-point
-    local optimizer. After a CMA-ES warm-up it builds **one**
+    The generalization of :class:`CMAESLBFGSBHandoff` to any of the three
+    single-point local optimizers. After a CMA-ES warm-up it builds **one**
     :class:`~declivity.algorithms.lbfgsb.initial_hessian.InitialGeometry` from
     the learned covariance and hands it to the chosen ``local_algorithm`` through
     the uniform ``initial_geometry=`` seam:
 
-    - ``LBFGSB`` — the geometry is the initial Hessian ``B_0`` (``= C^{-1}``).
-    - ``POWELL`` — its eigenvectors become the initial search-direction set.
+    - ``LBFGSB``     — the geometry is the initial Hessian ``B_0`` (``= C^{-1}``).
+    - ``POWELL``     — its eigenvectors become the initial search-direction set.
+    - ``NELDERMEAD`` — its principal axes shape the initial simplex.
 
-    ``transform=INVERSE`` (curvature ``C^{-1}``) is the correct default for both:
-    L-BFGS-B needs the inverse, while Powell reads only the eigenvectors
-    (invariant to the inversion).  ``IDENTITY`` is the control — an isotropic
-    geometry (identity ``B_0`` / coordinate directions) that still flows through
-    the same seam, so it isolates "covariance information" from "shared warm-up
-    ``x0``".
+    ``transform=INVERSE`` (curvature ``C^{-1}``) is the correct default for all
+    three: L-BFGS-B needs the inverse, while Powell / Nelder-Mead read only the
+    eigenvectors / anisotropy ratios (invariant to the inversion).  ``IDENTITY``
+    is the control — an isotropic geometry (identity ``B_0`` / coordinate
+    directions / isotropic simplex) that still flows through the same seam, so it
+    isolates "covariance information" from "shared warm-up ``x0``".
 
     Same seed and ``x0`` as a standalone CMA-ES run produce an identical CMA-ES
     prefix in the trace. Trace stitching, fitness clamping, and handoff metadata
@@ -559,6 +560,10 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     cmaes_extra_diagnostics: tuple[str, ...] = ("diag_eigen",)
     local_extra_diagnostics: tuple[str, ...] = ()
 
+    simplex_base_size: float | None = None
+    """Nelder-Mead only: absolute length of the longest simplex edge. ``None``
+    derives it from the bounds. Ignored by the other targets."""
+
     local_line_search: LineSearchStrategy | None = None
     """L-BFGS-B only: line-search strategy for the refinement phase. ``None``
     keeps the optimizer default (``MoreThuenteLineSearch``)."""
@@ -576,6 +581,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
         valid_targets = (
             AlgorithmChoice.LBFGSB,
             AlgorithmChoice.POWELL,
+            AlgorithmChoice.NELDERMEAD,
         )
         if self.local_algorithm not in valid_targets:
             names = ", ".join(str(a) for a in valid_targets)
@@ -605,8 +611,8 @@ class CMAESLocalHandoff(HandoffAlgorithm):
         cmaes_result = cmaes_optimizer.optimize()
 
         # Build one geometry object from the learned covariance. INVERSE gives
-        # the curvature B_0 = C^{-1}; Powell takes only its eigenvectors,
-        # L-BFGS-B the matrix itself.
+        # the curvature B_0 = C^{-1}; Powell/Nelder-Mead take only its
+        # eigenvectors / anisotropy, L-BFGS-B the matrix itself.
         eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
         geometry = InitialGeometry.from_covariance(
             eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma, self.transform
@@ -626,6 +632,9 @@ class CMAESLocalHandoff(HandoffAlgorithm):
                 local_kwargs["line_search"] = self.local_line_search
             if self.local_gradient_strategy is not None:
                 local_kwargs["gradient_strategy"] = self.local_gradient_strategy
+        elif self.local_algorithm == AlgorithmChoice.NELDERMEAD:
+            if self.simplex_base_size is not None:
+                local_kwargs["simplex_base_size"] = self.simplex_base_size
 
         local_result = AlgorithmFactory.create_optimizer(
             self.local_algorithm,

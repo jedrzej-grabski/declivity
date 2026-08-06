@@ -19,9 +19,9 @@ References:
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import final, override
+from enum import Enum
+from typing import Callable, final, override
 
 import numpy as np
 
@@ -67,6 +67,7 @@ class GradientLineSearch(ABC):
         gtol: float,
         xtol: float,
         maxiter: int,
+        phi: Callable[[float], float] | None = None,
     ) -> LineSearchResult:
         """Find a step ``alpha`` satisfying the strategy's acceptance test.
 
@@ -91,7 +92,13 @@ class GradientLineSearch(ABC):
             Interval-width tolerance (used by bracketing searches;
             ignored by pure Armijo backtracking).
         maxiter:
-            Maximum trial evaluations.
+            Maximum number of trial steps.
+        phi:
+            Optional value-only evaluator ``phi(alpha)``.  Searches that
+            never use ``phi'(alpha)`` at trial points (Armijo) call this
+            instead of ``phi_dphi`` — in finite-difference mode that cuts
+            the per-trial cost from three evaluations to one.  Searches
+            that need the derivative (More-Thuente) ignore it.
         """
         ...
 
@@ -124,7 +131,9 @@ class MoreThuenteLineSearch(GradientLineSearch):
         gtol: float,
         xtol: float,
         maxiter: int,
+        phi: Callable[[float], float] | None = None,
     ) -> LineSearchResult:
+        del phi  # More-Thuente needs phi'(alpha) at every trial point.
         return more_thuente_search(
             phi_dphi, stp0, phi0, dphi0, stpmax, ftol, gtol, xtol, maxiter
         )
@@ -138,7 +147,9 @@ class ArmijoBacktracking(GradientLineSearch):
     only the sufficient-decrease condition, contracting the trial step
     on each rejected trial.  ``gtol`` and ``xtol`` are accepted to
     keep the interface uniform with :class:`MoreThuenteLineSearch` but
-    are unused.
+    are unused.  When the caller supplies the value-only ``phi``
+    evaluator, each trial costs a single function evaluation (Armijo
+    never needs ``phi'(alpha)`` at trial points).
     """
 
     @override
@@ -153,9 +164,12 @@ class ArmijoBacktracking(GradientLineSearch):
         gtol: float,
         xtol: float,
         maxiter: int,
+        phi: Callable[[float], float] | None = None,
     ) -> LineSearchResult:
         del gtol, xtol  # Armijo ignores Wolfe-style curvature / bracket bounds.
-        return armijo_search(phi_dphi, stp0, phi0, dphi0, stpmax, ftol, maxiter)
+        return armijo_search(
+            phi_dphi, stp0, phi0, dphi0, stpmax, ftol, maxiter, phi=phi
+        )
 
 
 def more_thuente_search(
@@ -180,6 +194,9 @@ def more_thuente_search(
     the sufficient decrease condition holds with a non-negative derivative.
     Stage 2 directly minimizes f within the bracket.
     """
+    if maxiter < 1:
+        raise ValueError("maxiter must be at least 1.")
+
     step_min = 0.0
     extrapolation_upper = 4.0
     bisection_threshold = 0.66
@@ -188,6 +205,10 @@ def more_thuente_search(
         return LineSearchResult(
             step=0.0, f_new=phi0, dphi_new=dphi0, num_evals=0, converged=False
         )
+
+    # dcsrch's gtest: the sufficient-decrease slope ftol * phi'(0), used both
+    # in the Armijo threshold and in the boundary (stpmax/stpmin) tests.
+    gtest = ftol * dphi0
 
     is_bracketed = False
     stage = 1
@@ -217,8 +238,9 @@ def more_thuente_search(
 
         trial_f, trial_deriv = phi_dphi(step)
         num_evals += 1
+        last_evaluated_step = step
 
-        sufficient_decrease_threshold = phi0 + step * ftol * dphi0
+        sufficient_decrease_threshold = phi0 + step * gtest
 
         # Strong Wolfe convergence test
         if trial_f <= sufficient_decrease_threshold and abs(trial_deriv) <= gtol * abs(
@@ -240,27 +262,32 @@ def more_thuente_search(
                 num_evals=num_evals,
                 converged=False,
             )
+        # dcsrch boundary tests ("WARNING: STP = STPMAX/STPMIN"). Fortran's
+        # warning outcomes still return the step taken, so a sufficiently
+        # decreasing, still-steep step pinned at stpmax (the 1-D minimizer
+        # lies beyond the bound-limited feasible segment) is accepted rather
+        # than re-proposed until maxiter is exhausted.
         if (
             step == step_max
             and trial_f <= sufficient_decrease_threshold
-            and trial_deriv <= dphi0
+            and trial_deriv <= gtest
         ):
             return LineSearchResult(
                 step=step,
                 f_new=trial_f,
                 dphi_new=trial_deriv,
                 num_evals=num_evals,
-                converged=False,
+                converged=True,
             )
         if step == step_min and (
-            trial_f > sufficient_decrease_threshold or trial_deriv >= dphi0
+            trial_f > sufficient_decrease_threshold or trial_deriv >= gtest
         ):
             return LineSearchResult(
                 step=step,
                 f_new=trial_f,
                 dphi_new=trial_deriv,
                 num_evals=num_evals,
-                converged=False,
+                converged=True,
             )
 
         # Stage transition: switch from modified function to direct minimization
@@ -343,8 +370,11 @@ def more_thuente_search(
             previous_interval_width = interval_width
             interval_width = abs(other_step - best_step)
 
+    # maxiter exhausted: report the last *evaluated* step (``step`` now holds
+    # the next, never-evaluated proposal) so that ``step``/``f_new`` describe
+    # the same point.
     return LineSearchResult(
-        step=step,
+        step=last_evaluated_step,
         f_new=trial_f,
         dphi_new=trial_deriv,
         num_evals=num_evals,
@@ -539,6 +569,7 @@ def armijo_search(
     ftol: float = 1e-3,
     maxiter: int = 20,
     contraction_factor: float = 0.5,
+    phi: Callable[[float], float] | None = None,
 ) -> LineSearchResult:
     """Armijo backtracking line search.
 
@@ -546,13 +577,31 @@ def armijo_search(
         f(x + alpha*d) <= f(x) + ftol * alpha * f'(x).d
 
     Each rejected trial is contracted by the given factor.
+
+    The condition only involves ``phi(alpha)``, so when a value-only
+    evaluator ``phi`` is supplied each trial costs a single function
+    evaluation and the result's ``dphi_new`` is NaN (never computed).
+    Without ``phi``, trials fall back to ``phi_dphi``.
     """
+    if maxiter < 1:
+        raise ValueError("maxiter must be at least 1.")
+
+    if dphi0 >= 0:
+        return LineSearchResult(
+            step=0.0, f_new=phi0, dphi_new=dphi0, num_evals=0, converged=False
+        )
+
     step = min(step, step_max)
     num_evals = 0
 
     for _ in range(maxiter):
-        trial_f, trial_deriv = phi_dphi(step)
+        if phi is not None:
+            trial_f = phi(step)
+            trial_deriv = float("nan")
+        else:
+            trial_f, trial_deriv = phi_dphi(step)
         num_evals += 1
+        last_evaluated_step = step
 
         if trial_f <= phi0 + ftol * step * dphi0:
             return LineSearchResult(
@@ -567,17 +616,47 @@ def armijo_search(
 
         if step < 1e-20:
             return LineSearchResult(
-                step=step,
+                step=last_evaluated_step,
                 f_new=trial_f,
                 dphi_new=trial_deriv,
                 num_evals=num_evals,
                 converged=False,
             )
 
+    # Failure returns report the last *evaluated* step so that
+    # ``step``/``f_new`` describe the same point.
     return LineSearchResult(
-        step=step,
+        step=last_evaluated_step,
         f_new=trial_f,
         dphi_new=trial_deriv,
         num_evals=num_evals,
         converged=False,
     )
+
+
+class GradientLineSearchType(Enum):
+    """
+    Discoverability enum listing all built-in gradient-based line searches.
+
+    Call ``.build()`` to obtain a ready-to-use :class:`GradientLineSearch`
+    instance without importing concrete classes.
+    """
+
+    MORE_THUENTE = "more_thuente"
+    ARMIJO = "armijo"
+
+    def build(self) -> GradientLineSearch:
+        """
+        Construct the matching :class:`GradientLineSearch`.
+
+        Returns
+        -------
+        GradientLineSearch
+            Concrete line search for this enum member.
+        """
+        if self is GradientLineSearchType.MORE_THUENTE:
+            return MoreThuenteLineSearch()
+        elif self is GradientLineSearchType.ARMIJO:
+            return ArmijoBacktracking()
+        # Exhaustive match — new members must extend this method.
+        raise NotImplementedError(f"No build() implementation for {self!r}")
