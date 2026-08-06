@@ -20,6 +20,7 @@ L-BFGS-B, Brent for Powell).
 from declivity.utils.line_search.gradient import (
     ArmijoBacktracking,
     GradientLineSearch,
+    GradientLineSearchType,
     LineSearchResult,
     LineSearchStrategy,
     MoreThuenteLineSearch,
@@ -30,6 +31,7 @@ from declivity.utils.line_search.derivative_free import (
     BracketError,
     BrentLineSearch,
     DerivativeFreeLineSearch,
+    DerivativeFreeLineSearchType,
     GoldenSectionLineSearch,
     ScalarSearchResult,
     bounded_minimize,
@@ -40,6 +42,7 @@ from declivity.utils.line_search.derivative_free import (
 __all__ = [
     # Gradient-based branch
     "GradientLineSearch",
+    "GradientLineSearchType",
     "LineSearchStrategy",
     "LineSearchResult",
     "MoreThuenteLineSearch",
@@ -51,6 +54,7 @@ __all__ = [
     "ScalarSearchResult",
     "BrentLineSearch",
     "GoldenSectionLineSearch",
+    "DerivativeFreeLineSearchType",
     "BracketError",
     "bracket_minimum",
     "brent_minimize",

@@ -1,3 +1,4 @@
+import warnings
 from typing import Callable, Union, final, TYPE_CHECKING
 
 import numpy as np
@@ -146,6 +147,15 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         n = self.dimensions
 
         x = self.initial_point.copy()
+        # SciPy clips an out-of-bounds initial guess into the box (with a
+        # warning) before the first evaluation; feasible starts are
+        # untouched, keeping trajectories byte-identical.
+        if np.any(x < self.lower_bounds) or np.any(x > self.upper_bounds):
+            warnings.warn(
+                "Initial guess is not within the specified bounds",
+                stacklevel=2,
+            )
+            x = np.clip(x, self.lower_bounds, self.upper_bounds)
         direc = self._initial_directions.copy()
 
         fval = self.evaluate(x)
@@ -212,6 +222,13 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     f"Converged: sweep decrease {relative_decrease:.2e} within "
                     f"ftol bound {decrease_bound:.2e}"
                 )
+                break
+            # Budget check placed exactly where SciPy tests maxfun/maxiter:
+            # after the ftol test, before the extrapolated point spends
+            # another evaluation.  ``termination_message`` stays None so the
+            # final-message logic falls through to ``self.stop_message``,
+            # identical to the top-of-loop exit.
+            if self.should_stop(iteration, best_fitness):
                 break
             if np.isnan(fx) and np.isnan(fval):
                 termination_message = "NaN region encountered"
