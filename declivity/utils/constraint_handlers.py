@@ -457,6 +457,11 @@ class BoxConstraintHandler(ConstraintHandler):
         NaN and ``+inf`` map to ``np.finfo(float).max``; ``-inf`` maps to
         ``np.finfo(float).min`` — direction-preserving, so a subsequent
         clip lands each value on the correct bound.
+
+        Not to be confused with :func:`declivity.utils.helpers.delete_inf_nan`,
+        which sends ``-inf`` to ``+DBL_MAX`` instead.  That one is a port of
+        DES.R and is kept bug-compatible with it on purpose; this is the
+        framework's own, and it is the one every repair goes through.
         """
         result = x.copy()
         result[np.isnan(result)] = np.finfo(float).max

@@ -91,7 +91,25 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
         )
 
     def _repair_point(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        return self.constraint_handler.repair(x)
+        """Repair one trial vertex through the injected :class:`RepairStrategy`.
+
+        A reflected / expanded / contracted vertex is a population member of a
+        one-row population, so it goes through the same policy layer as the
+        initial simplex and the shrink step.  Calling
+        ``constraint_handler.repair`` directly instead — as this used to — left
+        the ``repair_strategy=`` seam only half live: an injected
+        :class:`~declivity.utils.repair_strategies.IdentityRepair` governed the
+        initial simplex and shrink but was ignored for every single-vertex move,
+        which is most of a Nelder-Mead run.
+
+        Under the default
+        :class:`~declivity.utils.repair_strategies.LamarckianRepair` this is
+        exactly ``ConstraintHandler.repair(x)`` (``repair_batch`` of a one-row
+        matrix), so the SciPy-parity trajectory is unchanged.
+        """
+        return self.repair_strategy.repair_population(
+            x[np.newaxis, :], self.constraint_handler
+        )[0]
 
     # Main loop
 

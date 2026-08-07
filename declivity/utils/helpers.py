@@ -84,6 +84,20 @@ def delete_inf_nan(x: NDArray[np.float64]) -> NDArray[np.float64]:
     """
     Replace any NaN or Inf values with a large finite value.
 
+    Mirror of ``deleteInfsNaNs`` (DES.R lines 413–417), which sends *every*
+    non-finite value to ``+DBL_MAX`` — including ``-inf``.
+
+    That makes it deliberately different from
+    ``BoxConstraintHandler._remove_inf_nan``, which is direction-preserving
+    (``-inf`` maps to ``DBL_MIN``) so that a subsequent clip lands each value on
+    the *correct* bound.  Do not "unify" the two: DES calls this on its raw
+    population before repair purely for reference parity — its correctness is
+    established by cross-validation against DES.R — and under this version a
+    diverged ``-inf`` coordinate ends up clamped to the *upper* bound, which is
+    what R does.  This is float hygiene for the sampling math (an ``inf`` in the
+    population poisons ``pop_mean`` and every mean that follows), not a
+    feasibility decision, so it is not the constraint handler's job.
+
     Args:
         x: Array that may contain NaN or Inf values
 
