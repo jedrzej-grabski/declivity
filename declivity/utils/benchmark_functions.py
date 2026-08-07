@@ -75,6 +75,9 @@ class Sphere(BenchmarkFunction):
     def __call__(self, x: NDArray[np.float64]) -> float:
         return np.sum(x**2)
 
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        return 2.0 * x
+
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         return -100.0 * np.ones(self.dimensions), 100.0 * np.ones(self.dimensions)
@@ -191,6 +194,15 @@ class Rosenbrock(BenchmarkFunction):
 
     def __call__(self, x: NDArray[np.float64]) -> float:
         return np.sum(100.0 * (x[1:] - x[:-1] ** 2) ** 2 + (1 - x[:-1]) ** 2)
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        # d/dx_i of the chained sum: term i contributes through both the
+        # ``x_{i+1} - x_i^2`` residual it starts and the one it ends.
+        grad = np.zeros_like(x, dtype=float)
+        residual = x[1:] - x[:-1] ** 2
+        grad[:-1] = -400.0 * residual * x[:-1] - 2.0 * (1 - x[:-1])
+        grad[1:] += 200.0 * residual
+        return grad
 
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -317,6 +329,19 @@ class Schwefel(BenchmarkFunction):
 
     def __call__(self, x: NDArray[np.float64]) -> float:
         return 418.9829 * self.dimensions - np.sum(x * np.sin(np.sqrt(np.abs(x))))
+
+    def gradient(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Gradient of the Schwefel function.
+
+        Differentiable everywhere except ``x_i == 0``, where the ``sqrt(|x|)``
+        cusp gives no derivative; the gradient is defined as 0 there (the
+        limit of the symmetric difference), so the callers that consume it get
+        a finite vector rather than a NaN.
+        """
+        root = np.sqrt(np.abs(x))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            derivative = np.sin(root) + root * np.cos(root) / 2.0
+        return -np.where(x == 0.0, 0.0, derivative)
 
     @property
     def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:

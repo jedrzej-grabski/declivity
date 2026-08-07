@@ -22,10 +22,15 @@ if TYPE_CHECKING:
 class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
     """Powell's method — derivative-free conjugate-direction minimization.
 
-    Single-point method: inherits :class:`BaseOptimizer` directly, like
-    L-BFGS-B.  The direction set starts as the identity (coordinate
-    descent) unless ``initial_directions`` overrides it, and evolves via
-    Powell's replacement heuristic.
+    The direction set starts as the identity unless ``initial_directions``
+    overrides it, and evolves via Powell's replacement heuristic.
+
+    Constraints come from the injected
+    :class:`~declivity.utils.constraint_handlers.ConstraintHandler`.  When it
+    bounds a ray via ``feasible_step_interval`` the line search is confined to
+    that interval; when it returns ``None`` the search runs unconstrained and
+    every point is passed through ``repair``.  ``penalty`` applies to every
+    evaluation in either case.
     """
 
     def __init__(
@@ -64,10 +69,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                 raise ValueError(
                     "Pass either initial_directions or initial_geometry, not both."
                 )
-            # principal_directions() returns eigenvectors as COLUMNS; Powell
-            # stores one search direction per ROW, so transpose. Seeding the
-            # direction set with the CMA-ES covariance eigenvectors un-rotates
-            # coordinate descent onto the landscape's principal axes.
+            # principal_directions() returns eigenvectors as columns; Powell
+            # stores one direction per row.
             initial_directions = initial_geometry.principal_directions().T
 
         if initial_directions is None:
@@ -85,26 +88,6 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     "would never be optimized."
                 )
 
-    # Feasible step interval
-
-    def _feasible_step_interval(
-        self, x: NDArray[np.float64], direction: NDArray[np.float64]
-    ) -> tuple[float, float]:
-
-        (nonzero,) = direction.nonzero()
-        lower = self.lower_bounds[nonzero]
-        upper = self.upper_bounds[nonzero]
-        x_nz = x[nonzero]
-        d_nz = direction[nonzero]
-        low = (lower - x_nz) / d_nz
-        high = (upper - x_nz) / d_nz
-
-        pos = d_nz > 0
-        lmin = float(np.max(np.where(pos, low, 0) + np.where(pos, 0, high)))
-        lmax = float(np.min(np.where(pos, high, 0) + np.where(pos, 0, low)))
-
-        return (lmin, lmax) if lmax >= lmin else (0.0, 0.0)
-
     # Directional minimization
 
     def _search_along(
@@ -116,17 +99,29 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         """Minimize the objective along ``direction`` from ``x``.
 
         Returns ``(f_min, x_new, step_vector)`` where
-        ``step_vector = alpha * direction`` — the same contract as
-        SciPy's ``_linesearch_powell``.  A zero direction is a no-op
-        that reuses ``fval`` without spending evaluations.
+        ``step_vector = alpha * direction``.  A zero direction is a no-op that
+        reuses ``fval`` without spending evaluations.
+
+        When the handler bounds the ray the search is confined to that
+        interval and nothing is repaired; when it returns ``None`` the search
+        runs unconstrained and every point is passed through ``repair``.
         """
         if not np.any(direction):
             return fval, x, direction
 
-        interval = self._feasible_step_interval(x, direction)
+        bounded_interval = self.constraint_handler.feasible_step_interval(x, direction)
+        repair_needed = bounded_interval is None
+        interval = (-np.inf, np.inf) if repair_needed else bounded_interval
 
-        def phi(alpha: float, _x=x, _d=direction) -> float:
-            return self.evaluate(_x + alpha * _d)
+        if repair_needed:
+
+            def phi(alpha: float, _x=x, _d=direction) -> float:
+                return self.evaluate(self.constraint_handler.repair(_x + alpha * _d))
+
+        else:
+
+            def phi(alpha: float, _x=x, _d=direction) -> float:
+                return self.evaluate(_x + alpha * _d)
 
         result = self._line_search.search(
             phi,
@@ -134,6 +129,10 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
             tol=self.config.xtol * 100.0,
             maxiter=self.config.ls_maxiter,
         )
+
+        if repair_needed:
+            x_new = self.constraint_handler.repair(x + result.alpha * direction)
+            return result.f_min, x_new, x_new - x
 
         step_vector = result.alpha * direction
         return result.f_min, x + step_vector, step_vector
@@ -147,15 +146,14 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         n = self.dimensions
 
         x = self.initial_point.copy()
-        # SciPy clips an out-of-bounds initial guess into the box (with a
-        # warning) before the first evaluation; feasible starts are
-        # untouched, keeping trajectories byte-identical.
-        if np.any(x < self.lower_bounds) or np.any(x > self.upper_bounds):
+        # An out-of-bounds initial guess is projected (with a warning) before
+        # the first evaluation; feasible starts are untouched.
+        if not self.constraint_handler.is_feasible(x):
             warnings.warn(
                 "Initial guess is not within the specified bounds",
                 stacklevel=2,
             )
-            x = np.clip(x, self.lower_bounds, self.upper_bounds)
+            x = self.constraint_handler.repair(x)
         direc = self._initial_directions.copy()
 
         fval = self.evaluate(x)
@@ -165,8 +163,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
 
         iteration = 0
         termination_message = None
-        # Whether the direction set changed at the end of the *previous*
-        # iteration
+        # Whether the direction set changed at the end of the previous
+        # iteration.
         direction_replaced = False
 
         while not self.should_stop(iteration, best_fitness):
@@ -223,11 +221,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     f"ftol bound {decrease_bound:.2e}"
                 )
                 break
-            # Budget check placed exactly where SciPy tests maxfun/maxiter:
-            # after the ftol test, before the extrapolated point spends
-            # another evaluation.  ``termination_message`` stays None so the
-            # final-message logic falls through to ``self.stop_message``,
-            # identical to the top-of-loop exit.
+            # Budget check after the ftol test, before the extrapolated point
+            # spends another evaluation.
             if self.should_stop(iteration, best_fitness):
                 break
             if np.isnan(fx) and np.isnan(fval):
@@ -238,25 +233,26 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
             direc1 = x - x_prev_iter
             x_prev_iter = x.copy()
             if not np.any(direc1):
-                # No net movement (only possible through exact
-                # cancellation) — nothing to extrapolate or replace.
                 continue
 
-            if np.all(np.isneginf(self.lower_bounds)) and np.all(
-                np.isposinf(self.upper_bounds)
-            ):
-                lmax = 1.0
-            else:
-                _, lmax = self._feasible_step_interval(x, direc1)
+            # The extrapolated point obeys the same handler interval as the
+            # line searches; an unbounded ray gives lmax = inf.
+            extrapolation_interval = self.constraint_handler.feasible_step_interval(
+                x, direc1
+            )
+            lmax = (
+                np.inf if extrapolation_interval is None else extrapolation_interval[1]
+            )
             x2 = x + min(lmax, 1.0) * direc1
+            if extrapolation_interval is None:
+                x2 = self.constraint_handler.repair(x2)
             fx2 = self.evaluate(x2)
             if fx2 < best_fitness:
                 best_fitness = fx2
                 best_solution = x2.copy()
 
-            # Powell's replacement test: drop the direction of largest
-            # decrease and adopt the aggregate displacement if that is
-            # profitable
+            # Replacement test: drop the direction of largest decrease and
+            # adopt the aggregate displacement if that is profitable.
             if fx > fx2:
                 t = 2.0 * (fx + fx2 - 2.0 * fval)
                 temp = fx - fval - delta

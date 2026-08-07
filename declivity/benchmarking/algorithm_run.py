@@ -7,25 +7,24 @@ The framework only needs three things from anything you put inside a
 - ``color`` — hex string the plotter uses for this algorithm's line
 - ``run(problem, x0, seed)`` — returns a :class:`RunTrace`
 
-How you provide them determines which base class to pick:
+Which base class to pick:
 
 ==============================  ===========================================
 Your runner is...               Inherit from
 ==============================  ===========================================
-one optimizer from the          :class:`SingleAlgorithm` (concrete, just
-factory, no special wrapping    instantiate it).
+one optimizer from the          :class:`SingleAlgorithm` (concrete).
+factory, no special wrapping
 warmup -> refinement, two       :class:`HandoffAlgorithm`. Implement
 phases that share state via     ``run_phases()``; the base class stitches
 local variables                 traces, clamps fitness, and fills in
-                                handoff metadata for you.
+                                handoff metadata.
 anything else (3+ phases,       :class:`BenchmarkAlgorithm`. Implement
 restarts, wrappers, custom      ``run()``; use ``trace_from_result()`` to
 schedules)                      package an :class:`OptimizationResult`
                                 into a :class:`RunTrace`.
 already a class, can't          conform to the :class:`AlgorithmRun`
-inherit                         :class:`Protocol` — just expose ``name``,
-                                ``color``, and ``run()``. No inheritance
-                                required.
+inherit                         :class:`Protocol`: expose ``name``,
+                                ``color``, and ``run()``.
 ==============================  ===========================================
 """
 
@@ -47,6 +46,7 @@ from declivity.benchmarking.run_trace import RunTrace, capture_scalar_series
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.config_base import BaseConfig
+from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.gradient_strategies import GradientStrategy
 from declivity.utils.initial_geometry import (
     HandoffTransform,
@@ -71,16 +71,13 @@ def initial_hessian_from_cmaes(
 ) -> NDArray[np.float64] | None:
     """Turn a CMA-ES eigendecomposition ``(B, D)`` into an L-BFGS-B ``B_0``.
 
-    ``C = B @ diag(D**2) @ B.T``; the L-BFGS-B model needs ``B`` (the Hessian),
-    and the CMA-ES covariance ``C`` is proportional to ``B^{-1}`` — so the useful
-    transforms invert it. See :class:`HandoffTransform` for the meaning of each
-    option; ``IDENTITY`` returns ``None`` (the L-BFGS-B default ``B_0 = I``).
+    ``C = B @ diag(D**2) @ B.T``.  The L-BFGS-B model needs the Hessian ``B``
+    and the CMA-ES covariance ``C`` is proportional to ``B^{-1}``, so the
+    useful transforms invert it.  See :class:`HandoffTransform`;
+    ``IDENTITY`` returns ``None`` (the L-BFGS-B default ``B_0 = I``).
 
-    Thin delegate to
-    :func:`~declivity.algorithms.lbfgsb.initial_hessian.covariance_to_hessian_matrix`
-    (the single source of truth, in the geometry module); retained here so the
-    config-based handoffs (:class:`CMAESLBFGSBHandoff`,
-    :class:`InterleavedCMAESLBFGSB`) keep their exact numeric contract.
+    Delegates to
+    :func:`~declivity.utils.initial_geometry.covariance_to_hessian_matrix`.
     """
     return covariance_to_hessian_matrix(
         transform, eigenvectors, eigenvalues_sqrt, sigma
@@ -91,11 +88,10 @@ def initial_hessian_from_cmaes(
 class AlgorithmRun(Protocol):
     """Duck-typed interface for anything :class:`~declivity.benchmarking.Benchmark` consumes.
 
-    For most use cases prefer subclassing :class:`BenchmarkAlgorithm` —
-    same three-attribute contract, plus you get the
-    :py:meth:`BenchmarkAlgorithm.trace_from_result` helper. The Protocol
-    is here for the case where you can't inherit (e.g. you're adapting
-    an existing class) and just want to conform structurally.
+    Prefer subclassing :class:`BenchmarkAlgorithm`, which has the same
+    three-attribute contract plus the
+    :py:meth:`BenchmarkAlgorithm.trace_from_result` helper.  This Protocol is
+    for classes that cannot inherit and only conform structurally.
     """
 
     name: str
@@ -119,11 +115,9 @@ class BenchmarkAlgorithm(ABC):
       ``(problem, x0, seed)`` triple and returns a :class:`RunTrace`.
 
     The :py:meth:`trace_from_result` helper packages a single
-    :class:`OptimizationResult` into a :class:`RunTrace` for the common
-    one-optimizer case. Multi-phase runners with their own stitching
-    rules (handoffs, restarts) skip the helper and assemble the trace
-    by hand, or use :class:`HandoffAlgorithm` for the standard two-phase
-    pattern.
+    :class:`OptimizationResult` into a :class:`RunTrace`.  Multi-phase
+    runners with their own stitching rules assemble the trace by hand, or
+    use :class:`HandoffAlgorithm` for the two-phase case.
 
     Minimal subclass::
 
@@ -131,7 +125,7 @@ class BenchmarkAlgorithm(ABC):
         class MyAlgorithm(BenchmarkAlgorithm):
             name: str
             color: str
-            # ... whatever config fields you need ...
+            # config fields
 
             def run(self, problem, x0, seed) -> RunTrace:
                 result = ...  # run an optimizer
@@ -141,16 +135,24 @@ class BenchmarkAlgorithm(ABC):
     name: str
     color: str
 
+    constraint_handler: ConstraintHandler | None = None
+    """Override for the problem's feasible region.
+
+    ``None`` (default) uses :attr:`Problem.constraint_handler`.  Set this
+    when the handler itself is under study, e.g. comparing
+    ``BoxStrategy.CLAMP`` against ``BOUNCE_BACK`` on one problem definition.
+
+    Read it through :meth:`resolve_constraint_handler` so the problem-level
+    default is honoured.
+    """
+
     retain_series: tuple[str, ...] | None = None
     """Which extra scalar-per-step diagnostics :meth:`trace_from_result`
-    keeps on the trace (for cross-seed bands). ``None`` (default) = "auto":
-    retain every cheap scalar field the LogData logged (``sigma``,
-    ``condition_number``, ``mean_fitness``, ...). A tuple restricts capture
-    to exactly those fields; an empty tuple keeps only ``best_fitness``
-    (the old lean behavior). Heavy vector/matrix fields are never retained.
-    This is the storage-side knob for the single-plotter design: whatever is
-    retained here becomes available to the benchmark band plotter under the
-    same panel that drew it on a single run."""
+    keeps on the trace, for cross-seed bands.  ``None`` (default) retains
+    every cheap scalar field the LogData logged (``sigma``,
+    ``condition_number``, ``mean_fitness``, ...); a tuple restricts capture
+    to those fields; an empty tuple keeps only ``best_fitness``.  Heavy
+    vector/matrix fields are never retained."""
 
     @abstractmethod
     def run(
@@ -162,6 +164,17 @@ class BenchmarkAlgorithm(ABC):
         """Run the algorithm on one (problem, x0, seed) triple."""
         ...
 
+    def resolve_constraint_handler(self, problem: Problem) -> ConstraintHandler:
+        """The handler this run should use: the runner's override, else the problem's.
+
+        Custom :class:`BenchmarkAlgorithm` subclasses should call this and
+        forward the result as ``constraint_handler=``; a runner that skips it
+        pins the run to the default box.
+        """
+        if self.constraint_handler is not None:
+            return self.constraint_handler
+        return problem.resolved_constraint_handler()
+
     def trace_from_result(
         self,
         problem: Problem,
@@ -170,22 +183,18 @@ class BenchmarkAlgorithm(ABC):
     ) -> RunTrace:
         """Package a single :class:`OptimizationResult` into a :class:`RunTrace`.
 
-        Handles the common case where one optimizer call produces the
-        whole convergence trace. ``result.diagnostic`` is expected to
-        carry ``evaluations`` and ``best_fitness`` (every built-in
-        LogData does).
+        For the case where one optimizer call produces the whole convergence
+        trace.  ``result.diagnostic`` must carry ``evaluations`` and
+        ``best_fitness``.
 
-        The trace is a *trimmed* ``LogData``: ``evaluations`` /
+        The trace is a trimmed ``LogData``: ``evaluations`` /
         ``best_fitness`` become first-class lists, and every other cheap
         scalar-per-step field (subject to :attr:`retain_series`) is captured
-        into ``trace.series`` so the same panel that plotted it on a single
-        run can plot an aggregated band across a benchmark's seeds. Heavy
-        per-iteration fields (population, eigenvalues, best_solution) are
-        dropped — they don't persist at scale and can't be aggregated.
+        into ``trace.series``.  Heavy per-iteration fields (population,
+        eigenvalues, best_solution) are dropped.
 
-        For multi-phase runners with custom stitching rules, build the
-        :class:`RunTrace` by hand instead — or use
-        :class:`HandoffAlgorithm`, which handles the two-phase case.
+        Multi-phase runners with custom stitching build the
+        :class:`RunTrace` by hand, or use :class:`HandoffAlgorithm`.
         """
         return RunTrace(
             algorithm=self.name,
@@ -203,16 +212,12 @@ class BenchmarkAlgorithm(ABC):
 class SingleAlgorithm(BenchmarkAlgorithm):
     """A single optimizer registered in the :class:`AlgorithmFactory`.
 
-    Concrete — instantiate directly with the optimizer choice and a
-    config factory; no subclass needed unless you want to override
-    :py:meth:`run`.
+    Instantiate directly with the optimizer choice and a config factory.
 
-    For evolutionary algorithms (DES, CMA-ES, MF-CMA-ES) you can
-    optionally pin a :class:`RepairStrategy` and / or
-    :class:`PopulationInitializer` to override the per-algorithm
-    defaults. These are forwarded to the factory only when set, so
-    single-point algorithms like L-BFGS-B (which do not accept them) are
-    unaffected.
+    For evolutionary algorithms (DES, CMA-ES, MF-CMA-ES) a
+    :class:`RepairStrategy` and / or :class:`PopulationInitializer` can be
+    pinned to override the per-algorithm defaults.  These are forwarded to
+    the factory only when set, so single-point algorithms are unaffected.
     """
 
     name: str
@@ -225,34 +230,35 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     """Names of additional diag_* flags to enable on the config."""
 
     repair_strategy: RepairStrategy | None = None
-    """Population-level repair policy. Only applicable to evolutionary
-    algorithms; ignored for L-BFGS-B. ``None`` keeps the optimizer's
-    own default (``LamarckianRepair`` for every evolutionary algorithm
-    — DES, CMA-ES, and MF-CMA-ES)."""
+    """Population-level repair policy; applies to evolutionary algorithms
+    only.  ``None`` keeps the optimizer's default (``LamarckianRepair``)."""
 
     population_initializer: PopulationInitializer | None = None
-    """How the iteration-0 population is seeded. Only applicable to
-    evolutionary algorithms; ignored for L-BFGS-B. ``None`` keeps the
-    optimizer's own default
+    """How the iteration-0 population is seeded; applies to evolutionary
+    algorithms only.  ``None`` keeps the optimizer's default
     (``NormalPopulationInitializer`` for DES,
-    ``MeanSigmaPopulationInitializer(sigma=config.sigma)`` for CMA-ES
-    and MF-CMA-ES)."""
+    ``MeanSigmaPopulationInitializer(sigma=config.sigma)`` for CMA-ES and
+    MF-CMA-ES)."""
 
     line_search: LineSearchStrategy | None = None
-    """Line-search strategy for L-BFGS-B; ignored for evolutionary
-    algorithms. ``None`` keeps the optimizer's default
+    """Line-search strategy for the gradient-based algorithms (L-BFGS-B,
+    BFGS); ignored for the others. ``None`` keeps the optimizer's default
     (``MoreThuenteLineSearch``)."""
 
     gradient_strategy: GradientStrategy | None = None
-    """Gradient-approximation strategy for L-BFGS-B; ignored for
-    evolutionary algorithms. ``None`` keeps the optimizer's default
-    (``CentralFD``)."""
+    """Gradient-approximation strategy for the gradient-based algorithms
+    (L-BFGS-B, BFGS); ignored for the others. ``None`` keeps the
+    optimizer's default (``CentralFD``)."""
 
     stopping_condition: StoppingCondition | None = None
     """When to stop. ``None`` keeps the optimizer default
     (``MaxEvaluations(10_000 * dimensions)``). Pass e.g.
     ``MaxEvaluations(5000)``, ``MaxTime(30.0)``, or a composite
     (``MaxEvaluations(5000) | TargetFitness(1e-8)``) to override."""
+
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override; ``None`` uses the problem's.  See
+    :attr:`BenchmarkAlgorithm.constraint_handler`."""
 
     def run(
         self,
@@ -268,7 +274,9 @@ class SingleAlgorithm(BenchmarkAlgorithm):
         kwargs: dict = {}
         if self.stopping_condition is not None:
             kwargs["stopping_condition"] = self.stopping_condition
-        if self.algorithm == AlgorithmChoice.LBFGSB:
+        # Both gradient-based optimizers take the same three seams, wired
+        # uniformly so the comparison is fair.
+        if self.algorithm in (AlgorithmChoice.LBFGSB, AlgorithmChoice.BFGS):
             if problem.gradient is not None:
                 kwargs["gradient_fn"] = problem.gradient
             if self.line_search is not None:
@@ -285,6 +293,7 @@ class SingleAlgorithm(BenchmarkAlgorithm):
             problem.function,
             x0,
             config,
+            constraint_handler=self.resolve_constraint_handler(problem),
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             seed=seed,
@@ -297,20 +306,16 @@ class SingleAlgorithm(BenchmarkAlgorithm):
 class HandoffAlgorithm(BenchmarkAlgorithm):
     """Two-phase (warm-up -> refinement) handoff base class.
 
-    Saves the trace-stitching boilerplate every handoff would otherwise
-    re-implement. Subclasses provide ``name`` + ``color`` (typically via
-    :py:func:`dataclasses.dataclass`) and override :py:meth:`run_phases`
-    to return the two phase results. The base class fills in a
-    :class:`RunTrace` with:
+    Subclasses provide ``name`` and ``color`` and override
+    :py:meth:`run_phases` to return the two phase results.  The base class
+    fills in a :class:`RunTrace` with:
 
-    - eval counts in the refinement segment offset by the warm-up's
-      total evaluations, so the convergence trace is continuous;
-    - the refinement segment's fitness clamped to never exceed the
-      warm-up's best (the refinement logger reports its own best, which
-      starts at ``f(x0_refinement)`` — that may be slightly worse than
-      the warm-up's running best);
-    - ``handoff_eval`` and ``handoff_iter`` set from the warm-up totals,
-      which the plotter uses to draw vertical handoff markers.
+    - eval counts in the refinement segment offset by the warm-up's total
+      evaluations, so the convergence trace is continuous;
+    - the refinement segment's fitness clamped to never exceed the warm-up's
+      best, since the refinement logger starts from ``f(x0_refinement)``;
+    - ``handoff_eval`` and ``handoff_iter`` from the warm-up totals, which
+      the plotter uses to draw handoff markers.
 
     Minimal usage::
 
@@ -318,19 +323,18 @@ class HandoffAlgorithm(BenchmarkAlgorithm):
         class MyHandoff(HandoffAlgorithm):
             name: str
             color: str
-            # ... whatever config fields you need ...
+            # config fields
 
             def run_phases(self, problem, x0, seed):
                 warmup_result   = ...  # run phase 1
                 refinement_result = ...  # run phase 2, using warmup state
                 return warmup_result, refinement_result
 
-    Pass state from warm-up to refinement through ordinary local
-    variables in :py:meth:`run_phases` — both phases live in the same
-    method so any state from one is in scope for the other.
+    Both phases live in the same method, so warm-up state reaches
+    refinement through ordinary local variables.
 
-    For more elaborate runners (3+ phases, restarts, conditional
-    branches), subclass :class:`BenchmarkAlgorithm` directly instead.
+    For 3+ phases, restarts, or conditional branches, subclass
+    :class:`BenchmarkAlgorithm` directly.
     """
 
     @abstractmethod
@@ -372,8 +376,8 @@ class HandoffAlgorithm(BenchmarkAlgorithm):
             for evaluation in refinement.diagnostic.evaluations
         ]
         # Clamp refinement fitness so it never reports worse than the
-        # warm-up's best — its first point is f(x0_refinement) which can
-        # be slightly worse than the warm-up's running minimum.
+        # warm-up's best: its first point is f(x0_refinement), which can be
+        # slightly worse than the warm-up's running minimum.
         refinement_fitness_list = [
             min(value, warmup_best) for value in refinement.diagnostic.best_fitness
         ]
@@ -397,19 +401,17 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
 
     Steps:
 
-    1. Run CMA-ES on the problem until :attr:`cmaes_stopping_condition`
-       fires (default: ``MaxEvaluations(10_000 * dimensions)``). Same seed
-       and same ``x0`` as a standalone CMA-ES run will produce an identical
-       CMA-ES prefix in the convergence trace.
+    1. Run CMA-ES until :attr:`cmaes_stopping_condition` fires (default
+       ``MaxEvaluations(10_000 * dimensions)``).  With the same seed and
+       ``x0``, a standalone CMA-ES run produces an identical prefix.
     2. Read the cached eigendecomposition ``(B, D)`` from CMA-ES.
     3. Compose the initial Hessian for L-BFGS-B according to
        :attr:`transform` (see :class:`HandoffTransform`).
     4. Run L-BFGS-B from the CMA-ES mean with that ``B_0`` until
        :attr:`lbfgsb_stopping_condition` fires.
 
-    Trace stitching, fitness clamping, and handoff metadata are inherited
-    from :class:`HandoffAlgorithm`; this class only owns the
-    CMA-ES-specific covariance transformation.
+    Trace stitching, fitness clamping, and handoff metadata come from
+    :class:`HandoffAlgorithm`.
     """
 
     name: str
@@ -439,6 +441,10 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
     """Gradient-approximation strategy for the L-BFGS-B refinement
     phase. ``None`` keeps the optimizer default (``CentralFD``)."""
 
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override, applied to both phases.  ``None`` uses the
+    problem's."""
+
     def _initial_hessian_from_cmaes(
         self,
         eigenvectors: NDArray[np.float64],
@@ -461,11 +467,14 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             if hasattr(cmaes_config, flag):
                 setattr(cmaes_config, flag, True)
 
+        handler = self.resolve_constraint_handler(problem)
+
         _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.CMAES,
             problem.function,
             x0,
             cmaes_config,
+            constraint_handler=handler,
             stopping_condition=self.cmaes_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -505,6 +514,7 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             problem.function,
             cmaes_optimizer.mean,  # type: ignore[union-attr]
             lbfgsb_config,
+            constraint_handler=handler,
             stopping_condition=self.lbfgsb_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -525,12 +535,15 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     the uniform ``initial_geometry=`` seam:
 
     - ``LBFGSB``     — the geometry is the initial Hessian ``B_0`` (``= C^{-1}``).
+    - ``BFGS``       — the same curvature, inverted once more: BFGS tracks the
+      *inverse* Hessian, so it seeds ``H_0 = B_0^{-1}``.
     - ``POWELL``     — its eigenvectors become the initial search-direction set.
     - ``NELDERMEAD`` — its principal axes shape the initial simplex.
 
     ``transform=INVERSE`` (curvature ``C^{-1}``) is the correct default for all
-    three: L-BFGS-B needs the inverse, while Powell / Nelder-Mead read only the
-    eigenvectors / anisotropy ratios (invariant to the inversion).  ``IDENTITY``
+    four: the quasi-Newton pair needs the inverse, while Powell / Nelder-Mead
+    read only the eigenvectors / anisotropy ratios (invariant to the
+    inversion).  ``IDENTITY``
     is the control — an isotropic geometry (identity ``B_0`` / coordinate
     directions / isotropic simplex) that still flows through the same seam, so it
     isolates "covariance information" from "shared warm-up ``x0``".
@@ -565,12 +578,18 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     derives it from the bounds. Ignored by the other targets."""
 
     local_line_search: LineSearchStrategy | None = None
-    """L-BFGS-B only: line-search strategy for the refinement phase. ``None``
-    keeps the optimizer default (``MoreThuenteLineSearch``)."""
+    """Gradient-based targets (L-BFGS-B, BFGS) only: line-search strategy for
+    the refinement phase. ``None`` keeps the optimizer default
+    (``MoreThuenteLineSearch``)."""
 
     local_gradient_strategy: GradientStrategy | None = None
-    """L-BFGS-B only: gradient-approximation strategy for the refinement phase.
-    ``None`` keeps the optimizer default (``CentralFD``)."""
+    """Gradient-based targets (L-BFGS-B, BFGS) only: gradient-approximation
+    strategy for the refinement phase. ``None`` keeps the optimizer default
+    (``CentralFD``)."""
+
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override, applied to both phases.  ``None`` uses the
+    problem's."""
 
     def run_phases(
         self,
@@ -580,6 +599,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     ) -> tuple[OptimizationResult, OptimizationResult]:
         valid_targets = (
             AlgorithmChoice.LBFGSB,
+            AlgorithmChoice.BFGS,
             AlgorithmChoice.POWELL,
             AlgorithmChoice.NELDERMEAD,
         )
@@ -596,11 +616,14 @@ class CMAESLocalHandoff(HandoffAlgorithm):
             if hasattr(cmaes_config, flag):
                 setattr(cmaes_config, flag, True)
 
+        handler = self.resolve_constraint_handler(problem)
+
         _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.CMAES,
             problem.function,
             x0,
             cmaes_config,
+            constraint_handler=handler,
             stopping_condition=self.cmaes_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -610,8 +633,8 @@ class CMAESLocalHandoff(HandoffAlgorithm):
         cmaes_optimizer = _raw_cmaes_optimizer
         cmaes_result = cmaes_optimizer.optimize()
 
-        # Build one geometry object from the learned covariance. INVERSE gives
-        # the curvature B_0 = C^{-1}; Powell/Nelder-Mead take only its
+        # One geometry object from the learned covariance.  INVERSE gives the
+        # curvature B_0 = C^{-1}; Powell and Nelder-Mead take only its
         # eigenvectors / anisotropy, L-BFGS-B the matrix itself.
         eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
         geometry = InitialGeometry.from_covariance(
@@ -625,7 +648,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
                 setattr(local_config, flag, True)
 
         local_kwargs: dict = {"initial_geometry": geometry}
-        if self.local_algorithm == AlgorithmChoice.LBFGSB:
+        if self.local_algorithm in (AlgorithmChoice.LBFGSB, AlgorithmChoice.BFGS):
             if problem.gradient is not None:
                 local_kwargs["gradient_fn"] = problem.gradient
             if self.local_line_search is not None:
@@ -641,6 +664,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
             problem.function,
             cmaes_optimizer.mean,
             local_config,
+            constraint_handler=handler,
             stopping_condition=self.local_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -654,13 +678,13 @@ class CMAESLocalHandoff(HandoffAlgorithm):
 class InterleaveResult:
     """Detailed record of one :class:`InterleavedCMAESLBFGSB` run.
 
-    :attr:`trace` is the standard :class:`RunTrace` (the overall-best
-    staircase) that :class:`~declivity.benchmarking.Benchmark` consumes. The
-    remaining fields expose the run's internal structure for the dedicated
-    staircase plot (:func:`declivity.plotting.plot_interleaved_convergence`):
+    :attr:`trace` is the standard :class:`RunTrace` that
+    :class:`~declivity.benchmarking.Benchmark` consumes.  The remaining
+    fields expose the run's internal structure for
+    :func:`declivity.plotting.plot_interleaved_convergence`:
 
-    - the CMA-ES *backbone* — best-so-far over CMA-ES generations only,
-      ignoring the L-BFGS-B drops, so it stays above the overall best;
+    - the CMA-ES backbone: best-so-far over CMA-ES generations only,
+      ignoring the L-BFGS-B drops;
     - each L-BFGS-B burst as its own ``(evaluations, best)`` segment;
     - the cumulative evaluation counts at which bursts began.
     """
@@ -683,32 +707,24 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
     Where :class:`CMAESLBFGSBHandoff` cuts over once, this cycles between
     the two algorithms for the whole budget:
 
-    1. Advance CMA-ES for ``cmaes_interval`` generations, *resumed* from
-       its own :class:`CMAESState` each cycle. With a shared RNG this
-       reproduces a standalone CMA-ES run bit-for-bit, so the CMA-ES
-       backbone is a true reference curve.
-    2. Fire an L-BFGS-B *side-probe* from the current CMA-ES mean, with
+    1. Advance CMA-ES for ``cmaes_interval`` generations, resumed from its
+       own :class:`CMAESState` each cycle.  With a shared RNG this
+       reproduces a standalone CMA-ES run bit-for-bit.
+    2. Fire an L-BFGS-B side-probe from the current CMA-ES mean, with
        ``B_0`` derived from the CMA-ES covariance (``transform``, default
-       ``C^{-1}`` — covariance only, exactly as in the one-shot handoff).
-       The probe runs until it "stops advancing rapidly" — the L-BFGS-B
-       ``factr`` relative-decrease test (``probe_factr``), capped by
+       ``C^{-1}``).  The probe runs until the L-BFGS-B ``factr``
+       relative-decrease test (``probe_factr``) fires, capped by
        ``probe_max_evals``.
-    3. Fold the probe's improvements into the tracked OVERALL BEST, then
-       return to step 1 with CMA-ES **untouched**. The probe never feeds
-       back into the CMA-ES distribution — it is a pure refinement of the
-       running best.
+    3. Fold the probe's improvements into the tracked overall best and
+       return to step 1 with CMA-ES untouched.  The probe never feeds back
+       into the CMA-ES distribution.
 
-    The result is the characteristic staircase: CMA-ES descends gently
-    (the backbone) while each probe drops the overall best sharply toward
-    the local minimum of the region CMA-ES currently occupies. Early
-    drops are shallow (CMA-ES's covariance is still a poor Hessian model);
-    later ones deepen as ``C^{-1}`` becomes an accurate model of the
-    landscape.
+    The trace is a staircase: CMA-ES descends gently while each probe drops
+    the overall best toward the local minimum of the region CMA-ES
+    currently occupies.
 
-    This is implemented directly on :class:`BenchmarkAlgorithm` rather
-    than :class:`HandoffAlgorithm` (which is strictly two-phase) — exactly
-    the multi-phase case ``docs/framework_design.md`` defers to a direct
-    :py:meth:`run`.
+    Implemented on :class:`BenchmarkAlgorithm` rather than
+    :class:`HandoffAlgorithm`, which is strictly two-phase.
     """
 
     name: str
@@ -731,10 +747,9 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
 
     probe_factr: float = 1e7
     """L-BFGS-B relative-decrease stop for each probe: the burst hands back
-    once ``(f_old - f_new)/max(|f_old|,|f_new|,1) <= probe_factr * eps`` —
-    i.e. once the fast plunge flattens out. Larger -> the burst bails
-    sooner (shallower steps); smaller -> it grinds closer to the local
-    minimum (deeper steps)."""
+    once ``(f_old - f_new)/max(|f_old|,|f_new|,1) <= probe_factr * eps``.
+    Larger values end the burst sooner; smaller ones grind closer to the
+    local minimum."""
 
     probe_pgtol: float = 1e-8
     """Projected-gradient stop for each probe (local-minimum safety)."""
@@ -747,11 +762,14 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
     lbfgsb_extra_diagnostics: tuple[str, ...] = ()
 
     lbfgsb_line_search: LineSearchStrategy | None = None
-    """Line-search strategy for the probes. ``None`` keeps the L-BFGS-B
-    default (``MoreThuenteLineSearch``); ``ArmijoBacktracking`` is more
-    robust on rippled / multimodal landscapes."""
+    """Line-search strategy for the probes.  ``None`` keeps the L-BFGS-B
+    default (``MoreThuenteLineSearch``)."""
 
     lbfgsb_gradient_strategy: GradientStrategy | None = None
+
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override, shared by the CMA-ES backbone and every
+    probe. ``None`` uses the problem's."""
 
     def run(
         self,
@@ -775,6 +793,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
         """
         rng = np.random.default_rng(seed)
         dimensions = problem.dimensions
+        handler = self.resolve_constraint_handler(problem)
 
         reference_config = self.cmaes_config_factory(dimensions)
         population_size = reference_config.population_size
@@ -805,7 +824,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
         cmaes_converged = False
 
         while cumulative < total_budget:
-            # ---- CMA-ES slice, resumed from its own state --------------
+            # CMA-ES slice, resumed from its own state.
             slice_budget = min(interval_evaluations, total_budget - cumulative)
             if slice_budget < evaluations_per_generation:
                 break
@@ -819,6 +838,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 problem.function,
                 x0,
                 cmaes_config,
+                constraint_handler=handler,
                 stopping_condition=MaxEvaluations(slice_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
@@ -843,16 +863,16 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
             total_generations += len(cmaes_result.diagnostic.iteration)
             state = cmaes.get_state()
 
-            # A non-budget termination means CMA-ES genuinely converged or
-            # stalled; do one last probe then stop, otherwise the loop
-            # would spin re-hitting the same criterion every cycle.
+            # A non-budget termination means CMA-ES converged or stalled; do
+            # one last probe then stop, otherwise the loop keeps re-hitting
+            # the same criterion.
             if not cmaes_result.message.startswith("Maximum function evaluations"):
                 cmaes_converged = True
 
             if cumulative >= total_budget:
                 break
 
-            # ---- L-BFGS-B side-probe from the current CMA-ES mean ------
+            # L-BFGS-B side-probe from the current CMA-ES mean.
             probe_budget = min(self.probe_max_evals, total_budget - cumulative)
             if probe_budget <= 0:
                 break
@@ -882,6 +902,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 problem.function,
                 cmaes.mean,
                 lbfgsb_config,
+                constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
@@ -891,9 +912,8 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
 
             burst_starts.append(cumulative)
             # Start the burst segment at the current overall-best level so
-            # the drop renders as a clean step; the values are the running
-            # best within the probe (monotone), which coincides with the
-            # overall-best staircase wherever the probe improves on it.
+            # the drop renders as a clean step.  The values are the running
+            # best within the probe.
             burst_running = overall_best
             segment_evaluations = [cumulative]
             segment_best = [burst_running]

@@ -18,9 +18,9 @@ __all__ = [
 class ScalarSearchResult:
     """Result of a derivative-free line search.
 
-    ``alpha`` is the accepted step along the direction (may be negative:
-    a derivative-free search explores both orientations of the ray),
-    ``f_min`` the objective value at that step.
+    ``alpha`` is the accepted step along the direction; it may be negative,
+    since a derivative-free search explores both orientations of the ray.
+    ``f_min`` is the objective value at that step.
     """
 
     alpha: float
@@ -33,9 +33,8 @@ class DerivativeFreeLineSearch(ABC):
     """Abstract base class for derivative-free line-search strategies.
 
     Finds ``alpha`` minimizing ``phi(alpha) = f(x + alpha * d)`` using
-    function values only.  Unlike the gradient-based branch there is no
-    sufficient-decrease test — the search is a genuine 1-D minimization,
-    so the natural tolerance is on the *location* of the minimizer.
+    function values only.  There is no sufficient-decrease test: this is a
+    1-D minimization, so the tolerance is on the location of the minimizer.
     """
 
     @abstractmethod
@@ -53,17 +52,14 @@ class DerivativeFreeLineSearch(ABC):
         phi:
             1-D restriction of the objective, ``phi(alpha) = f(x + alpha*d)``.
         alpha_bounds:
-            Feasible step interval ``(alpha_min, alpha_max)``.  ``None``
-            or ``(-inf, +inf)`` means unbounded; either end may be
-            infinite.  Powell derives this interval from the box bounds
-            so that every trial point stays feasible.
+            Feasible step interval ``(alpha_min, alpha_max)``.  ``None`` or
+            ``(-inf, +inf)`` means unbounded; either end may be infinite.
         tol:
             Line-search tolerance, matching SciPy's
-            ``_linesearch_powell(tol=...)`` convention: the unbounded
-            Brent branch uses it as a *relative* tolerance on ``alpha``
-            and the bounded branch uses ``tol / 100`` as an *absolute*
-            tolerance (SciPy applies the same split).  Powell passes
-            ``100 * xtol``.
+            ``_linesearch_powell(tol=...)`` convention: the unbounded Brent
+            branch uses it as a relative tolerance on ``alpha`` and the
+            bounded branch uses ``tol / 100`` as an absolute one.  Powell
+            passes ``100 * xtol``.
         maxiter:
             Iteration cap for the scalar minimizer.
         """
@@ -231,13 +227,10 @@ class DerivativeFreeLineSearchType(Enum):
             return BrentLineSearch()
         elif self is DerivativeFreeLineSearchType.GOLDEN_SECTION:
             return GoldenSectionLineSearch()
-        # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")
 
 
-# ---------------------------------------------------------------------------
 # Scalar-minimizer primitives (ports of scipy.optimize._optimize internals).
-# ---------------------------------------------------------------------------
 
 
 class BracketError(RuntimeError):

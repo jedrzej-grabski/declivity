@@ -80,17 +80,15 @@ class PopulationOptimizer(BaseOptimizer[LogDataType, ConfigType], ABC):
         config:
             Algorithm-specific configuration dataclass.
         repair_strategy:
-            **Required — no default.**  Strategy used to repair infeasible
-            population members.  Callers must pass an explicit concrete
-            instance; subclasses typically default to ``LamarckianRepair``
-            (the canonical "apply ``ConstraintHandler.repair_batch`` to
-            every individual" policy) and allow callers to override.
+            Required, no default.  Strategy for repairing infeasible
+            population members.  Subclasses typically default to
+            ``LamarckianRepair``, which applies
+            ``ConstraintHandler.repair_batch`` to every individual.
         population_initializer:
-            **Required — no default.**  Strategy used to seed the initial
+            Required, no default.  Strategy for seeding the initial
             population.  Subclasses pass a per-algorithm default
             (``NormalPopulationInitializer`` for DES,
-            ``MeanSigmaPopulationInitializer`` for CMA-ES and MF-CMA-ES)
-            and allow callers to override.
+            ``MeanSigmaPopulationInitializer`` for CMA-ES and MF-CMA-ES).
         algorithm:
             :class:`~declivity.algorithms.choices.AlgorithmChoice` enum value
             forwarded to :class:`BaseOptimizer` for logging and result

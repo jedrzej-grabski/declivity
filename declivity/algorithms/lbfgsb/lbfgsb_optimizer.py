@@ -18,6 +18,7 @@ References:
     ACM Trans. Math. Software 38 (2011).
 """
 
+from functools import partial
 from typing import TYPE_CHECKING, Callable, Union, final
 
 import numpy as np
@@ -29,14 +30,14 @@ from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.core.algorithm_factory import register_optimizer
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.gradient_strategies import CentralFD, ForwardFD, GradientStrategy
-from declivity.utils.initial_geometry import InitialHessian, InitialHessianMode
-from declivity.utils.line_search import (
-    LineSearchStrategy,
-    MoreThuenteLineSearch,
-    max_feasible_step,
+from declivity.utils.gradient_strategies import (
+    CentralFD,
+    ForwardFD,
+    GradientStrategy,
+    directional_derivative,
 )
-from declivity.utils.optimality import projected_gradient_inf_norm
+from declivity.utils.initial_geometry import InitialHessian, InitialHessianMode
+from declivity.utils.line_search import LineSearchStrategy, MoreThuenteLineSearch
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
@@ -91,10 +92,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self._memory_size = config.m
         self._machine_epsilon = np.finfo(float).eps
 
-        # Resolve the finite-difference step: explicit config values pass
-        # through untouched; the 0 = auto sentinel picks the step that
-        # balances truncation against rounding error for the strategy in
-        # use — eps**(1/3) for central differences, sqrt(eps) for forward.
+        # fd_eps = 0 means auto: eps**(1/3) for central differences,
+        # sqrt(eps) for forward.
         if config.fd_eps > 0:
             self._finite_diff_epsilon = config.fd_eps
         elif isinstance(self._gradient_strategy, ForwardFD):
@@ -102,10 +101,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         else:
             self._finite_diff_epsilon = float(self._machine_epsilon ** (1.0 / 3.0))
 
-        # A supplied InitialGeometry (e.g. a CMA-ES-derived B_0 from a
-        # handoff) and ``config.initial_hessian`` are mutually exclusive
-        # seams; otherwise build one from the config's raw curvature as
-        # before.
+        # initial_geometry and config.initial_hessian are mutually exclusive.
         if initial_geometry is not None:
             if config.initial_hessian is not None:
                 raise ValueError(
@@ -142,15 +138,13 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         if self._gradient_fn is not None:
             return np.asarray(self._gradient_fn(x), dtype=float)
         # The strategy routes its evaluations through ``self.evaluate`` so
-        # the evaluation budget is incremented exactly as the inline
-        # FD loops used to do.
+        # they count against the budget.
         return self._gradient_strategy.compute(
             f=self.evaluate,
             x=x,
             eps=self._finite_diff_epsilon,
             f_at_x=function_value_at_x,
-            lower_bounds=self.lower_bounds,
-            upper_bounds=self.upper_bounds,
+            constraint_handler=self.constraint_handler,
         )
 
     def _compute_directional_derivative(
@@ -159,7 +153,9 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         """Evaluate phi(alpha) = f(x + alpha*d) and phi'(alpha) = grad f . d.
 
         When an analytical gradient is available, the full gradient is cached
-        for reuse after the line search completes.
+        for reuse after the line search completes.  Otherwise the derivative
+        comes from the injected :class:`GradientStrategy`, applied to the 1-D
+        restriction of the objective along the ray.
         """
         x_trial = x + alpha * direction
         f_trial = self.evaluate(x_trial)
@@ -168,32 +164,16 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             gradient_at_trial = self._gradient_fn(x_trial)
             self._cached_gradient = np.asarray(gradient_at_trial, dtype=float)
             return f_trial, float(np.dot(self._cached_gradient, direction))
-        else:
-            epsilon = self._finite_diff_epsilon
-            forward_point = x_trial + epsilon * direction
-            backward_point = x_trial - epsilon * direction
-            forward_feasible = bool(
-                np.all(forward_point >= self.lower_bounds)
-                and np.all(forward_point <= self.upper_bounds)
-            )
-            backward_feasible = bool(
-                np.all(backward_point >= self.lower_bounds)
-                and np.all(backward_point <= self.upper_bounds)
-            )
-            if forward_feasible == backward_feasible:
-                # Both probes feasible: central difference.  (Also the
-                # degenerate fallback when neither probe fits the box.)
-                f_forward = self.evaluate(forward_point)
-                f_backward = self.evaluate(backward_point)
-                return f_trial, (f_forward - f_backward) / (2.0 * epsilon)
-            if forward_feasible:
-                # Backward probe would exit the box (x_trial sits on a
-                # bound): one-sided difference toward the feasible side,
-                # anchored on the already-evaluated f_trial.
-                f_forward = self.evaluate(forward_point)
-                return f_trial, (f_forward - f_trial) / epsilon
-            f_backward = self.evaluate(backward_point)
-            return f_trial, (f_trial - f_backward) / epsilon
+
+        return f_trial, directional_derivative(
+            self._gradient_strategy,
+            f=self.evaluate,
+            x=x_trial,
+            direction=direction,
+            eps=self._finite_diff_epsilon,
+            f_at_x=f_trial,
+            constraint_handler=self.constraint_handler,
+        )
 
     # Projected gradient
 
@@ -201,9 +181,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self, x: NDArray[np.float64], gradient: NDArray[np.float64]
     ) -> float:
         """Infinity norm of the projected gradient (KKT optimality measure)."""
-        return projected_gradient_inf_norm(
-            x, gradient, self.lower_bounds, self.upper_bounds
-        )
+        return self.constraint_handler.projected_gradient_inf_norm(x, gradient)
 
     # L-BFGS compact representation
 
@@ -391,8 +369,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         """
         num_vars = self.dimensions
         num_corrections = self._num_corrections
-        lower = self.lower_bounds
-        upper = self.upper_bounds
+        # The GCP walks per-coordinate breakpoints, so it needs a box.
+        lower, upper = self.constraint_handler.bounding_box(num_vars)
         B0 = self._initial_hessian
 
         cauchy_direction = np.zeros(num_vars)
@@ -440,8 +418,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         # W = [Y | theta * B_0 * S]
         projected_direction = self._build_w_projection(cauchy_direction)
 
-        # Effective base Hessian: theta * B_0 (or just B_0 when theta = 1 initially).
-        # When persist is False and corrections exist, fall back to theta * I.
+        # Effective base Hessian is theta * B_0; when persist is False and
+        # corrections exist, fall back to theta * I.
         use_initial_hessian = (
             self._num_corrections == 0 or self.config.persist_initial_hessian
         )
@@ -493,9 +471,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 variable_status[var_index] = 1
 
             # Breakpoint derivative updates use the diagonal of B_0 (or theta
-            # for the non-persist case). For dense B_0, this is an approximation
-            # at the per-variable level; the off-diagonal contributions are
-            # captured by the L-BFGS correction terms.
+            # for the non-persist case). For dense B_0 the off-diagonal
+            # contributions come from the L-BFGS correction terms instead.
             if use_initial_hessian:
                 h_i = self._theta * B0.diagonal_element(var_index)
             else:
@@ -613,11 +590,10 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         for j in range(num_free):
             restricted_basis[j, :] = self._get_w_row(free_variable_indices[j])
 
-        # B_0^{-1} restricted to free variables, applied to the reduced gradient
-        # For diagonal B_0: element-wise division
-        # For dense B_0: extract the free-variable subblock and solve
+        # B_0^{-1} restricted to free variables, applied to the reduced
+        # gradient: element-wise for a diagonal B_0, a solve on the
+        # free-variable subblock for a dense one.
         if B0.mode == InitialHessianMode.DENSE:
-            # Extract the free-variable subblock of B_0
             assert B0._matrix is not None
             free_idx = np.array(free_variable_indices)
             B0_free = np.zeros((num_free, num_free))
@@ -630,7 +606,6 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             # B_0_Z^{-1} * A  for the Woodbury K matrix
             B0_inv_A = cho_solve(B0_free_cholesky, restricted_basis)
         else:
-            # Diagonal: B_0^{-1} is element-wise inverse
             B0_inv_diag_free = np.array(
                 [
                     1.0 / B0.diagonal_element(free_variable_indices[j])
@@ -689,51 +664,41 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 cauchy_point[free_variable_indices[j]] + reduced_newton_direction[j]
             )
 
-        # Morales-Nocedal 2011 safeguard
-        projected_candidate = np.clip(candidate, self.lower_bounds, self.upper_bounds)
+        # Morales-Nocedal 2011 safeguard: project the Newton candidate back
+        # into the feasible region.
+        projected_candidate = self.constraint_handler.repair(candidate)
         directional_derivative = float(np.dot(gradient, projected_candidate - x))
 
         if directional_derivative <= 0:
             return projected_candidate
 
-        # Backtracking fallback
-        max_feasible_alpha = 1.0
-        for j in range(num_free):
-            idx = free_variable_indices[j]
-            if reduced_newton_direction[j] > self._machine_epsilon:
-                max_feasible_alpha = min(
-                    max_feasible_alpha,
-                    (self.upper_bounds[idx] - cauchy_point[idx])
-                    / reduced_newton_direction[j],
-                )
-            elif reduced_newton_direction[j] < -self._machine_epsilon:
-                max_feasible_alpha = min(
-                    max_feasible_alpha,
-                    (self.lower_bounds[idx] - cauchy_point[idx])
-                    / reduced_newton_direction[j],
-                )
-
-        max_feasible_alpha = max(0.0, min(1.0, max_feasible_alpha))
-        fallback = cauchy_point.copy()
-        for j in range(num_free):
-            fallback[free_variable_indices[j]] = (
-                cauchy_point[free_variable_indices[j]]
-                + max_feasible_alpha * reduced_newton_direction[j]
-            )
-        return np.clip(fallback, self.lower_bounds, self.upper_bounds)
+        # Backtracking fallback: lift the reduced direction into the full space
+        # (fixed variables get a zero component) and shrink the step to the
+        # largest feasible alpha.
+        newton_direction = np.zeros(self.dimensions)
+        newton_direction[free_variable_indices] = reduced_newton_direction
+        max_feasible_alpha = min(
+            1.0,
+            self.constraint_handler.max_feasible_step(cauchy_point, newton_direction),
+        )
+        fallback = cauchy_point + max_feasible_alpha * newton_direction
+        return self.constraint_handler.repair(fallback)
 
     # Main loop
 
     def optimize(self) -> OptimizationResult["LBFGSBLogData"]:
         self.evaluations = 0
         self._begin_run()
-        num_vars = self.dimensions
         config = self.config
 
         self._reset_correction_memory()
         self._cached_gradient: NDArray[np.float64] | None = None
 
-        x = self.constraint_handler.repair(self.initial_point.copy())
+        # Annotated explicitly: the line-search closures capture ``x`` as a
+        # default argument, so without an annotation the inference is circular.
+        x: NDArray[np.float64] = self.constraint_handler.repair(
+            self.initial_point.copy()
+        )
 
         function_value, gradient = self._evaluate_function_and_gradient(x)
         best_fitness = function_value
@@ -782,7 +747,7 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             else:
                 search_target = cauchy_point
 
-            direction = search_target - x
+            direction: NDArray[np.float64] = search_target - x
             direction_norm = float(np.linalg.norm(direction))
 
             if direction_norm < self._machine_epsilon:
@@ -804,12 +769,9 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
 
             directional_derivative = float(np.dot(gradient, direction))
             if directional_derivative >= 0:
-                direction = -gradient.copy()
-                for i in range(num_vars):
-                    if x[i] <= self.lower_bounds[i] and direction[i] < 0:
-                        direction[i] = 0
-                    if x[i] >= self.upper_bounds[i] and direction[i] > 0:
-                        direction[i] = 0
+                # Fall back to steepest descent restricted to the directions
+                # the handler still allows from x.
+                direction = self.constraint_handler.project_direction(x, -gradient)
                 directional_derivative = float(np.dot(gradient, direction))
                 direction_norm = float(np.linalg.norm(direction))
                 if (
@@ -819,35 +781,26 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                     termination_message = "Cannot find descent direction"
                     break
 
-            # L-BFGS-B convention (Byrd-Lu-Nocedal-Zhu 1995): always try the
-            # full Newton step alpha=1 on the first iteration, regardless of
-            # box geometry.
+            # Byrd-Lu-Nocedal-Zhu 1995: try the full Newton step alpha = 1 on
+            # the first iteration regardless of box geometry.
             max_feas_step = (
                 1.0
                 if iteration == 1
-                else max_feasible_step(
-                    x, direction, self.lower_bounds, self.upper_bounds
-                )
+                else self.constraint_handler.max_feasible_step(x, direction)
             )
             if max_feas_step <= 0:
                 termination_message = "Maximum feasible step is zero"
                 break
 
-            # Initial step guess matches the canonical L-BFGS-B convention
-            # (Byrd–Lu–Nocedal–Zhu 1995, scipy/Fortran v3.0): try the full
-            # Newton step ``alpha = 1`` on every iteration, capped by the
-            # largest feasible step ``alpha_max`` that keeps ``x + alpha d``
-            # inside the box.  An earlier ``min(1/||d||, alpha_max)`` heuristic
-            # on the first iteration shrank the very first step to a tiny
-            # ``alpha`` whenever ``||d||`` was large at ``x_0``, which the
-            # line search would then accept (Wolfe conditions are trivially
-            # satisfied at small alpha), wasting the first iteration.
+            # Initial guess is the full Newton step, capped by the largest
+            # feasible step.
             initial_step = min(1.0, max_feas_step)
 
             self._cached_gradient = None
 
-            def phi_and_dphi(alpha: float, _x=x, _d=direction) -> tuple[float, float]:
-                return self._compute_directional_derivative(_x, _d, alpha)
+            # Bound eagerly with ``partial``; x and direction do not change
+            # during the search.
+            phi_and_dphi = partial(self._compute_directional_derivative, x, direction)
 
             def phi_only(alpha: float, _x=x, _d=direction) -> float:
                 return self.evaluate(_x + alpha * _d)
@@ -872,9 +825,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 and line_search_result.step > 0
                 and line_search_result.f_new < best_fitness
             ):
-                # Even a failed search evaluated real trial points; keep a
-                # strictly better feasible one for reporting without
-                # accepting the step into the algorithm state.
+                # Keep a better trial point from a failed search for reporting
+                # without accepting the step into the algorithm state.
                 best_fitness = line_search_result.f_new
                 best_solution = (x + line_search_result.step * direction).copy()
 
@@ -900,8 +852,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
             step_vector = x_new - x
 
             if repair_moved_x:
-                # The line search's f/gradient describe x_line_search, not
-                # the repaired point — re-evaluate both.
+                # The line search's f/gradient describe x_line_search, not the
+                # repaired point.
                 function_value_new, gradient_new = self._evaluate_function_and_gradient(
                     x_new
                 )
@@ -909,8 +861,8 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
                 gradient_new = self._cached_gradient
                 function_value_new = line_search_result.f_new
             else:
-                # The line search already evaluated f at exactly x_new; only
-                # the gradient is missing.
+                # f was already evaluated at x_new; only the gradient is
+                # missing.
                 function_value_new = line_search_result.f_new
                 gradient_new = self._compute_gradient(x_new, function_value_new)
 

@@ -94,10 +94,8 @@ class Benchmark:
             key = (problem_name, algorithm_name)
             self.traces.setdefault(key, []).append(trace)
 
-        # Sort each (problem, algorithm) bucket by seed so the trace order
-        # is stable regardless of parallel completion order. Plotters and
-        # summary statistics don't depend on order, but persistence /
-        # diff-against-reference workflows do.
+        # Sort each (problem, algorithm) bucket by seed so the trace order is
+        # stable regardless of parallel completion order.
         for traces in self.traces.values():
             traces.sort(key=lambda trace: trace.seed)
 
@@ -148,7 +146,7 @@ class Benchmark:
         start: float,
     ) -> list[tuple[str, str, RunTrace]]:
         # joblib's loky backend ships closures via cloudpickle, so lambdas in
-        # config_factory work transparently.
+        # config_factory work.
         completed = 0
         total = len(jobs)
         results: list[tuple[str, str, RunTrace]] = []

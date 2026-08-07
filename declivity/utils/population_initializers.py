@@ -4,14 +4,12 @@ Population initializers for evolutionary algorithms.
 Each concrete class encapsulates how a population is seeded at the start
 of a run, making initialization pluggable without touching algorithm logic.
 
-Hierarchy
----------
-- ``PopulationInitializer`` — abstract base (single abstract method)
-- ``NormalPopulationInitializer`` — DES default; matches ``rng.normal(x0, (ub-lb)/scale_factor)``
-- ``MeanSigmaPopulationInitializer`` — MF-CMA-ES default; dim-first RNG layout preserved
-- ``SimplexPopulationInitializer`` — Nelder-Mead default; deterministic axis-step simplex
-- ``CovarianceSimplexInitializer`` — Nelder-Mead simplex shaped by a learned geometry (CMA-ES covariance)
-- ``IdentityPopulationInitializer`` — explicit no-op placeholder (raises NotImplementedError)
+- ``PopulationInitializer`` — abstract base
+- ``NormalPopulationInitializer`` — DES default, ``rng.normal(x0, (ub-lb)/scale_factor)``
+- ``MeanSigmaPopulationInitializer`` — MF-CMA-ES default, dim-first RNG layout
+- ``SimplexPopulationInitializer`` — Nelder-Mead default, deterministic axis-step simplex
+- ``CovarianceSimplexInitializer`` — Nelder-Mead simplex shaped by a learned geometry
+- ``IdentityPopulationInitializer`` — no-op placeholder, raises NotImplementedError
 - ``PopulationInitializerType`` — discoverability enum with ``.build()`` factory
 """
 
@@ -23,6 +21,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
+
+from declivity.utils.constraint_handlers import ConstraintHandler
 
 if TYPE_CHECKING:
     from declivity.utils.initial_geometry import InitialGeometry
@@ -42,8 +42,7 @@ class PopulationInitializer(ABC):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         """Generate an initial population.
 
@@ -55,10 +54,15 @@ class PopulationInitializer(ABC):
             Starting point / mean, shape ``(dim,)``.
         pop_size:
             Number of individuals to generate.
-        lower_bounds:
-            Per-dimension lower bounds, shape ``(dim,)``.
-        upper_bounds:
-            Per-dimension upper bounds, shape ``(dim,)``.
+        constraint_handler:
+            The run's
+            :class:`~declivity.utils.constraint_handlers.ConstraintHandler`.
+            Use
+            :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.bounding_box`
+            for the search range to scale by.  The returned population need
+            not be feasible; the optimizer applies its
+            :class:`~declivity.utils.repair_strategies.RepairStrategy`
+            afterwards.
 
         Returns
         -------
@@ -69,7 +73,7 @@ class PopulationInitializer(ABC):
 
 
 class NormalPopulationInitializer(PopulationInitializer):
-    """DES-default initializer — normally distributed around *x0*.
+    """DES-default initializer: normally distributed around *x0*.
 
     Reproduces DES's inline code::
 
@@ -79,6 +83,9 @@ class NormalPopulationInitializer(PopulationInitializer):
     The ``scale_factor`` parameter controls the number of standard deviations
     that span the search range; the DES default is ``6`` so that ~99.7 % of
     the initial samples fall inside ``[lb, ub]``.
+
+    Unbounded dimensions have no range to scale by and fall back to a
+    magnitude derived from ``x0``.
     """
 
     def __init__(self, scale_factor: float = 6.0) -> None:
@@ -89,15 +96,19 @@ class NormalPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        scale = (upper_bounds - lower_bounds) / self.scale_factor
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(len(x0))
+        span = upper_bounds - lower_bounds
+        if not np.all(np.isfinite(span)):
+            fallback = max(1.0, float(np.max(np.abs(x0)))) if len(x0) else 1.0
+            span = np.where(np.isfinite(span), span, fallback * self.scale_factor)
+        scale = span / self.scale_factor
         return rng.normal(loc=x0, scale=scale, size=(pop_size, len(x0)))
 
 
 class MeanSigmaPopulationInitializer(PopulationInitializer):
-    """MF-CMA-ES-default initializer — isotropic Gaussian scaled by *sigma*.
+    """MF-CMA-ES-default initializer: isotropic Gaussian scaled by *sigma*.
 
     Reproduces MF-CMA-ES's inline code::
 
@@ -124,8 +135,7 @@ class MeanSigmaPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         # Generate in (dim, pop_size) layout to match MF-CMA-ES's RNG sequence.
         d = rng.standard_normal((len(x0), pop_size))
@@ -134,15 +144,14 @@ class MeanSigmaPopulationInitializer(PopulationInitializer):
 
 
 class UniformPopulationInitializer(PopulationInitializer):
-    """R-DES-default initializer — uniform per-individual inside a fraction of bounds.
+    """R-DES-default initializer: uniform inside a fraction of the bounds.
 
     Reproduces the R reference's inline draw::
 
         replicate(lambda, runif(N, fraction*lower, fraction*upper))
 
-    The starting point ``x0`` is deliberately **not** used: R-DES does
-    not centre the first population on ``par``.  The default
-    ``fraction=0.8`` matches ``DES.R`` line 202.
+    ``x0`` is unused: R-DES does not centre the first population on ``par``.
+    The default ``fraction=0.8`` matches ``DES.R`` line 202.
     """
 
     def __init__(self, fraction: float = 0.8) -> None:
@@ -153,15 +162,14 @@ class UniformPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        del x0  # intentionally unused — R-DES draws independently of par
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(len(x0))
+        del x0  # R-DES draws independently of par
         low = self.fraction * lower_bounds
         high = self.fraction * upper_bounds
         # R's ``replicate(lambda, runif(N, low, high))`` draws (N, lambda)
-        # column-by-column.  Preserve that draw order so a side-by-side
-        # NumPy-seeded reference port consumes the same RNG stream.
+        # column-by-column; preserve that draw order.
         out = rng.uniform(
             low=low[:, None], high=high[:, None], size=(len(low), pop_size)
         )
@@ -169,7 +177,7 @@ class UniformPopulationInitializer(PopulationInitializer):
 
 
 class SimplexPopulationInitializer(PopulationInitializer):
-    """Nelder-Mead-default initializer — deterministic axis-step simplex.
+    """Nelder-Mead-default initializer: deterministic axis-step simplex.
 
     Builds the classic ``(n+1, n)`` starting simplex around *x0* the way
     SciPy's ``method='Nelder-Mead'`` does: vertex 0 is ``x0`` itself and
@@ -181,14 +189,11 @@ class SimplexPopulationInitializer(PopulationInitializer):
         sim[k + 1][k] = zdelt                        otherwise
 
     ``x0`` is clipped into the box first, and vertices that land above an
-    upper bound are *reflected* into the interior before clipping — the
-    same degeneracy guard SciPy applies, so a clipped simplex never
-    collapses onto a bound face.
+    upper bound are reflected into the interior before clipping, so a clipped
+    simplex does not collapse onto a bound face.
 
-    Deterministic: the ``rng`` argument is accepted for interface
-    compatibility but never consumed.  Swap in a random initializer
-    (e.g. :class:`NormalPopulationInitializer`) to study how simplex
-    seeding affects Nelder-Mead.
+    The ``rng`` argument is accepted for interface compatibility but never
+    consumed.
     """
 
     def __init__(self, nonzdelt: float = 0.05, zdelt: float = 0.00025) -> None:
@@ -202,10 +207,9 @@ class SimplexPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        del rng  # deterministic construction — interface compatibility only
+        del rng  # deterministic construction
         dim = len(x0)
         if pop_size != dim + 1:
             raise ValueError(
@@ -213,6 +217,7 @@ class SimplexPopulationInitializer(PopulationInitializer):
                 f"vertices; got pop_size={pop_size}."
             )
 
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(dim)
         x0 = np.clip(np.asarray(x0, dtype=float), lower_bounds, upper_bounds)
 
         sim = np.empty((dim + 1, dim), dtype=float)
@@ -225,10 +230,9 @@ class SimplexPopulationInitializer(PopulationInitializer):
                 y[k] = self.zdelt
             sim[k + 1] = y
 
-        # Degeneracy guard: a vertex pushed past an upper bound is
-        # reflected into the interior (2*ub - v), then everything is
-        # clipped — plain clipping could collapse the simplex onto a
-        # bound face when x0 sits near it.
+        # A vertex pushed past an upper bound is reflected into the interior
+        # (2*ub - v) before clipping; plain clipping could collapse the
+        # simplex onto a bound face.
         with np.errstate(invalid="ignore"):
             mask = sim > upper_bounds
             sim = np.where(mask, 2 * upper_bounds - sim, sim)
@@ -240,30 +244,26 @@ class CovarianceSimplexInitializer(PopulationInitializer):
     """Nelder-Mead initializer that shapes the simplex from a learned geometry.
 
     Builds the ``(n+1, n)`` starting simplex around *x0* with edges along the
-    geometry's principal axes (the eigenvectors of a CMA-ES covariance), so the
-    simplex is elongated along flat / high-variance directions and compressed
-    along steep ones — matching the landscape's anisotropy the way seeding
-    Powell with the covariance eigenvectors un-rotates its coordinate descent.
+    geometry's principal axes, so the simplex is elongated along
+    high-variance directions and compressed along steep ones.
 
-    **Shape** (relative anisotropy) comes from the covariance; **absolute size**
-    is decoupled into ``base_size`` with a ``min_step`` floor.  This matters:
-    the raw CMA-ES extent ``sigma * D`` *collapses* as CMA-ES converges, and a
-    ``sigma * D``-sized simplex would satisfy Nelder-Mead's ``xatol`` / ``fatol``
-    test on the first iteration and terminate having done nothing.  Pass
-    ``absolute=True`` to use ``sigma * D`` anyway (only to study that collapse).
+    Relative anisotropy comes from the covariance; absolute size is decoupled
+    into ``base_size`` with a ``min_step`` floor, because the raw CMA-ES
+    extent ``sigma * D`` collapses as CMA-ES converges and a ``sigma *
+    D``-sized simplex would satisfy ``xatol`` / ``fatol`` immediately.  Pass
+    ``absolute=True`` to use ``sigma * D`` regardless.
 
     Construction::
 
         vertex[0]   = clip(x0)
         vertex[k+1] = x0 + geometry.axis_steps(...)[:, k]
 
-    reflected off **both** bounds (eigenvector edges are signed, unlike
-    :class:`SimplexPopulationInitializer`'s always-positive axis steps) then
-    clipped, with a per-edge fallback so tight bounds cannot collapse a vertex
-    onto ``x0`` (which would give a degenerate zero-volume simplex).
+    Edges are signed, so vertices are reflected off both bounds before
+    clipping, with a per-edge fallback so tight bounds cannot collapse a
+    vertex onto ``x0``.
 
-    Deterministic: the ``rng`` argument is accepted for interface compatibility
-    but never consumed.
+    The ``rng`` argument is accepted for interface compatibility but never
+    consumed.
     """
 
     def __init__(
@@ -285,28 +285,22 @@ class CovarianceSimplexInitializer(PopulationInitializer):
         """Fraction of the mean bound range used for ``base_size`` when it is
         not given explicitly."""
         self.ratio_floor = ratio_floor
-        """Smallest allowed anisotropy ratio ``D_k / max(D)`` — caps how thin the
-        steepest axis's edge may get relative to the widest."""
+        """Smallest allowed anisotropy ratio ``D_k / max(D)``."""
         self.min_step = min_step
-        """Hard floor on every edge length. Set it above the optimizer's
-        convergence tolerance (Nelder-Mead passes ``100 * xatol``) so the
-        simplex never starts at the convergence tolerance."""
+        """Floor on every edge length.  Nelder-Mead passes ``100 * xatol``."""
         self.normalize = normalize
-        """Use relative anisotropy (shape only) with size decoupled into
-        ``base_size``. This is the collapse-robust default."""
+        """Use relative anisotropy with size decoupled into ``base_size``."""
         self.absolute = absolute
-        """Use the raw CMA-ES extent ``sigma * D`` for edge lengths (collapses as
-        CMA-ES converges; for studies of that collapse only)."""
+        """Use the raw CMA-ES extent ``sigma * D`` for edge lengths."""
 
     def generate_population(
         self,
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        del rng  # deterministic construction — interface compatibility only
+        del rng  # deterministic construction
         dim = len(x0)
         if pop_size != dim + 1:
             raise ValueError(
@@ -314,6 +308,7 @@ class CovarianceSimplexInitializer(PopulationInitializer):
                 f"vertices; got pop_size={pop_size}."
             )
 
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(dim)
         x0 = np.clip(np.asarray(x0, dtype=float), lower_bounds, upper_bounds)
 
         base_size = self.base_size
@@ -338,8 +333,8 @@ class CovarianceSimplexInitializer(PopulationInitializer):
         sim[0] = x0
         for k in range(dim):
             vertex = x0 + steps[:, k]
-            # Reflect off both bounds (signed edges can overshoot either way),
-            # then clip — plain clipping could collapse the edge onto a face.
+            # Reflect off both bounds, then clip; plain clipping could
+            # collapse the edge onto a face.
             with np.errstate(invalid="ignore"):
                 vertex = np.where(
                     vertex > upper_bounds, 2 * upper_bounds - vertex, vertex
@@ -348,8 +343,8 @@ class CovarianceSimplexInitializer(PopulationInitializer):
                     vertex < lower_bounds, 2 * lower_bounds - vertex, vertex
                 )
             vertex = np.clip(vertex, lower_bounds, upper_bounds)
-            # Degeneracy fallback: a vertex clipped back onto x0 collapses the
-            # simplex. Nudge along coordinate k by min_step (into the interior).
+            # A vertex clipped back onto x0 collapses the simplex; nudge it
+            # along coordinate k by min_step.
             if float(np.linalg.norm(vertex - x0)) < 0.5 * self.min_step:
                 vertex = x0.copy()
                 step = self.min_step
@@ -361,15 +356,8 @@ class CovarianceSimplexInitializer(PopulationInitializer):
 
 
 class IdentityPopulationInitializer(PopulationInitializer):
-    """Explicit no-op placeholder — must not be called.
-
-    Use this when an optimiser generates its own candidates without going
-    through a :class:`PopulationInitializer` and the framework still
-    requires one for structural enforcement.  Currently no shipped
-    algorithm uses it as a default (CMA-ES, DES, and MF-CMA-ES all route
-    iteration-0 sampling through a real initializer), but it remains
-    available for custom optimisers that need an explicit "this seam is
-    intentionally unused" marker.
+    """No-op placeholder for optimisers that generate their own candidates
+    but must still supply a :class:`PopulationInitializer`.
 
     Calling :meth:`generate_population` raises :exc:`NotImplementedError`.
     """
@@ -379,8 +367,7 @@ class IdentityPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         raise NotImplementedError(
             "IdentityPopulationInitializer is a structural placeholder and "
@@ -422,5 +409,4 @@ class PopulationInitializerType(Enum):
             case PopulationInitializerType.IDENTITY:
                 return IdentityPopulationInitializer()
             case _:
-                # Exhaustive match — new members must extend this method.
                 raise NotImplementedError(f"No build() implementation for {self!r}")

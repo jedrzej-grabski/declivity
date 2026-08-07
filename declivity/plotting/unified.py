@@ -1,28 +1,22 @@
-"""The unified panel plotter — one renderer for single runs *and* benchmarks.
+"""One panel renderer for single runs and multi-seed benchmarks.
 
-The framework used to draw single-run diagnostics (``plot_metrics`` over an
-``OptimizationResult``) and multi-seed benchmark curves (``plot_benchmark_*``
-over ``RunTrace`` lists) on two unrelated code paths. They are now the same
-thing at different seed counts:
+Single runs and benchmarks are the same thing at different seed counts:
 
-- **a run** exposes named per-step series via ``get_series(field)`` — both a
-  live ``LogData`` (single run, every field) and a persisted ``RunTrace``
-  (trimmed to the retained scalar fields) satisfy this :class:`RunSeries`
-  contract;
-- **a result** is a :class:`RunGroup` — 1..N runs of one algorithm. N=1 is a
-  single run (drawn as a line); N=25 is a benchmark (drawn as a median + IQR
-  band).
+- a run exposes named per-step series via ``get_series(field)``.  Both a live
+  ``LogData`` and a persisted ``RunTrace`` (trimmed to the retained scalar
+  fields) satisfy this :class:`RunSeries` contract.
+- a result is a :class:`RunGroup`: 1..N runs of one algorithm.  N=1 draws as
+  a line, N=25 as a median + IQR band.
 
-:func:`draw_groups` is the shared atomic renderer: it draws one line-or-band
-per group for a single field, and *that one function* is what every public
-entry point (``plot_metrics``, ``plot_comparison``, ``plot_benchmark_convergence``,
-``plot_convergence_overlay``, and the new :func:`plot_panels`) renders through.
-So a :class:`~declivity.plotting.panel.Panel` registered once drives all of them.
+:func:`draw_groups` is the shared renderer, drawing one line-or-band per
+group for a single field.  Every public entry point (``plot_metrics``,
+``plot_comparison``, ``plot_benchmark_convergence``,
+``plot_convergence_overlay``, :func:`plot_panels`) goes through it, so a
+:class:`~declivity.plotting.panel.Panel` registered once drives all of them.
 
-:func:`plot_panels` is the unified front door: pass it a single
-``OptimizationResult`` and it draws that run's panels as lines; pass it a
-benchmark (a :class:`RunGroup` of many seeds, or a dict of them) and the same
-panels come out as aggregated bands. Same panel, same call.
+:func:`plot_panels` is the front door: pass a single ``OptimizationResult``
+for lines, or a benchmark (a :class:`RunGroup` of many seeds, or a dict of
+them) for aggregated bands.
 """
 
 from collections.abc import Callable, Iterable, Sequence
@@ -45,14 +39,12 @@ from declivity.core.base_optimizer import OptimizationResult
 from declivity.plotting.panel import Panel, PanelRegistry
 from declivity.plotting.types import PanelKey, PanelSet
 
-# Accepted shapes for the ``panels=`` argument across the public API. Defined
-# here (not in types.py) because it references Panel, which would cycle.
+# Accepted shapes for the ``panels=`` argument.  Defined here rather than in
+# types.py because it references Panel, which would cycle.
 PanelSelection = Sequence["PanelKey | str | Panel"] | PanelSet | str | None
 
 
-# ===========================================================================
-# The unified data model
-# ===========================================================================
+# The unified data model.
 
 
 @runtime_checkable
@@ -123,9 +115,7 @@ class RunGroup:
         return cls(label=label, runs=list(runs), color=color, algorithm=algorithm)
 
 
-# ===========================================================================
-# Low-level rendering primitives (shared by every plotter)
-# ===========================================================================
+# Low-level rendering primitives, shared by every plotter.
 
 
 def save_if_path(fig: Figure, save_path: Path | str | None) -> None:
@@ -165,8 +155,8 @@ def draw_line(
 ) -> bool:
     """Draw one line. Returns ``False`` (drawing nothing) if either array is empty.
 
-    Length mismatches (a field logged at a different cadence) are truncated to
-    the common prefix so the plot still draws something honest.
+    Length mismatches, from a field logged at a different cadence, are
+    truncated to the common prefix.
     """
     if not x_values or not y_values:
         return False
@@ -202,9 +192,7 @@ def decorate_axes(
     ax.grid(True, alpha=grid_alpha, which="both")
 
 
-# ===========================================================================
-# The shared atomic renderers
-# ===========================================================================
+# The shared atomic renderers.
 
 
 def _final_value(run: RunSeries, field_name: str) -> float | None:
@@ -333,9 +321,7 @@ def draw_single_run(
     return drew
 
 
-# ===========================================================================
-# Panel resolution + data coercion for the unified front door
-# ===========================================================================
+# Panel resolution and data coercion for the front door.
 
 
 def _coerce_to_groups(
@@ -445,9 +431,7 @@ def _field_for(group: RunGroup, key: str, reference: Panel) -> str | None:
     return reference.series_list[0].field
 
 
-# ===========================================================================
-# The unified front door
-# ===========================================================================
+# The front door.
 
 
 def plot_panels(

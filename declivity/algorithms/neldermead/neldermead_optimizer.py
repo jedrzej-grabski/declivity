@@ -65,10 +65,9 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
                 raise ValueError(
                     "Pass either population_initializer or initial_geometry, not both."
                 )
-            # Shape the initial simplex from the learned geometry's principal
-            # axes. Absolute size is decoupled into base_size with a floor above
-            # the convergence tolerance, so a collapsed CMA-ES covariance cannot
-            # produce a simplex that satisfies xatol/fatol immediately.
+            # Shape the initial simplex from the geometry's principal axes.
+            # ``min_step`` keeps a collapsed covariance from producing a
+            # simplex that satisfies xatol/fatol immediately.
             population_initializer = CovarianceSimplexInitializer(
                 initial_geometry,
                 base_size=simplex_base_size,
@@ -91,7 +90,16 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
         )
 
     def _repair_point(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        return self.constraint_handler.repair(x)
+        """Repair one trial vertex through the injected :class:`RepairStrategy`.
+
+        A reflected / expanded / contracted vertex goes through the same
+        policy layer as the initial simplex and the shrink step.  Under the
+        default :class:`~declivity.utils.repair_strategies.LamarckianRepair`
+        this is ``ConstraintHandler.repair(x)``.
+        """
+        return self.repair_strategy.repair_population(
+            x[np.newaxis, :], self.constraint_handler
+        )[0]
 
     # Main loop
 
@@ -111,8 +119,7 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
             rng=self.rng,
             x0=self.initial_point,
             pop_size=n + 1,
-            lower_bounds=self.lower_bounds,
-            upper_bounds=self.upper_bounds,
+            constraint_handler=self.constraint_handler,
         )
         sim = self.repair_strategy.repair_population(sim, self.constraint_handler)
         fsim = self.evaluate_population(sim)

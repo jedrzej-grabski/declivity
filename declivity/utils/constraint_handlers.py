@@ -1,9 +1,14 @@
 """
 Constraint handler abstractions and box-constraint implementations.
 
-Replaces the BoundaryHandler/BoundaryHandlerType strategy pattern with a
-proper ABC that is open to inequality constraints, user-supplied callables,
-and parameterised penalty functions in future slices.
+A :class:`ConstraintHandler` defines the feasible region for a run.
+Optimizers, population initializers, and gradient strategies all query it
+rather than reading bound arrays directly.
+
+Only the feasibility tests are abstract.  The geometry methods
+(``feasible_step_interval``, ``max_feasible_step``, ``project_direction``,
+``projected_gradient``) default to the answers implied by ``bounding_box``,
+which itself defaults to unbounded.
 """
 
 from abc import ABC, abstractmethod
@@ -12,6 +17,48 @@ from typing import final, override
 
 import numpy as np
 from numpy.typing import NDArray
+
+from declivity.utils.optimality import projected_gradient as _box_projected_gradient
+
+MAX_FEASIBLE_STEP = 1e10
+"""Finite cap returned by :meth:`ConstraintHandler.max_feasible_step` for a ray
+that is unbounded in the search direction."""
+
+
+def _box_step_interval(
+    x: NDArray[np.float64],
+    direction: NDArray[np.float64],
+    lower_bounds: NDArray[np.float64],
+    upper_bounds: NDArray[np.float64],
+) -> tuple[float, float]:
+    """Ratio test: the span of ``x + alpha * direction`` that stays in a box.
+
+    For each coordinate the direction actually moves, the two bounds give the
+    step lengths at which that coordinate reaches them; the feasible interval
+    is the intersection over coordinates.  Coordinates with a zero direction
+    component are excluded.
+
+    Either bound may be infinite, in which case the matching end of the
+    interval is infinite too.  A returned ``(0.0, 0.0)`` means no non-zero
+    step is feasible.
+    """
+    (nonzero,) = np.asarray(direction).nonzero()
+    if nonzero.size == 0:
+        return (-np.inf, np.inf)
+
+    lower = lower_bounds[nonzero]
+    upper = upper_bounds[nonzero]
+    x_nz = x[nonzero]
+    d_nz = direction[nonzero]
+    low = (lower - x_nz) / d_nz
+    high = (upper - x_nz) / d_nz
+
+    # Moving in +d hits the upper bound last, in -d the lower bound.
+    pos = d_nz > 0
+    alpha_min = float(np.max(np.where(pos, low, 0) + np.where(pos, 0, high)))
+    alpha_max = float(np.min(np.where(pos, high, 0) + np.where(pos, 0, low)))
+
+    return (alpha_min, alpha_max) if alpha_max >= alpha_min else (0.0, 0.0)
 
 
 class BoxStrategy(Enum):
@@ -25,15 +72,19 @@ class ConstraintHandler(ABC):
     """
     Abstract base class for constraint-handling strategies.
 
-    A ConstraintHandler is responsible for three orthogonal concerns:
+    A ConstraintHandler covers five concerns:
 
     * **Feasibility test** — ``is_feasible`` / ``feasibility_distance``
-    * **Repair** — project or bounce an infeasible point back into the feasible
-      region.  The default implementation is a no-op (returns *x* unchanged).
+      (abstract).
+    * **Repair** — project or bounce an infeasible point back into the
+      feasible region.  Default is a no-op.
     * **Penalty** — augment an objective value to discourage infeasibility.
-      The default implementation is a no-op (returns *f_x* unchanged).
-
-    Subclasses should override only the hooks they need.
+      Default is a no-op.
+    * **Enclosing box** — ``bounding_box``, the tightest axis-aligned box
+      containing the feasible region.  Defaults to unbounded.
+    * **Directional feasibility** — ``feasible_step_interval`` /
+      ``max_feasible_step`` / ``project_direction`` / ``projected_gradient``,
+      all defaulting to the answers implied by ``bounding_box``.
     """
 
     @abstractmethod
@@ -80,6 +131,104 @@ class ConstraintHandler(ABC):
         """
         return f_x
 
+    # Geometry — everything below defaults to a value derived from
+    # bounding_box.
+
+    def bounding_box(
+        self, dimensions: int
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """
+        Tightest axis-aligned box ``(lower, upper)`` containing the feasible
+        region, as two arrays of length *dimensions*.
+
+        Coordinate-wise algorithms (L-BFGS-B's Cauchy point, population
+        sampling, finite-difference probes) read their bounds from here.  The
+        default is unbounded.  A handler with a bounded feasible set should
+        override this even when that set is not a box; a conservative
+        enclosing box is still valid.
+        """
+        return (
+            np.full(dimensions, -np.inf, dtype=float),
+            np.full(dimensions, np.inf, dtype=float),
+        )
+
+    def max_feasible_step(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> float:
+        """
+        Largest ``alpha >= 0`` such that ``x + alpha * direction`` is feasible.
+
+        The ``stpmax`` a gradient line search expects.  Taken from
+        :meth:`feasible_step_interval` when the handler provides one, else
+        from the ratio test against :meth:`bounding_box`.  An unconstrained
+        handler gets the full :data:`MAX_FEASIBLE_STEP`.
+        """
+        interval = self.feasible_step_interval(x, direction)
+        if interval is None:
+            lower, upper = self.bounding_box(len(x))
+            interval = _box_step_interval(x, direction, lower, upper)
+        return float(min(max(interval[1], 0.0), MAX_FEASIBLE_STEP))
+
+    def project_direction(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """
+        Drop the components of *direction* that immediately leave the feasible
+        region from *x*, leaving the step along the still-feasible subspace.
+
+        The default zeroes components pushing outward at an active box bound.
+        Returns a new array, identical to the input when nothing is active.
+        """
+        lower, upper = self.bounding_box(len(x))
+        projected = np.array(direction, dtype=np.float64, copy=True)
+        blocked = ((x <= lower) & (projected < 0)) | ((x >= upper) & (projected > 0))
+        projected[blocked] = 0.0
+        return projected
+
+    def projected_gradient(
+        self, x: NDArray[np.float64], gradient: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """
+        KKT first-order optimality measure at *x* — the gradient with the
+        components that push into an active constraint removed.
+
+        The default is the box projection
+        (:func:`declivity.utils.optimality.projected_gradient`), which reduces
+        to the plain gradient when the box is unbounded.
+        """
+        lower, upper = self.bounding_box(len(x))
+        return _box_projected_gradient(x, gradient, lower, upper)
+
+    def projected_gradient_inf_norm(
+        self, x: NDArray[np.float64], gradient: NDArray[np.float64]
+    ) -> float:
+        """Infinity norm of :meth:`projected_gradient` (0.0 when empty)."""
+        projected = self.projected_gradient(x, gradient)
+        if len(projected) == 0:
+            return 0.0
+        return float(np.max(np.abs(projected)))
+
+    def feasible_step_interval(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> tuple[float, float] | None:
+        """
+        Return ``(alpha_min, alpha_max)`` such that ``x + alpha * direction``
+        is feasible for every ``alpha`` in that closed interval, or ``None``.
+
+        Returning ``None`` (the default) means the feasible set is not an
+        interval along this ray, or cannot be computed cheaply.  Callers then
+        search unconstrained and route every point through :meth:`repair`.
+
+        Implement this for polytopes (boxes, linear constraints).  Leave the
+        default for strictly convex regions, where every straight ray from a
+        boundary point leaves immediately and the interval collapses to
+        ``(0.0, 0.0)``.
+
+        A degenerate ``(0.0, 0.0)`` means no non-zero step is feasible.
+        """
+        del x, direction
+        return None
+
 
 @final
 class BoxConstraintHandler(ConstraintHandler):
@@ -111,10 +260,6 @@ class BoxConstraintHandler(ConstraintHandler):
         self.lower_bounds: NDArray[np.float64] = lower_bounds
         self.upper_bounds: NDArray[np.float64] = upper_bounds
 
-    # ------------------------------------------------------------------
-    # ConstraintHandler interface
-    # ------------------------------------------------------------------
-
     @override
     def is_feasible(self, x: NDArray[np.float64]) -> bool:
         return bool(np.all(x >= self.lower_bounds)) and bool(
@@ -138,12 +283,8 @@ class BoxConstraintHandler(ConstraintHandler):
 
     @override
     def repair_batch(self, population: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Vectorised box repair.
-
-        For ``CLAMP``, a single ``np.clip`` over the whole matrix
-        replaces the per-row loop.  ``BOUNCE_BACK`` is recursive and
-        keeps the per-row fallback.
-        """
+        """Vectorised box repair for ``CLAMP``; ``BOUNCE_BACK`` is recursive
+        and keeps the per-row fallback."""
         if self.strategy is BoxStrategy.CLAMP:
             sanitized = self._remove_inf_nan(population)
             return np.clip(sanitized, self.lower_bounds, self.upper_bounds)
@@ -154,30 +295,43 @@ class BoxConstraintHandler(ConstraintHandler):
         """No-op — box constraints are handled by repair, not penalty."""
         return f_x
 
-    # ------------------------------------------------------------------
-    # Internal repair implementations
-    # (ported character-for-character from BoundaryHandler subclasses)
-    # ------------------------------------------------------------------
+    @override
+    def bounding_box(
+        self, dimensions: int
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """The box itself."""
+        if len(self.lower_bounds) != dimensions:
+            raise ValueError(
+                f"BoxConstraintHandler was built for "
+                f"{len(self.lower_bounds)} dimensions but asked for "
+                f"{dimensions}."
+            )
+        return self.lower_bounds, self.upper_bounds
+
+    @override
+    def feasible_step_interval(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> tuple[float, float]:
+        """Exact ray span for a box."""
+        return _box_step_interval(x, direction, self.lower_bounds, self.upper_bounds)
 
     def _repair_clamp(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Clamp repair — sanitize non-finite values, then clip into the box.
+        """Sanitize non-finite values, then clip into the box.
 
-        Sanitizing must come first: ``np.clip`` propagates NaN, and a
-        post-clip replacement would land far outside the bounds.
+        Sanitizing comes first because ``np.clip`` propagates NaN.
         """
         x_repaired = self._remove_inf_nan(x)
         return np.clip(x_repaired, self.lower_bounds, self.upper_bounds)
 
     def _repair_bounce_back(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Bounce-back repair — mirrors BounceBackBoundaryHandler.repair (lines 66–106)."""
+        """Reflect out-of-bounds coordinates back into the box."""
         if self.is_feasible(x):
             return x
 
         x_repaired = x.copy()
 
-        # Zero-width dimensions have no interior to bounce within — the
-        # modulo below would divide by zero (NaN).  Pin them to the unique
-        # feasible value and exclude them from the bounce loops.
+        # Zero-width dimensions have no interior to bounce within and would
+        # make the modulo below divide by zero.
         degenerate = self.upper_bounds == self.lower_bounds
         if np.any(degenerate):
             x_repaired[degenerate] = self.lower_bounds[degenerate]
@@ -200,10 +354,8 @@ class BoxConstraintHandler(ConstraintHandler):
                     self.upper_bounds[i] - self.lower_bounds[i]
                 )
 
-        # Handle any NaN or Inf values
         x_repaired = self._remove_inf_nan(x_repaired)
 
-        # Recursively repair if still infeasible
         if not self.is_feasible(x_repaired):
             return self._repair_bounce_back(x_repaired)
 
@@ -213,8 +365,11 @@ class BoxConstraintHandler(ConstraintHandler):
         """Replace non-finite values with the extreme finite floats.
 
         NaN and ``+inf`` map to ``np.finfo(float).max``; ``-inf`` maps to
-        ``np.finfo(float).min`` — direction-preserving, so a subsequent
-        clip lands each value on the correct bound.
+        ``np.finfo(float).min``, so a subsequent clip lands each value on the
+        correct bound.
+
+        Distinct from :func:`declivity.utils.helpers.delete_inf_nan`, which
+        sends ``-inf`` to ``+DBL_MAX`` to match DES.R.
         """
         result = x.copy()
         result[np.isnan(result)] = np.finfo(float).max
@@ -260,5 +415,4 @@ class ConstraintHandlerType(Enum):
             return BoxConstraintHandler(
                 BoxStrategy.BOUNCE_BACK, lower_bounds, upper_bounds
             )
-        # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")

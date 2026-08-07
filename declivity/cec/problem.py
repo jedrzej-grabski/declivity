@@ -67,8 +67,7 @@ class CECProblem(BenchmarkFunction):
     def __getstate__(self) -> dict[str, object]:
         # CECEvaluator is a nanobind extension object and cannot be pickled,
         # so it is dropped here and rebuilt from the cache on unpickling.
-        # Without this, a CECProblem cannot cross a process boundary and
-        # Benchmark(num_workers>1) fails.
+        # Without this a CECProblem cannot cross a process boundary.
         state = self.__dict__.copy()
         del state["_evaluator"]
         return state
@@ -79,12 +78,11 @@ class CECProblem(BenchmarkFunction):
 
     def __call__(self, x: NDArray[np.float64]) -> float:
         # cecxx's evaluator takes a (dimensions, num_points) matrix and
-        # returns one result per column. The shape is explicit here because
-        # the binding reads input.shape(1) unconditionally, so handing it a
-        # 1D array is an out-of-bounds read that only happens to work.
+        # returns one result per column.  The binding reads input.shape(1)
+        # unconditionally, so a 1D array is an out-of-bounds read.
         arr = np.ascontiguousarray(x, dtype=np.float64).reshape(-1, 1)
-        # cecpy's stub declares Sequence[float]; the binding actually reads
-        # shape(0) and shape(1) off the array, so the 2D form is required.
+        # cecpy's stub declares Sequence[float], but the binding reads
+        # shape(0) and shape(1), so the 2D form is required.
         return float(self._evaluator(self.function_number, arr)[0])  # pyright: ignore[reportArgumentType]
 
     @property

@@ -129,9 +129,7 @@ def percentile_band(
     return median, low, high
 
 
-# ---------------------------------------------------------------------------
-# Backward-compatible wrappers: best_fitness-on-evaluations over RunTraces.
-# ---------------------------------------------------------------------------
+# Wrappers: best_fitness-on-evaluations over RunTraces.
 
 
 def common_evaluation_grid(

@@ -6,18 +6,17 @@ routine in ``scipy.optimize._optimize._minimize_bfgs``.  This module pits
 it against :class:`~declivity.algorithms.bfgs.BFGSOptimizer`, a faithful
 port of that routine into declivity's injected-strategy interface.
 
-BFGS is **deterministic** given an initial point and is **unconstrained**,
-so — unlike the L-BFGS-B harness — no box bounds are imposed on either
-implementation (the declivity optimizer runs with its ±inf default, where
-its projected-gradient convergence test degenerates to SciPy's plain
-``vecnorm(gfk, inf)`` test).  Here a *seed* selects an initial point ``x0``
-drawn uniformly from ``[lb, ub]^d`` — both implementations receive that
-same ``x0``.  The parity claim is that, across many random ``x0`` draws,
-the two implementations converge to indistinguishable distributions of
-final fitness and (on unimodal problems) the same minimizer.
+BFGS is deterministic given an initial point and unconstrained, so no box
+bounds are imposed on either implementation.  The declivity optimizer runs
+with its ±inf default, where its projected-gradient convergence test
+reduces to SciPy's ``vecnorm(gfk, inf)`` test.  A seed selects an initial
+point ``x0`` drawn uniformly from ``[lb, ub]^d``, and both implementations
+receive the same ``x0``.  The parity claim is that across many ``x0`` draws
+the two converge to indistinguishable distributions of final fitness, and
+on unimodal problems to the same minimizer.
 
-Both implementations use **forward finite differences** for the gradient,
-matching SciPy's default, so the per-evaluation comparison is fair.
+Both implementations use forward finite differences for the gradient,
+matching SciPy's default.
 
 Output (under ``plots/cross_validation/bfgs_vs_scipy/``):
 

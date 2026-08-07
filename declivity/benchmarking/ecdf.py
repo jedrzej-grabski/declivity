@@ -1,38 +1,29 @@
 """Empirical cumulative distribution of running times (ECDF).
 
-An algorithm's ECDF curve answers: "of a shared set of target quality
-levels, what fraction has been reached by evaluation budget x?" — averaged
-across seeds. It complements the median/IQR convergence band in
-:mod:`declivity.benchmarking.aggregation`: that view answers "how good is
-the typical run at x", this one answers "how many of the targets we care
-about are met by x", which stays comparable across algorithms with very
-different convergence shapes (fast-then-stalling vs. slow-then-sharp).
+An algorithm's ECDF curve gives the fraction of a shared set of target
+quality levels reached by evaluation budget x, averaged across seeds.  It
+complements the median/IQR convergence band in
+:mod:`declivity.benchmarking.aggregation` and stays comparable across
+algorithms with different convergence shapes.
 
 Two grids drive the computation:
 
-- a **threshold grid** (:func:`threshold_grid`) — log-spaced target fitness
-  levels, built once from the pooled ``best_fitness`` range of every run you
-  want to compare fairly (typically every algorithm on one problem, so
-  they're judged against identical targets). Pass ``ceiling=`` to fix the
-  top of the range instead, which is what makes curves comparable *across*
-  figures — a data-derived range shifts whenever the set of pooled runs
-  changes;
-- a **budget grid** — log-spaced evaluation counts, the shared x-axis every
-  algorithm's curve is discretised onto. Reuse
-  :func:`declivity.benchmarking.aggregation.series_grid` for this; it isn't
-  redefined here.
+- a threshold grid (:func:`threshold_grid`): log-spaced target fitness
+  levels, built once from the pooled ``best_fitness`` range of every run
+  being compared.  Pass ``ceiling=`` to fix the top of the range, which is
+  needed for curves to be comparable across separate figures;
+- a budget grid: log-spaced evaluation counts, the shared x-axis every
+  algorithm's curve is discretised onto.  Use
+  :func:`declivity.benchmarking.aggregation.series_grid`.
 
-By default every function here works on the *gap to the known global
-optimum* (``field value - global_minimum``). Pass ``global_minimum=`` the
-problem's known ``f*``; note that ``BenchmarkFunction.global_minimum`` is
-the pair ``(x*, f*)``, so the value wanted here is its second element.
-:func:`declivity.plotting.plot_benchmark_ecdf` reads it off the ``Problem``
-for you. Pass ``gap_to_optimum=False`` to fall back to raw values instead
-(no known optimum, or reusing this machinery for a field that isn't a
-fitness gap).
+By default every function here works on the gap to the known global optimum
+(``field value - global_minimum``).  ``BenchmarkFunction.global_minimum`` is
+the pair ``(x*, f*)``, so pass its second element.
+:func:`declivity.plotting.plot_benchmark_ecdf` reads it off the ``Problem``.
+Pass ``gap_to_optimum=False`` to use raw values.
 
-Runs that never reach a target are kept in the denominator, so a curve
-correctly plateaus below 1.0 rather than being inflated by dropping them.
+Runs that never reach a target stay in the denominator, so a curve plateaus
+below 1.0 rather than being inflated by dropping them.
 """
 
 import warnings
@@ -59,27 +50,21 @@ def threshold_grid(
 ) -> NDArray[np.float64]:
     """Log-spaced target levels spanning the pooled ``field`` range.
 
-    Pool every trace you want compared on equal footing (typically every
-    algorithm's runs on one problem) — the grid is shared across whatever
-    is passed in, so callers control the fairness boundary. Falls back to
-    ``[floor, floor * 10]`` when every value is at or below ``floor`` (e.g.
-    a trivially easy problem), so degenerate inputs still produce a valid
-    grid instead of a zero-width ``logspace`` call.
+    The grid is shared across whatever is passed in, so pool every trace to
+    be compared on equal footing.  Falls back to ``[floor, floor * 10]``
+    when every value is at or below ``floor``, so degenerate inputs still
+    give a valid grid instead of a zero-width ``logspace`` call.
 
-    When ``gap_to_optimum`` (default), the range is taken over the *gap*
-    ``field value - global_minimum`` rather than the raw values; a
-    constant shift doesn't change where the max sits, so this is just
+    With ``gap_to_optimum`` (default) the range is taken over
+    ``field value - global_minimum``, which reduces to
     ``max(values) - global_minimum``.
 
-    Non-finite values are ignored when sizing the range. This matters:
-    DES logs its first iteration before the incumbent is set, so every DES
-    trace starts with ``+inf``, and a single one of those would otherwise
-    make the whole grid ``[nan, inf, inf, ...]`` — against which every
-    comparison is true, so every algorithm's curve pins to ~1.0 and the
-    figure silently stops discriminating.
+    Non-finite values are ignored when sizing the range.  DES logs its first
+    iteration before the incumbent is set, so every DES trace starts with
+    ``+inf``, which would otherwise make the whole grid
+    ``[nan, inf, inf, ...]`` and pin every curve to ~1.0.
 
     ``ceiling`` fixes the top of the range explicitly, bypassing the data.
-    Use it when curves have to be comparable across separate figures.
     """
     if ceiling is not None:
         if not np.isfinite(ceiling) or ceiling <= floor:
@@ -155,13 +140,12 @@ def aggregate_ecdf(
 ) -> NDArray[np.float64]:
     """Mean ECDF curve across ``traces``, discretised onto ``x_grid``.
 
-    One algorithm's runs in, one curve out. A run missing data contributes
-    an all-zero curve (no targets reached) rather than being dropped, so a
-    partially-failed benchmark still aggregates — but it does drag the mean
-    down, which is why it warns. This differs deliberately from
-    ``stack_runs_on_grid``, which appends an all-NaN row that the
-    percentile band then ignores: here a run that produced nothing really
-    did reach no target, so counting it is the honest choice for an ECDF.
+    One algorithm's runs in, one curve out.  A run missing data contributes
+    an all-zero curve rather than being dropped, so a partially-failed
+    benchmark still aggregates; it does drag the mean down, hence the
+    warning.  ``stack_runs_on_grid`` differs here: it appends an all-NaN row
+    the percentile band ignores, whereas a run that produced nothing did
+    reach no target.
     """
     rows: list[NDArray[np.float64]] = []
     empty = 0
@@ -179,10 +163,9 @@ def aggregate_ecdf(
             rows.append(np.zeros(x_grid.shape, dtype=np.float64))
             continue
         curve = step_function_lookup(x_array.tolist(), frac.tolist(), x_grid)
-        # Grid cells before a run's first logged point come back as the
-        # "no progress yet" +inf sentinel `step_function_lookup` uses for
-        # fitness curves; for an ECDF that means zero targets reached yet,
-        # not infinity.
+        # Grid cells before a run's first logged point come back as the +inf
+        # sentinel `step_function_lookup` uses; for an ECDF that means zero
+        # targets reached, not infinity.
         rows.append(np.where(np.isinf(curve), 0.0, curve))
     if not rows:
         return np.zeros(x_grid.shape, dtype=np.float64)

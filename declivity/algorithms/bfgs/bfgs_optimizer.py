@@ -2,19 +2,17 @@
 Pure Python implementation of the BFGS algorithm.
 
 A dense quasi-Newton method that maintains an approximation ``Hk`` of the
-*inverse* Hessian and takes Newton-like steps ``pk = -Hk @ grad`` along a
-Wolfe line search.  This is a faithful port of SciPy's ``_minimize_bfgs``
-(Broyden–Fletcher–Goldfarb–Shanno) into declivity's injected-strategy
-interface: the line search, gradient strategy, constraint handler, and
-stopping condition are all pluggable framework components.
+inverse Hessian and takes Newton-like steps ``pk = -Hk @ grad`` along a Wolfe
+line search.  Ported from SciPy's ``_minimize_bfgs``, with the line search,
+gradient strategy, constraint handler and stopping condition injected.
 
-SciPy's ``method='BFGS'`` is unconstrained; here the default bounds are
-±inf (identical behaviour).  When finite box bounds are supplied, the
-optimizer reuses L-BFGS-B's constraint handling — the line-search step is
-capped by :func:`~declivity.utils.line_search.max_feasible_step`, accepted
-points are repaired by the constraint handler, and convergence is measured
-on the projected gradient (which reduces to the plain gradient when
-unbounded, so parity with SciPy is unaffected).
+The default bounds are ±inf, matching SciPy's unconstrained
+``method='BFGS'``.  Boundary decisions go through the injected
+:class:`~declivity.utils.constraint_handlers.ConstraintHandler`, which
+projects the search direction at active constraints, caps the line-search
+step, repairs accepted points, and supplies the projected gradient used as
+the convergence measure.  All four reduce to their unconstrained forms under
+the default handler.
 
 References:
     R. Fletcher, "Practical Methods of Optimization", 2nd ed., Wiley (1987).
@@ -34,14 +32,13 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.core.algorithm_factory import register_optimizer
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.gradient_strategies import CentralFD, GradientStrategy
-from declivity.utils.initial_geometry import InitialGeometry
-from declivity.utils.line_search import (
-    LineSearchStrategy,
-    MoreThuenteLineSearch,
-    max_feasible_step,
+from declivity.utils.gradient_strategies import (
+    CentralFD,
+    GradientStrategy,
+    directional_derivative,
 )
-from declivity.utils.optimality import projected_gradient
+from declivity.utils.initial_geometry import InitialGeometry
+from declivity.utils.line_search import LineSearchStrategy, MoreThuenteLineSearch
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
@@ -54,8 +51,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
     """BFGS quasi-Newton optimizer for smooth minimization.
 
     Maintains a dense inverse-Hessian approximation ``Hk`` updated by the
-    Sherman–Morrison BFGS formula.  Single-point method: inherits
-    :class:`BaseOptimizer` directly, like L-BFGS-B and Powell.
+    Sherman–Morrison BFGS formula.
     """
 
     def __init__(
@@ -94,14 +90,17 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         self._line_search = line_search or MoreThuenteLineSearch()
         self._machine_epsilon = np.finfo(float).eps
 
-        # A supplied InitialGeometry stores the curvature B_0; BFGS tracks the
-        # inverse Hessian H_0 = B_0^{-1}, so seed it via ``solve`` (this also
-        # gives the CMA-ES covariance shape back for a from_covariance handoff,
-        # symmetric with the L-BFGS-B B_0 handoff).
+        # initial_geometry and config.initial_inverse_hessian are mutually
+        # exclusive.
+        if initial_geometry is not None and config.initial_inverse_hessian is not None:
+            raise ValueError(
+                "Pass either config.initial_inverse_hessian or initial_geometry, "
+                "not both."
+            )
         self._initial_geometry = initial_geometry
         self._cached_gradient: NDArray[np.float64] | None = None
 
-    # Gradient computation (mirrors L-BFGS-B)
+    # Gradient computation
 
     def _evaluate_function_and_gradient(
         self, x: NDArray[np.float64]
@@ -120,6 +119,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             x=x,
             eps=self._finite_diff_epsilon,
             f_at_x=function_value_at_x,
+            constraint_handler=self.constraint_handler,
         )
 
     def _compute_directional_derivative(
@@ -128,7 +128,9 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         """Evaluate phi(alpha) = f(x + alpha*d) and phi'(alpha) = grad f . d.
 
         When an analytical gradient is available, the full gradient is cached
-        for reuse after the line search completes.
+        for reuse after the line search completes.  Otherwise the derivative
+        comes from the injected :class:`GradientStrategy` applied to the 1-D
+        restriction along the ray.
         """
         x_trial = x + alpha * direction
         f_trial = self.evaluate(x_trial)
@@ -137,25 +139,28 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             gradient_at_trial = self._gradient_fn(x_trial)
             self._cached_gradient = np.asarray(gradient_at_trial, dtype=float)
             return f_trial, float(np.dot(self._cached_gradient, direction))
-        else:
-            epsilon = self._finite_diff_epsilon
-            f_forward = self.evaluate(x_trial + epsilon * direction)
-            f_backward = self.evaluate(x_trial - epsilon * direction)
-            return f_trial, (f_forward - f_backward) / (2.0 * epsilon)
+
+        return f_trial, directional_derivative(
+            self._gradient_strategy,
+            f=self.evaluate,
+            x=x_trial,
+            direction=direction,
+            eps=self._finite_diff_epsilon,
+            f_at_x=f_trial,
+            constraint_handler=self.constraint_handler,
+        )
 
     # Convergence measure
 
     def _gradient_norm(
         self, x: NDArray[np.float64], gradient: NDArray[np.float64]
     ) -> float:
-        """Norm of the projected gradient under ``config.norm``.
+        """Norm of the handler's projected gradient under ``config.norm``.
 
-        Equals ``vecnorm(gradient, ord=norm)`` when bounds are infinite (the
-        projected gradient does not clip anything), so it reproduces SciPy's
-        ``vecnorm(gfk, ord=norm)`` test in the unconstrained regime while
-        remaining a valid KKT measure at active bounds.
+        Equals ``vecnorm(gradient, ord=norm)`` when the handler is
+        unconstrained.
         """
-        pg = projected_gradient(x, gradient, self.lower_bounds, self.upper_bounds)
+        pg = self.constraint_handler.projected_gradient(x, gradient)
         if len(pg) == 0:
             return 0.0
         return float(np.linalg.norm(pg, ord=self.config.norm))
@@ -167,16 +172,14 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         n = self.dimensions
 
         if self._initial_geometry is not None:
-            # A supplied geometry stores the *curvature* B_0; BFGS tracks the
-            # inverse Hessian, so seed H_0 = B_0^{-1}.
+            # The geometry stores the curvature B_0; BFGS tracks the inverse
+            # Hessian, so seed H_0 = B_0^{-1}.
             inverse_hessian = self._initial_geometry.solve(np.eye(n))
             return 0.5 * (inverse_hessian + inverse_hessian.T)
 
-        # ``initial_inverse_hessian`` (None / scalar / 1D / 2D) is H_0 directly.
-        # Reuse InitialGeometry's shared dispatch and its positivity / shape /
-        # SPD validation rather than re-rolling it here; ``scale_columns(I)``
-        # materializes the dense matrix (diag(h) in diagonal mode, the
-        # symmetrized SPD-checked matrix in dense mode).
+        # ``initial_inverse_hessian`` (None / scalar / 1D / 2D) is H_0
+        # directly; InitialGeometry handles the dispatch and validation, and
+        # ``scale_columns(I)`` materializes the dense matrix.
         geometry = InitialGeometry(self.config.initial_inverse_hessian, n)
         return np.asarray(geometry.scale_columns(np.eye(n)), dtype=np.float64)
 
@@ -189,7 +192,11 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         n = self.dimensions
         identity = np.eye(n)
 
-        x = self.constraint_handler.repair(self.initial_point.copy())
+        # Annotated explicitly: the line-search closures capture ``x`` as a
+        # default argument, so without an annotation the inference is circular.
+        x: NDArray[np.float64] = self.constraint_handler.repair(
+            self.initial_point.copy()
+        )
         self._cached_gradient = None
 
         function_value, gradient = self._evaluate_function_and_gradient(x)
@@ -221,26 +228,23 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             iteration += 1
 
             direction = np.asarray(-(inverse_hessian @ gradient), dtype=np.float64)
+
+            # Drop components pushing outward at an active constraint; leaving
+            # them in would make the largest feasible step zero.  A no-op with
+            # an unconstrained handler.
+            direction = self.constraint_handler.project_direction(x, direction)
             directional_derivative = float(np.dot(gradient, direction))
 
-            # Ascent-direction guard: if bound clamping (or a degenerate Hk)
-            # made ``direction`` non-descent, fall back to projected steepest
-            # descent with active-bound components zeroed (as in L-BFGS-B).
+            # If bound clamping or a degenerate Hk made ``direction``
+            # non-descent, fall back to projected steepest descent.
             if directional_derivative >= 0:
-                direction = -gradient.copy()
-                for i in range(n):
-                    if x[i] <= self.lower_bounds[i] and direction[i] < 0:
-                        direction[i] = 0.0
-                    if x[i] >= self.upper_bounds[i] and direction[i] > 0:
-                        direction[i] = 0.0
+                direction = self.constraint_handler.project_direction(x, -gradient)
                 directional_derivative = float(np.dot(gradient, direction))
                 if directional_derivative >= 0:
                     termination_message = "Cannot find descent direction"
                     break
 
-            max_feas_step = max_feasible_step(
-                x, direction, self.lower_bounds, self.upper_bounds
-            )
+            max_feas_step = self.constraint_handler.max_feasible_step(x, direction)
             if max_feas_step <= 0:
                 termination_message = "Maximum feasible step is zero"
                 break
@@ -262,9 +266,11 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
 
             self._cached_gradient = None
 
-            # phi(alpha), phi'(alpha) along the current point/direction — bound
-            # eagerly (x/direction do not change during the line search).
+            # Bound eagerly; x and direction do not change during the search.
             phi_and_dphi = partial(self._compute_directional_derivative, x, direction)
+
+            def phi_only(alpha: float, _x=x, _d=direction) -> float:
+                return self.evaluate(_x + alpha * _d)
 
             line_search_result = self._line_search.search(
                 phi_dphi=phi_and_dphi,
@@ -276,12 +282,13 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 gtol=config.c2,
                 xtol=config.xtol_ls,
                 maxiter=config.max_ls_iter,
+                # Value-only fast path: a derivative-free search (Armijo)
+                # takes one evaluation per trial step instead of three.
+                phi=phi_only,
             )
 
             accepted_step = line_search_result.step
             if accepted_step <= 0 or not line_search_result.converged:
-                # Mirrors SciPy's warnflag=2: the line search could not find a
-                # point satisfying the Wolfe conditions (precision loss).
                 termination_message = (
                     "Line search failed: desired error not necessarily achieved "
                     "due to precision loss"
@@ -289,10 +296,17 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 break
 
             step_vector = accepted_step * direction
-            x_new = self.constraint_handler.repair(x + step_vector)
+            x_line_search = x + step_vector
+            x_new = self.constraint_handler.repair(x_line_search)
             step_vector = x_new - x
 
-            if self._cached_gradient is not None:
+            if not np.array_equal(x_new, x_line_search):
+                # The line search's f / gradient describe the unrepaired trial
+                # point.
+                function_value_new, gradient_new = self._evaluate_function_and_gradient(
+                    x_new
+                )
+            elif self._cached_gradient is not None:
                 gradient_new = self._cached_gradient
                 function_value_new = line_search_result.f_new
             else:
@@ -347,8 +361,8 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 )
                 break
 
-            # BFGS inverse-Hessian update (Sherman–Morrison), SciPy port.
-            # rho = 1 / (yk . sk), guarded when the curvature vanishes.
+            # Inverse-Hessian update (Sherman–Morrison).  rho = 1 / (yk . sk),
+            # guarded when the curvature vanishes.
             rho = 1000.0 if curvature == 0.0 else 1.0 / curvature
 
             left = identity - rho * np.outer(step_vector, gradient_difference)

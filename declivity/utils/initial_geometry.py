@@ -1,27 +1,24 @@
 """
-Shared "learned local geometry" object for the local optimizers.
+Shared learned-geometry object for the single-point local optimizers.
 
-Originally the L-BFGS-B initial Hessian ``B_0``; now generalized into a single
-curvature/quadratic model that seeds **all three** single-point local
-optimizers from the same learned geometry (typically a CMA-ES covariance):
+One curvature/quadratic model, typically built from a CMA-ES covariance, that
+seeds all three local optimizers:
 
-- **L-BFGS-B** consumes it as the initial Hessian ``B_0`` (curvature ops
-  ``multiply`` / ``solve`` / ``quadratic_form`` / ...), exactly as before.
-- **Powell** consumes :meth:`InitialGeometry.principal_directions` — the
-  eigenvectors of the covariance — as its initial search-direction set.
+- **L-BFGS-B** consumes it as the initial Hessian ``B_0`` (``multiply`` /
+  ``solve`` / ``quadratic_form`` / ...).
+- **Powell** consumes :meth:`InitialGeometry.principal_directions`, the
+  eigenvectors of the covariance, as its initial search-direction set.
 - **Nelder-Mead** consumes :meth:`InitialGeometry.axis_steps` /
-  :meth:`InitialGeometry.principal_scales` to shape its initial simplex along
-  the covariance's principal axes.
+  :meth:`InitialGeometry.principal_scales` to shape its initial simplex.
 
-Canonical stored quantity is **curvature** ``B_0`` (large eigenvalue = steep),
-so the ~15 L-BFGS-B call sites stay byte-identical.  The covariance -> curvature
-inversion happens **once**, in :meth:`InitialGeometry.from_covariance`.  When
-built from a covariance the object *also* stores the forward eigendecomposition
-``(B, D, sigma)`` as first-class fields, so the direction / simplex accessors are
-exact and cheap (no re-``eigh``) and do not double-invert.
+The stored quantity is curvature ``B_0`` (large eigenvalue = steep).  The
+covariance-to-curvature inversion happens once, in
+:meth:`InitialGeometry.from_covariance`, which also stores the forward
+eigendecomposition ``(B, D, sigma)`` so the direction / simplex accessors need
+no second ``eigh``.
 
-``InitialHessian`` is kept as an alias of ``InitialGeometry`` for backwards
-compatibility (L-BFGS-B and its exports import the old name).
+``InitialHessian`` is an alias of ``InitialGeometry`` kept for backwards
+compatibility.
 """
 
 from enum import Enum, StrEnum
@@ -30,10 +27,9 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import cho_factor, cho_solve
 
-# Numeric floor applied to (squared) eigenvalues before inversion, so a
-# collapsed covariance direction does not blow the reciprocal up to inf. This is
-# the *numeric* floor for the matrix math — distinct from the *practical* simplex
-# edge floor (``min_step``) used by ``CovarianceSimplexInitializer``.
+# Floor applied to (squared) eigenvalues before inversion, so a collapsed
+# covariance direction does not send the reciprocal to inf.  Distinct from the
+# simplex edge floor (``min_step``) in ``CovarianceSimplexInitializer``.
 _EIGENVALUE_FLOOR = 1e-30
 
 
@@ -51,13 +47,12 @@ class HandoffTransform(StrEnum):
     approximation of the CMA-ES posterior around the warm-up mean."""
 
     SIGMA_INVERSE = "sigma_inverse"
-    """Use ``(sigma^2 C)^{-1}`` — accounts for the CMA-ES global step-size
-    scaling. Sometimes more conservative than the bare inverse."""
+    """Use ``(sigma^2 C)^{-1}``, which accounts for the CMA-ES global
+    step-size scaling."""
 
     IDENTITY = "identity"
-    """Drop the covariance and use the isotropic default (``B_0 = I``). Mainly a
-    control experiment: isolates the value of *passing covariance information*
-    from the value of *sharing a starting point* with CMA-ES."""
+    """Drop the covariance and use the isotropic default ``B_0 = I``.  The
+    control case: same starting point, no covariance information."""
 
 
 def covariance_to_hessian_matrix(
@@ -69,10 +64,8 @@ def covariance_to_hessian_matrix(
     """Turn a covariance eigendecomposition ``(B, D)`` into a curvature matrix.
 
     ``C = B @ diag(D**2) @ B.T``; the returned matrix is the L-BFGS-B initial
-    Hessian ``B_0`` (proportional to ``C^{-1}``).  Single source of truth shared
-    by :meth:`InitialGeometry.from_covariance` and the benchmarking
-    ``initial_hessian_from_cmaes`` delegate.  ``IDENTITY`` returns ``None`` (the
-    L-BFGS-B default ``B_0 = I``).
+    Hessian ``B_0``, proportional to ``C^{-1}``.  ``IDENTITY`` returns ``None``
+    (the L-BFGS-B default ``B_0 = I``).
     """
     transform = str(transform)
     if transform == HandoffTransform.IDENTITY:
@@ -80,9 +73,8 @@ def covariance_to_hessian_matrix(
 
     eigenvalues = np.maximum(np.asarray(eigenvalues_sqrt) ** 2, _EIGENVALUE_FLOOR)
 
-    # Floored 1/eigenvalues can be huge (up to 1e30); the matmul values are
-    # still valid but numpy raises spurious divide/overflow warnings on the
-    # intermediates.
+    # Floored 1/eigenvalues can reach 1e30, which raises spurious numpy
+    # divide/overflow warnings on the intermediates.
     with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
         if transform == HandoffTransform.INVERSE:
             return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
@@ -125,9 +117,8 @@ class InitialGeometry:
     - principal_scales(): per-axis forward std-devs (Nelder-Mead simplex extent)
     - axis_steps(...): ready-to-use simplex edge vectors
 
-    Use :meth:`identity`, :meth:`from_curvature`, or :meth:`from_covariance` to
-    construct from a source covariance; the plain constructor accepts a raw
-    curvature (None / scalar / 1D / 2D) as before.
+    Use :meth:`identity`, :meth:`from_curvature`, or :meth:`from_covariance`;
+    the plain constructor accepts a raw curvature (None / scalar / 1D / 2D).
     """
 
     def __init__(
@@ -135,9 +126,8 @@ class InitialGeometry:
         initial_hessian,
         num_dimensions: int,
     ):
-        # Forward-geometry fields — populated eagerly by ``from_covariance`` (so
-        # the direction / scale accessors are exact and need no re-``eigh``), or
-        # lazily by ``_forward_geometry`` for a raw curvature.
+        # Forward-geometry fields: populated eagerly by ``from_covariance``,
+        # or lazily by ``_forward_geometry`` for a raw curvature.
         self._eigenvectors: NDArray[np.float64] | None = None
         self._forward_scales: NDArray[np.float64] | None = None
         self._sigma: float = 1.0
@@ -198,16 +188,14 @@ class InitialGeometry:
                 "initial_hessian must be None, a scalar, a 1D array, or a 2D array"
             )
 
-    # ------------------------------------------------------------------
     # Constructors.
-    # ------------------------------------------------------------------
 
     @classmethod
     def identity(cls, num_dimensions: int) -> "InitialGeometry":
-        """Isotropic geometry — ``B_0 = I``, unit directions, uniform scales.
+        """Isotropic geometry: ``B_0 = I``, unit directions, uniform scales.
 
-        The neutral control: L-BFGS-B behaves as ``config.initial_hessian=None``,
-        Powell gets the coordinate directions, Nelder-Mead an isotropic simplex.
+        L-BFGS-B behaves as ``config.initial_hessian=None``, Powell gets the
+        coordinate directions, Nelder-Mead an isotropic simplex.
         """
         return cls(None, num_dimensions)
 
@@ -231,12 +219,11 @@ class InitialGeometry:
         """Build from a covariance eigendecomposition ``(B, D)``.
 
         ``C = B @ diag(D**2) @ B.T``.  ``transform`` selects how ``C`` becomes
-        the curvature ``B_0`` (:class:`HandoffTransform`); the L-BFGS-B matrix is
-        built once, byte-identical to the pre-existing handoff.  The **forward**
-        eigendecomposition ``(B, D, sigma)`` is stored directly (columns ordered
-        by descending variance) so the direction / scale accessors are exact and
-        do not re-invert.  ``transform=IDENTITY`` discards the covariance shape
-        and returns an isotropic :meth:`identity` geometry.
+        the curvature ``B_0`` (:class:`HandoffTransform`).  The forward
+        eigendecomposition ``(B, D, sigma)`` is stored as-is, with columns
+        ordered by descending variance, so the direction / scale accessors do
+        not re-invert.  ``transform=IDENTITY`` returns an isotropic
+        :meth:`identity` geometry.
         """
         eigenvectors = np.asarray(eigenvectors, dtype=float)
         eigenvalues_sqrt = np.asarray(eigenvalues_sqrt, dtype=float)
@@ -250,10 +237,9 @@ class InitialGeometry:
 
         geometry = cls(matrix, num_dimensions)
 
-        # Store the forward geometry of the *source covariance* (independent of
-        # the transform used for the matrix): columns ordered by descending
-        # variance (largest std-dev first). CMA-ES hands eigenvalues back
-        # ascending, so impose our own order rather than passing it through.
+        # Store the forward geometry of the source covariance, independent of
+        # the transform, with columns ordered by descending variance.  CMA-ES
+        # returns eigenvalues ascending.
         order = np.argsort(eigenvalues_sqrt)[::-1]
         geometry._eigenvectors = eigenvectors[:, order].copy()
         geometry._forward_scales = np.maximum(
@@ -334,9 +320,7 @@ class InitialGeometry:
         """
         return float(self._diagonal[i])
 
-    # ------------------------------------------------------------------
-    # Geometry accessors — consumed by Powell / Nelder-Mead.
-    # ------------------------------------------------------------------
+    # Geometry accessors, consumed by Powell / Nelder-Mead.
 
     def _forward_geometry(
         self,
@@ -344,10 +328,9 @@ class InitialGeometry:
         """Return ``(eigenvectors, forward_scales)`` of the source geometry.
 
         ``eigenvectors`` are unit columns; ``forward_scales`` are the per-axis
-        standard deviations of the *covariance* (shape only, no ``sigma``), i.e.
-        ``1/sqrt(curvature eigenvalue)``.  Populated eagerly by
-        :meth:`from_covariance`; otherwise derived once (identity for a diagonal
-        curvature, a cached ``eigh`` for a raw dense curvature) and cached.
+        standard deviations of the covariance (shape only, no ``sigma``), i.e.
+        ``1/sqrt(curvature eigenvalue)``.  Populated by
+        :meth:`from_covariance`, otherwise derived once and cached.
         """
         if self._eigenvectors is not None and self._forward_scales is not None:
             return self._eigenvectors, self._forward_scales
@@ -371,10 +354,9 @@ class InitialGeometry:
         return eigenvectors, scales
 
     def principal_directions(self) -> NDArray[np.float64]:
-        """Eigenvectors of the geometry as **unit columns** (defensive copy).
+        """Eigenvectors of the geometry as unit columns (defensive copy).
 
-        For Powell these are the initial search directions (the columns must be
-        transposed to rows to match Powell's per-row direction convention).
+        Powell uses these as its initial search directions, transposed to rows.
         Equal to the eigenvectors of the source covariance, since inversion
         preserves eigenvectors.
         """
@@ -384,12 +366,9 @@ class InitialGeometry:
     def principal_scales(self, include_sigma: bool = False) -> NDArray[np.float64]:
         """Per-axis forward standard deviations (defensive copy).
 
-        ``include_sigma=False`` (default) returns the covariance *shape*
-        std-devs ``D``; ``include_sigma=True`` returns the full search-distribution
+        ``include_sigma=False`` (default) returns the covariance shape std-devs
+        ``D``; ``include_sigma=True`` returns the full search-distribution
         std-devs ``sigma * D``.  Ordered to match :meth:`principal_directions`.
-        Returned directly from the stored forward geometry — never by inverting
-        ``B_0`` — so there is no spurious factor of ``sigma`` and no double
-        inversion.
         """
         _, scales = self._forward_geometry()
         scales = scales.copy()
@@ -400,8 +379,7 @@ class InitialGeometry:
     def principal_curvatures(self) -> NDArray[np.float64]:
         """Shape curvature per axis (``1 / D**2``), ordered like the directions.
 
-        Diagnostic reciprocal of the squared shape std-devs; not used for the
-        L-BFGS-B matrix math (that uses the stored ``B_0`` directly).
+        Diagnostic only; the L-BFGS-B matrix math uses the stored ``B_0``.
         """
         _, scales = self._forward_geometry()
         return 1.0 / np.maximum(scales, np.sqrt(_EIGENVALUE_FLOOR)) ** 2
@@ -418,16 +396,14 @@ class InitialGeometry:
 
         Each column is a principal direction scaled to a length:
 
-        - ``absolute=True``: ``length_k = sigma * D_k`` — the true CMA-ES
-          search-distribution extent (collapses as CMA-ES converges; use only to
-          study that collapse).
-        - ``normalize=True`` (default): ``length_k = base_size * clip(D_k/max(D),
-          ratio_floor, 1)`` — relative anisotropy shape, absolute size decoupled
-          into ``base_size``.  This is the collapse-robust default.
+        - ``absolute=True``: ``length_k = sigma * D_k``, the true CMA-ES
+          search-distribution extent, which collapses as CMA-ES converges.
+        - ``normalize=True`` (default): ``length_k = base_size *
+          clip(D_k/max(D), ratio_floor, 1)``, relative anisotropy with the
+          absolute size decoupled into ``base_size``.
         - otherwise: ``length_k = base_size * D_k``.
 
-        Every length is then floored at ``min_step`` so no edge starts below the
-        convergence tolerance.
+        Every length is floored at ``min_step``.
         """
         directions, scales = self._forward_geometry()
         if absolute:
@@ -444,8 +420,7 @@ class InitialGeometry:
         return directions * lengths
 
 
-# Backwards-compatible aliases: the object was previously named after its
-# L-BFGS-B role. Existing imports (`InitialHessian`, `InitialHessianMode`) and
-# call sites keep working unchanged.
+# Backwards-compatible aliases from when the object was named after its
+# L-BFGS-B role.
 InitialHessian = InitialGeometry
 GeometryMode = InitialHessianMode

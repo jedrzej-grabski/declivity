@@ -39,7 +39,19 @@ class OptimizationResult(Generic[LogDataType]):
 
 
 class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
-    """Abstract base class for optimization algorithms."""
+    """Abstract base class for optimization algorithms.
+
+    Boundary handling goes through the injected
+    :class:`~declivity.utils.constraint_handlers.ConstraintHandler`:
+    ``max_feasible_step``, ``project_direction``, ``projected_gradient``,
+    ``feasible_step_interval``, ``is_feasible``, ``repair``, ``penalty``.
+
+    :attr:`lower_bounds` / :attr:`upper_bounds` cache the handler's
+    :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.bounding_box`
+    intersected with the box the caller asked for, for the box-based
+    algorithms that need the arrays in hot loops.  Mutating them does not
+    change the feasible region.
+    """
 
     def __init__(
         self,
@@ -66,21 +78,31 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         else:
             self.rng = np.random.default_rng(seed)
 
-        self.lower_bounds = self._process_bounds(lower_bounds, self.dimensions)
-        self.upper_bounds = self._process_bounds(upper_bounds, self.dimensions)
+        requested_lower = self._process_bounds(lower_bounds, self.dimensions)
+        requested_upper = self._process_bounds(upper_bounds, self.dimensions)
+        self.lower_bounds = requested_lower
+        self.upper_bounds = requested_upper
         self._validate_bounds()
 
         self.constraint_handler: ConstraintHandler = (
             constraint_handler
             if constraint_handler is not None
             else BoxConstraintHandler(
-                BoxStrategy.CLAMP, self.lower_bounds, self.upper_bounds
+                BoxStrategy.CLAMP, requested_lower, requested_upper
             )
         )
 
-        # When to stop is an injected, modular concern — exactly like the
-        # constraint handler above.  The default reproduces the framework's
-        # historical ``10_000 * dimensions`` evaluation budget.
+        # Intersect the caller's search box with the handler's own box; a
+        # point has to satisfy both.  A handler that declares no box (the
+        # unbounded default) leaves the caller's box untouched.
+        handler_lower, handler_upper = self.constraint_handler.bounding_box(
+            self.dimensions
+        )
+        self.lower_bounds = np.maximum(requested_lower, handler_lower)
+        self.upper_bounds = np.minimum(requested_upper, handler_upper)
+        self._validate_bounds()
+
+        # The default is a ``10_000 * dimensions`` evaluation budget.
         self.stopping_condition: StoppingCondition = (
             stopping_condition
             if stopping_condition is not None
@@ -127,12 +149,10 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         """Evaluate a population of solutions.
 
         If the stopping condition imposes an evaluation cap
-        (:meth:`StoppingCondition.remaining_evaluations`), the generation
-        is trimmed so it never overshoots that cap — the members beyond it
-        are marked infeasible (``inf``) rather than evaluated.  Conditions
-        that do not bound evaluations (time, target fitness, stagnation)
-        return ``None`` and the whole generation is evaluated; the run then
-        halts at the next top-of-loop test.
+        (:meth:`StoppingCondition.remaining_evaluations`), the generation is
+        trimmed to it and the members beyond are marked ``inf``.  Conditions
+        that do not bound evaluations return ``None``, and the whole
+        generation is evaluated.
         """
         count = population.shape[0]
         fitness = np.zeros(count)
@@ -150,11 +170,8 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
     def _begin_run(self) -> None:
         """Reset per-run stopping-condition bookkeeping.
 
-        Every ``optimize()`` implementation must call this once, before the
-        main loop (and before any pre-loop ``evaluate_population``), so that
-        wall-clock timing starts, the iteration / best-fitness trackers are
-        cleared, and any stateful stopping condition (time, stagnation) is
-        reset for a fresh run.
+        Every ``optimize()`` implementation calls this once, before the main
+        loop and before any pre-loop ``evaluate_population``.
         """
         self._run_start_time = time.monotonic()
         self._iterations = 0
@@ -165,9 +182,8 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
     def should_stop(self, iterations: int, best_fitness: float) -> bool:
         """Test the injected stopping condition against the current state.
 
-        Call this as the main-loop guard: ``while not self.should_stop(...)``.
-        Pass the completed-iteration count and the best fitness found so
-        far.  When the condition fires, its message is stashed for
+        Used as the main-loop guard: ``while not self.should_stop(...)``.
+        When the condition fires, its message is stashed for
         :attr:`stop_message`.
         """
         self._iterations = iterations
@@ -188,8 +204,7 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         """Termination message from the stopping condition that last fired.
 
         Falls back to a generic string if the loop exited without the
-        condition firing (e.g. an algorithm-internal convergence break took
-        precedence — in that case the optimizer uses its own message).
+        condition firing.
         """
         return self._stop_message or "Stopping condition met."
 

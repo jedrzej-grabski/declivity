@@ -1,50 +1,40 @@
 """
 Modular stopping-condition abstractions.
 
-A :class:`StoppingCondition` decides *when an optimizer's main loop should
-halt*, independently of the algorithm's own internal convergence tests
-(CMA-ES ``tolfun`` / ``tolx``, L-BFGS-B ``pgtol`` / ``factr``, ...).  It is
-the shared, cross-algorithm termination signal that used to live as a bare
-``budget: int`` field on the configuration dataclass.
-
-Like :class:`~declivity.utils.constraint_handlers.ConstraintHandler` and
-:class:`~declivity.utils.repair_strategies.RepairStrategy`, a
-``StoppingCondition`` is *injected into the optimizer at construction time*
-and defaults to a sensible built-in — an evaluation budget of
-``10_000 * dimensions`` (see :func:`default_stopping_condition`), which
-reproduces the framework's historical default exactly.
+A :class:`StoppingCondition` decides when an optimizer's main loop halts,
+independently of the algorithm's own internal convergence tests (CMA-ES
+``tolfun`` / ``tolx``, L-BFGS-B ``pgtol`` / ``factr``, ...).  It is injected
+into the optimizer at construction time and defaults to an evaluation budget
+of ``10_000 * dimensions`` (see :func:`default_stopping_condition`).
 
 Contract
 --------
 The optimizer feeds each condition an :class:`OptimizationState` snapshot
 (evaluations, iterations, best fitness, elapsed wall-clock) every time the
 main loop tests for termination; the condition answers :meth:`should_stop`
-and exposes a :attr:`message` describing why it fired.  *Stateful*
-conditions (time, stagnation) additionally override :meth:`reset`, which
-the optimizer calls once at the start of every ``optimize()`` so a single
-instance can be reused across runs.
+and exposes a :attr:`message` describing why it fired.  Stateful conditions
+(time, stagnation) also override :meth:`reset`, which the optimizer calls at
+the start of every ``optimize()``.
 
 Composition
 -----------
-Conditions compose with ``|`` (OR — :class:`AnyStoppingCondition`) and
-``&`` (AND — :class:`AllStoppingCondition`)::
+Conditions compose with ``|`` (:class:`AnyStoppingCondition`) and ``&``
+(:class:`AllStoppingCondition`)::
 
     # stop after 5000 evals, OR 30 seconds, OR reaching f <= 1e-8
     condition = MaxEvaluations(5000) | MaxTime(30.0) | TargetFitness(1e-8)
 
 Evaluation cap
 --------------
-Evaluation-budget conditions additionally expose
+Evaluation-budget conditions expose
 :meth:`~StoppingCondition.remaining_evaluations`, which lets
-``BaseOptimizer.evaluate_population`` trim a generation that would otherwise
-overshoot a hard evaluation cap.  A condition that does not bound
-evaluations (time, target fitness, stagnation) returns ``None`` — evaluate
-the whole generation, then stop at the next loop test.
+``BaseOptimizer.evaluate_population`` trim a generation that would overshoot
+the cap.  Conditions that do not bound evaluations return ``None``.
 
 Discoverability
 ---------------
 :class:`StoppingConditionType` lists the built-ins with a ``.build(...)``
-factory, mirroring ``ConstraintHandlerType`` / ``RepairStrategyType``.
+factory.
 """
 
 from __future__ import annotations
@@ -72,8 +62,7 @@ __all__ = [
 
 
 DEFAULT_EVALUATIONS_PER_DIMENSION = 10_000
-"""Evaluations-per-dimension used by :func:`default_stopping_condition`;
-reproduces the framework's historical ``10_000 * d`` budget default."""
+"""Evaluations-per-dimension used by :func:`default_stopping_condition`."""
 
 
 class OptimizationState:
@@ -149,13 +138,12 @@ class StoppingCondition(ABC):
     def remaining_evaluations(self, evaluations: int) -> int | None:
         """Evaluations still permitted, or ``None`` for no evaluation cap.
 
-        Only conditions that bound *evaluations* return a number;
-        everything else returns ``None``.  Consumed by
+        Only conditions that bound evaluations return a number; everything
+        else returns ``None``.  Consumed by
         :meth:`BaseOptimizer.evaluate_population` to trim a generation that
-        would otherwise overshoot a hard budget.  Deliberately takes only
-        the evaluation count (not a full :class:`OptimizationState`) so it
-        cannot accidentally depend on the iteration / time fields, which
-        are stale at population-evaluation time.
+        would overshoot the budget.  Takes only the evaluation count rather
+        than a full :class:`OptimizationState`, whose iteration and time
+        fields are stale at population-evaluation time.
         """
         return None
 
@@ -170,11 +158,9 @@ class StoppingCondition(ABC):
 class MaxEvaluations(StoppingCondition):
     """Stop after a fixed number of function evaluations.
 
-    The framework default and historical behaviour (the old
-    ``config.budget``).  The message is kept verbatim —
-    ``"Maximum function evaluations reached."`` — because the interleaved
-    handoff distinguishes a budget stop from genuine convergence by
-    matching on that prefix.
+    The framework default.  The message is kept verbatim as
+    ``"Maximum function evaluations reached."`` because the interleaved
+    handoff distinguishes a budget stop from convergence by that prefix.
     """
 
     def __init__(self, max_evaluations: int) -> None:
@@ -327,7 +313,7 @@ class Stagnation(StoppingCondition):
             self._last_improvement_index = index
             return False
         if self._last_improvement_index is None:
-            # First observation with no prior baseline — start the clock.
+            # First observation, no prior baseline: start the clock.
             self._last_improvement_index = index
             return False
         return (index - self._last_improvement_index) >= self.patience
@@ -377,7 +363,7 @@ class AnyStoppingCondition(StoppingCondition):
     def should_stop(self, state: OptimizationState) -> bool:
         fired: StoppingCondition | None = None
         for condition in self.conditions:
-            # Evaluate every child (stateful ones must observe each state);
+            # Evaluate every child so stateful ones observe each state, and
             # remember the first that fired for the message.
             if condition.should_stop(state) and fired is None:
                 fired = condition
@@ -448,11 +434,7 @@ class AllStoppingCondition(StoppingCondition):
 
 
 def default_stopping_condition(dimensions: int) -> StoppingCondition:
-    """The framework default: ``MaxEvaluations(10_000 * dimensions)``.
-
-    Reproduces the historical ``default_budget(d)`` every optimizer used
-    before stopping conditions were extracted from the config.
-    """
+    """The framework default: ``MaxEvaluations(10_000 * dimensions)``."""
     return MaxEvaluations(DEFAULT_EVALUATIONS_PER_DIMENSION * dimensions)
 
 
@@ -495,5 +477,4 @@ class StoppingConditionType(Enum):
             return TargetFitness(**kwargs)  # type: ignore[arg-type]
         if self is StoppingConditionType.STAGNATION:
             return Stagnation(**kwargs)  # type: ignore[arg-type]
-        # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")

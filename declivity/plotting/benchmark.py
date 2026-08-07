@@ -1,23 +1,20 @@
-"""Multi-seed benchmark plotting — median + IQR bands over ``RunTrace`` lists.
+"""Multi-seed benchmark plotting: median + IQR bands over ``RunTrace`` lists.
 
-Counterpart to :py:mod:`declivity.plotting.declarative` for the multi-seed,
-multi-problem case. These functions lay out the grid (one panel per problem,
-or a single overlay axes) and draw the curves through the *same*
-:func:`~declivity.plotting.unified.draw_groups` core the single-run plotters use —
-so a benchmark of one seed renders as a line and a benchmark of 25 renders as
-a median + IQR band, through one code path.
+The multi-seed, multi-problem counterpart to
+:py:mod:`declivity.plotting.declarative`.  These functions lay out the grid
+(one panel per problem, or a single overlay axes) and draw the curves through
+the same :func:`~declivity.plotting.unified.draw_groups` core the single-run
+plotters use.
 
 Convergence (best fitness vs. evaluations), final-fitness distributions and
-target-hitting ECDFs are first-class here, because those are the quantities
-every ``RunTrace`` carries. Any *retained* scalar series (``sigma``, ...) can
-be banded across seeds via :func:`~declivity.plotting.unified.plot_panels`
-with the matching panel key.
+target-hitting ECDFs are first-class here, since every ``RunTrace`` carries
+them.  Retained scalar series (``sigma``, ...) can be banded across seeds via
+:func:`~declivity.plotting.unified.plot_panels` with the matching panel key.
 
-The ECDF entry point takes a single ``problem`` rather than an iterable,
-unlike its siblings: it collapses one problem's runs into one curve per
-algorithm. The suite-wide COCO figure, which pools (problem, target) pairs
-across a whole function family into a single curve, is a different
-aggregation and is not built here yet.
+The ECDF entry point takes a single ``problem`` rather than an iterable: it
+collapses one problem's runs into one curve per algorithm.  The suite-wide
+COCO figure, pooling (problem, target) pairs across a function family, is a
+different aggregation and is not built here.
 """
 
 import warnings
@@ -211,12 +208,12 @@ def plot_benchmark_boxplot(
 ) -> Figure:
     """Final-fitness distribution per algorithm, one panel per problem.
 
-    Runs that reached sub-``floor`` fitness are dropped (they can't be shown
-    honestly on a log axis); the count of surviving runs is annotated as
-    ``n=X/Y`` above each box when ``X < Y``.
+    Runs that reached sub-``floor`` fitness are dropped, since a log axis
+    cannot show them; the count of surviving runs is annotated as ``n=X/Y``
+    above each box when ``X < Y``.
 
-    This view is final-*scalar*, not a time series, so it doesn't go through
-    ``draw_groups`` — but it reads the same ``RunTrace`` records and the same
+    This view is a final scalar rather than a time series, so it does not go
+    through ``draw_groups``, but it reads the same ``RunTrace`` records and
     per-algorithm colours.
     """
     problems_list = list(problems)
@@ -256,8 +253,10 @@ def plot_benchmark_boxplot(
             ax.set_visible(False)
             continue
 
+        # ``tick_labels`` replaced ``labels`` in Matplotlib 3.9; the old
+        # spelling was removed in 3.11, which is the version this repo pins.
         box_artists = ax.boxplot(
-            boxes, labels=labels, patch_artist=True, showmeans=True, meanline=True
+            boxes, tick_labels=labels, patch_artist=True, showmeans=True, meanline=True
         )
         for patch, color in zip(box_artists["boxes"], colors):
             patch.set_facecolor(color)
@@ -412,7 +411,7 @@ def _problem_optimum(problem: Problem) -> float:
     warnings.warn(
         f"{problem.name!r} publishes no finite global minimum; thresholding "
         f"raw fitness as if f*=0. Pass global_minimum= explicitly, or "
-        f"gap_to_optimum=False to say so deliberately.",
+        f"gap_to_optimum=False to use raw fitness.",
         RuntimeWarning,
         stacklevel=3,
     )
@@ -521,9 +520,7 @@ def plot_benchmark_ecdf(
     ax.set_xlabel(xlabel, fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
     ax.set_ylim(0.0, 1.02)
-    # Record what the curves were measured against; without it the figure
-    # does not say which targets, dimension or seed count produced it, and
-    # the target range moves with the pooled data unless fixed.
+    # Record which targets, dimension and seed count produced the curves.
     subtitle = (
         f"{problem.name}  (d={problem.dimensions}, "
         f"n_seeds={max(seed_counts) if seed_counts else 0}, "

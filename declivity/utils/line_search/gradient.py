@@ -3,15 +3,12 @@ Gradient-based line searches.
 
 Provides the More-Thuente line search (port of the Fortran dcsrch/dcstep
 subroutines by More and Thuente, 1994) and a simple Armijo backtracking
-search.  Both operate on ``phi(alpha) = f(x + alpha*d)`` *and its
-directional derivative* ``phi'(alpha)`` — they are the branch of the
-line-search family that requires gradient information.  Derivative-free
-searches (Brent, golden section — used by Powell) live in
+search.  Both operate on ``phi(alpha) = f(x + alpha*d)`` and its directional
+derivative ``phi'(alpha)``.  Derivative-free searches live in
 :mod:`declivity.utils.line_search.derivative_free`.
 
-Historically this module lived at ``declivity/algorithms/lbfgsb/line_search.py``;
-it moved here when the line search became a shared framework component
-(the old path re-exports for compatibility).
+This module previously lived at
+``declivity/algorithms/lbfgsb/line_search.py``, which still re-exports it.
 
 References:
     J.J. More and D.J. Thuente, "Line Search Algorithms with Guaranteed
@@ -40,19 +37,16 @@ class LineSearchResult:
 class GradientLineSearch(ABC):
     """Abstract base class for gradient-based line-search strategies.
 
-    A gradient-based line search returns a step length ``alpha > 0``
-    along a descent direction such that some sufficient-decrease
-    condition is met (Armijo, Wolfe, or strong Wolfe depending on the
-    concrete implementation).  It requires the directional derivative
-    ``phi'(alpha)`` at every trial point — algorithms without gradient
-    access should inject a
+    Returns a step length ``alpha > 0`` along a descent direction meeting a
+    sufficient-decrease condition (Armijo, Wolfe, or strong Wolfe depending
+    on the implementation).  Requires the directional derivative
+    ``phi'(alpha)`` at every trial point; algorithms without gradient access
+    inject a
     :class:`~declivity.utils.line_search.derivative_free.DerivativeFreeLineSearch`
     instead.
 
     Optimisers receive a strategy at construction time and call its
-    :meth:`search` method whenever they need a step — same pattern as
-    :class:`~declivity.utils.gradient_strategies.GradientStrategy` and
-    :class:`~declivity.utils.repair_strategies.RepairStrategy`.
+    :meth:`search` method whenever they need a step.
     """
 
     @abstractmethod
@@ -103,8 +97,8 @@ class GradientLineSearch(ABC):
         ...
 
 
-# Backwards-compatible alias — the ABC was called ``LineSearchStrategy``
-# when it lived under ``declivity/algorithms/lbfgsb/``.
+# Backwards-compatible alias from when the ABC lived under
+# ``declivity/algorithms/lbfgsb/``.
 LineSearchStrategy = GradientLineSearch
 
 
@@ -262,11 +256,9 @@ def more_thuente_search(
                 num_evals=num_evals,
                 converged=False,
             )
-        # dcsrch boundary tests ("WARNING: STP = STPMAX/STPMIN"). Fortran's
+        # dcsrch boundary tests ("WARNING: STP = STPMAX/STPMIN").  Fortran's
         # warning outcomes still return the step taken, so a sufficiently
-        # decreasing, still-steep step pinned at stpmax (the 1-D minimizer
-        # lies beyond the bound-limited feasible segment) is accepted rather
-        # than re-proposed until maxiter is exhausted.
+        # decreasing, still-steep step pinned at stpmax is accepted.
         if (
             step == step_max
             and trial_f <= sufficient_decrease_threshold
@@ -370,9 +362,8 @@ def more_thuente_search(
             previous_interval_width = interval_width
             interval_width = abs(other_step - best_step)
 
-    # maxiter exhausted: report the last *evaluated* step (``step`` now holds
-    # the next, never-evaluated proposal) so that ``step``/``f_new`` describe
-    # the same point.
+    # maxiter exhausted: report the last evaluated step, since ``step`` now
+    # holds the next, unevaluated proposal.
     return LineSearchResult(
         step=last_evaluated_step,
         f_new=trial_f,
@@ -623,8 +614,8 @@ def armijo_search(
                 converged=False,
             )
 
-    # Failure returns report the last *evaluated* step so that
-    # ``step``/``f_new`` describe the same point.
+    # Failure returns report the last evaluated step, so ``step`` and
+    # ``f_new`` describe the same point.
     return LineSearchResult(
         step=last_evaluated_step,
         f_new=trial_f,
@@ -658,5 +649,4 @@ class GradientLineSearchType(Enum):
             return MoreThuenteLineSearch()
         elif self is GradientLineSearchType.ARMIJO:
             return ArmijoBacktracking()
-        # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")
