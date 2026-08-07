@@ -35,7 +35,11 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.core.algorithm_factory import register_optimizer
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.gradient_strategies import CentralFD, GradientStrategy
+from declivity.utils.gradient_strategies import (
+    CentralFD,
+    GradientStrategy,
+    directional_derivative,
+)
 from declivity.utils.initial_geometry import InitialGeometry
 from declivity.utils.line_search import LineSearchStrategy, MoreThuenteLineSearch
 from declivity.utils.stopping_conditions import StoppingCondition
@@ -132,7 +136,12 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         """Evaluate phi(alpha) = f(x + alpha*d) and phi'(alpha) = grad f . d.
 
         When an analytical gradient is available, the full gradient is cached
-        for reuse after the line search completes.
+        for reuse after the line search completes.  Otherwise the derivative
+        comes from the *injected* :class:`GradientStrategy` applied to the 1-D
+        restriction along the ray, with probe feasibility delegated to the
+        constraint handler — identical to L-BFGS-B, and a no-op under the
+        default unbounded handler (where no probe is ever infeasible), so
+        SciPy parity is unaffected.
         """
         x_trial = x + alpha * direction
         f_trial = self.evaluate(x_trial)
@@ -141,11 +150,16 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             gradient_at_trial = self._gradient_fn(x_trial)
             self._cached_gradient = np.asarray(gradient_at_trial, dtype=float)
             return f_trial, float(np.dot(self._cached_gradient, direction))
-        else:
-            epsilon = self._finite_diff_epsilon
-            f_forward = self.evaluate(x_trial + epsilon * direction)
-            f_backward = self.evaluate(x_trial - epsilon * direction)
-            return f_trial, (f_forward - f_backward) / (2.0 * epsilon)
+
+        return f_trial, directional_derivative(
+            self._gradient_strategy,
+            f=self.evaluate,
+            x=x_trial,
+            direction=direction,
+            eps=self._finite_diff_epsilon,
+            f_at_x=f_trial,
+            constraint_handler=self.constraint_handler,
+        )
 
     # Convergence measure
 
@@ -277,6 +291,9 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             # eagerly (x/direction do not change during the line search).
             phi_and_dphi = partial(self._compute_directional_derivative, x, direction)
 
+            def phi_only(alpha: float, _x=x, _d=direction) -> float:
+                return self.evaluate(_x + alpha * _d)
+
             line_search_result = self._line_search.search(
                 phi_dphi=phi_and_dphi,
                 stp0=initial_step,
@@ -287,6 +304,13 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
                 gtol=config.c2,
                 xtol=config.xtol_ls,
                 maxiter=config.max_ls_iter,
+                # Value-only fast path: a derivative-free search (Armijo) takes
+                # one evaluation per trial step instead of three.  L-BFGS-B
+                # supplies this too; omitting it here made the injected
+                # line_search= seam cost 3x more in BFGS than in L-BFGS-B for
+                # the same strategy, which is exactly the kind of asymmetry a
+                # shared-budget comparison must not have.
+                phi=phi_only,
             )
 
             accepted_step = line_search_result.step

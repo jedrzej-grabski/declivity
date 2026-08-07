@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Callable
+from typing import Callable, override
 
 import numpy as np
 from numpy.typing import NDArray
@@ -186,6 +186,84 @@ class CentralFD(GradientStrategy):
                     f_at_x = f(x)
                 gradient[i] = (f_at_x - f(x_backward)) / eps
         return gradient
+
+
+class _RayRestrictedHandler(ConstraintHandler):
+    """The feasible region seen by the 1-D restriction ``phi(t) = f(x + t*d)``.
+
+    A :class:`GradientStrategy` asks its handler whether a *perturbed point*
+    is feasible.  When the strategy is differentiating along a ray, the point
+    it perturbs is the scalar ``t``, not the vector it maps to — so the real
+    handler cannot be passed straight through.  This adapter translates each
+    feasibility question back into the full space and forwards it, which keeps
+    the feasible region the run's *actual* handler's decision rather than a
+    box re-derived at the call site.
+    """
+
+    def __init__(
+        self,
+        handler: ConstraintHandler,
+        x: NDArray[np.float64],
+        direction: NDArray[np.float64],
+    ) -> None:
+        self._handler = handler
+        self._x = x
+        self._direction = direction
+
+    def _point(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        return self._x + float(t[0]) * self._direction
+
+    @override
+    def is_feasible(self, x: NDArray[np.float64]) -> bool:
+        return self._handler.is_feasible(self._point(x))
+
+    @override
+    def feasibility_distance(self, x: NDArray[np.float64]) -> float:
+        return self._handler.feasibility_distance(self._point(x))
+
+
+def directional_derivative(
+    strategy: GradientStrategy,
+    f: Callable[[NDArray[np.float64]], float],
+    x: NDArray[np.float64],
+    direction: NDArray[np.float64],
+    eps: float,
+    f_at_x: float | None = None,
+    constraint_handler: ConstraintHandler | None = None,
+) -> float:
+    """Approximate ``phi'(0)`` for ``phi(t) = f(x + t * direction)``.
+
+    The ``phi'(alpha)`` a :class:`~declivity.utils.line_search.gradient.GradientLineSearch`
+    needs, obtained by handing the *same injected*
+    :class:`GradientStrategy` the 1-D restriction of the objective along the
+    ray.  Routing it through the strategy is what keeps a single injected
+    component in charge of *all* finite differencing in a run: differencing
+    ``∇f`` with central differences while the line search silently used its own
+    hardcoded scheme would make the ``gradient_strategy=`` seam only half live.
+
+    ``constraint_handler`` is wrapped in a :class:`_RayRestrictedHandler`, so a
+    probe that would leave the feasible region switches that difference to the
+    feasible side exactly as it does for a coordinate gradient — relevant
+    because a line search is allowed to land *on* the boundary
+    (``max_feasible_step``), which puts the outward probe outside it.
+
+    With ``CentralFD`` (the framework default) and ``f_at_x`` supplied this
+    costs the same two evaluations as a hand-rolled central difference, in the
+    same order.
+    """
+    ray_handler = (
+        None
+        if constraint_handler is None
+        else _RayRestrictedHandler(constraint_handler, x, direction)
+    )
+    gradient = strategy.compute(
+        f=lambda t: f(x + float(t[0]) * direction),
+        x=np.zeros(1, dtype=float),
+        eps=eps,
+        f_at_x=f_at_x,
+        constraint_handler=ray_handler,
+    )
+    return float(gradient[0])
 
 
 class GradientStrategyType(Enum):

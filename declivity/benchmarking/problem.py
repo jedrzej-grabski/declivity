@@ -22,6 +22,11 @@ from numpy.typing import NDArray
 
 from declivity.cec import CECEdition, CECProblem
 from declivity.utils.benchmark_functions import BenchmarkFunction
+from declivity.utils.constraint_handlers import (
+    BoxConstraintHandler,
+    BoxStrategy,
+    ConstraintHandler,
+)
 from declivity.utils.initial_point_generator import (
     FixedInitialPointGenerator,
     InitialPointGenerator,
@@ -55,6 +60,28 @@ class Problem:
     - ``InitialPointGenerator`` subclass: delegate to its ``generate_point``.
     """
 
+    constraint_handler: ConstraintHandler | None = None
+    """The problem's feasible region.
+
+    ``None`` (default) means the box ``[lower_bound, upper_bound]`` with CLAMP
+    repair — the optimizer's own default, so existing problems are unchanged.
+    Set it to express a region the two scalar bounds cannot: a per-dimension
+    box, ``BoxStrategy.BOUNCE_BACK`` repair, or a custom
+    :class:`~declivity.utils.constraint_handlers.ConstraintHandler` subclass
+    (ball, polytope, penalty-only).
+
+    The feasible region belongs to the *problem*, which is why it lives here
+    alongside ``lower_bound`` / ``upper_bound`` rather than on the runner.  A
+    :class:`~declivity.benchmarking.algorithm_run.BenchmarkAlgorithm` may still
+    override it when the handler is the thing under study (comparing repair
+    strategies, say) — see its ``constraint_handler`` field.
+
+    Note that every runner also forwards ``lower_bound`` / ``upper_bound`` as
+    the requested search box, and :class:`BaseOptimizer` *intersects* the two,
+    so a handler here can only tighten the region, never widen it past the
+    declared bounds.
+    """
+
     def __post_init__(self) -> None:
         # Normalise the initial_point_generator field so it is always an
         # InitialPointGenerator instance after construction.
@@ -76,12 +103,14 @@ class Problem:
         initial_point_generator: InitialPointGenerator
         | NDArray[np.float64]
         | None = None,
+        constraint_handler: ConstraintHandler | None = None,
     ) -> Problem:
         """Build a Problem from a BenchmarkFunction.
 
         Picks up the function's bounds and ``gradient`` attribute (if any)
-        unless explicit values are passed. ``initial_point_generator`` is
-        forwarded verbatim (``None`` → uniform sampling within the bounds).
+        unless explicit values are passed. ``initial_point_generator`` and
+        ``constraint_handler`` are forwarded verbatim (``None`` → uniform
+        sampling within the bounds, and the default CLAMP box handler).
         """
         lb_array, ub_array = function.bounds
         # Only advertise an analytic gradient when the concrete function
@@ -100,6 +129,7 @@ class Problem:
             upper_bound=float(ub_array[0]) if upper_bound is None else upper_bound,
             gradient=function.gradient if overrides_gradient else None,
             initial_point_generator=initial_point_generator,
+            constraint_handler=constraint_handler,
         )
 
     @classmethod
@@ -112,6 +142,7 @@ class Problem:
         initial_point_generator: InitialPointGenerator
         | NDArray[np.float64]
         | None = None,
+        constraint_handler: ConstraintHandler | None = None,
     ) -> Problem:
         """Build a Problem from a cecxx-backed CEC benchmark function.
 
@@ -124,18 +155,36 @@ class Problem:
             name=function.name,
             function=function,
             initial_point_generator=initial_point_generator,
+            constraint_handler=constraint_handler,
+        )
+
+    def resolved_constraint_handler(self) -> ConstraintHandler:
+        """The problem's feasible region as a concrete handler.
+
+        Returns :attr:`constraint_handler` when one was given, otherwise the
+        framework default — ``BoxConstraintHandler(CLAMP, ...)`` over
+        ``[lower_bound, upper_bound]``, which is exactly what
+        :class:`BaseOptimizer` would have constructed for itself.  Making it
+        explicit here means the starting-point generator and the optimizer
+        reason about the *same* region rather than each deriving its own.
+        """
+        if self.constraint_handler is not None:
+            return self.constraint_handler
+        return BoxConstraintHandler(
+            BoxStrategy.CLAMP,
+            np.full(self.dimensions, self.lower_bound, dtype=float),
+            np.full(self.dimensions, self.upper_bound, dtype=float),
         )
 
     def starting_point(self, seed: int) -> NDArray[np.float64]:
-        """Deterministic starting point inside the bounds.
+        """Deterministic starting point inside the feasible region.
 
         Same seed => same x0, regardless of which algorithm consumes it.
-        Delegates to ``self.initial_point_generator.generate_point``.
+        Delegates to ``self.initial_point_generator.generate_point``, handing
+        it the resolved constraint handler so a non-box region is respected.
         """
         rng = np.random.default_rng(seed)
-        lower_bounds = np.full(self.dimensions, self.lower_bound)
-        upper_bounds = np.full(self.dimensions, self.upper_bound)
         assert isinstance(self.initial_point_generator, InitialPointGenerator)
         return self.initial_point_generator.generate_point(
-            rng, self.dimensions, lower_bounds, upper_bounds
+            rng, self.dimensions, self.resolved_constraint_handler()
         )

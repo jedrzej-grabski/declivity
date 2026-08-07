@@ -132,22 +132,6 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     "would never be optimized."
                 )
 
-    # Feasible step interval
-
-    def _feasible_step_interval(
-        self, x: NDArray[np.float64], direction: NDArray[np.float64]
-    ) -> tuple[float, float]:
-        """Step-length range along ``direction`` that the handler calls feasible.
-
-        Delegates to
-        :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.feasible_step_interval`.
-        A handler that cannot describe its feasible set along a ray returns
-        ``None``; the search is then unconstrained and feasibility is enforced
-        by repair instead (see :meth:`_search_along`).
-        """
-        interval = self.constraint_handler.feasible_step_interval(x, direction)
-        return (-np.inf, np.inf) if interval is None else interval
-
     # Directional minimization
 
     def _search_along(

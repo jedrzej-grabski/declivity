@@ -15,9 +15,16 @@ Like :class:`~declivity.utils.stopping_conditions.StoppingCondition` and
 search is injected into the optimizer at construction time
 (``line_search=``) and defaults per algorithm (More-Thuente for
 L-BFGS-B, Brent for Powell).
+
+Neither branch knows anything about the feasible region: the ``stpmax`` /
+``alpha_bounds`` a bound-constrained search needs comes from the run's
+:class:`~declivity.utils.constraint_handlers.ConstraintHandler`
+(``max_feasible_step`` / ``feasible_step_interval``), which is the single
+authority on that question.  A ratio test also lived here once; it was
+removed because two implementations of "how far along this ray" is exactly
+one too many.
 """
 
-from declivity.utils.line_search.bounds import max_feasible_step
 from declivity.utils.line_search.derivative_free import (
     BracketError,
     BrentLineSearch,
@@ -59,7 +66,5 @@ __all__ = [
     "bounded_minimize",
     "bracket_minimum",
     "brent_minimize",
-    # Box-bound geometry (feeds stpmax for bound-constrained line searches)
-    "max_feasible_step",
     "more_thuente_search",
 ]

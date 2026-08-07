@@ -47,6 +47,7 @@ from declivity.benchmarking.run_trace import RunTrace, capture_scalar_series
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.core.base_optimizer import OptimizationResult
 from declivity.core.config_base import BaseConfig
+from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.gradient_strategies import GradientStrategy
 from declivity.utils.initial_geometry import (
     HandoffTransform,
@@ -141,6 +142,19 @@ class BenchmarkAlgorithm(ABC):
     name: str
     color: str
 
+    constraint_handler: ConstraintHandler | None = None
+    """Override for the problem's feasible region.
+
+    ``None`` (default) uses :attr:`Problem.constraint_handler` — the feasible
+    region is a property of the problem, so that is where it normally belongs.
+    Set this only when the handler is the thing under study: comparing
+    ``BoxStrategy.CLAMP`` against ``BOUNCE_BACK`` repair, or a curved region
+    against its enclosing box, on one shared problem definition.
+
+    Resolve it with :meth:`resolve_constraint_handler` rather than reading the
+    field, so the problem-level default is honoured.
+    """
+
     retain_series: tuple[str, ...] | None = None
     """Which extra scalar-per-step diagnostics :meth:`trace_from_result`
     keeps on the trace (for cross-seed bands). ``None`` (default) = "auto":
@@ -161,6 +175,19 @@ class BenchmarkAlgorithm(ABC):
     ) -> RunTrace:
         """Run the algorithm on one (problem, x0, seed) triple."""
         ...
+
+    def resolve_constraint_handler(self, problem: Problem) -> ConstraintHandler:
+        """The handler this run should use: the runner's override, else the problem's.
+
+        Every built-in runner passes the result to the factory, which is what
+        makes ``ConstraintHandler`` injectable from a benchmark at all. Custom
+        :class:`BenchmarkAlgorithm` subclasses should call this and forward the
+        result as ``constraint_handler=`` — a runner that skips it silently
+        pins the run to the default box and ignores both settings.
+        """
+        if self.constraint_handler is not None:
+            return self.constraint_handler
+        return problem.resolved_constraint_handler()
 
     def trace_from_result(
         self,
@@ -254,6 +281,10 @@ class SingleAlgorithm(BenchmarkAlgorithm):
     ``MaxEvaluations(5000)``, ``MaxTime(30.0)``, or a composite
     (``MaxEvaluations(5000) | TargetFitness(1e-8)``) to override."""
 
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override; ``None`` uses the problem's. Applies to every
+    algorithm — see :attr:`BenchmarkAlgorithm.constraint_handler`."""
+
     def run(
         self,
         problem: Problem,
@@ -289,6 +320,7 @@ class SingleAlgorithm(BenchmarkAlgorithm):
             problem.function,
             x0,
             config,
+            constraint_handler=self.resolve_constraint_handler(problem),
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             seed=seed,
@@ -443,6 +475,10 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
     """Gradient-approximation strategy for the L-BFGS-B refinement
     phase. ``None`` keeps the optimizer default (``CentralFD``)."""
 
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override, applied to *both* phases so warm-up and
+    refinement agree on the region. ``None`` uses the problem's."""
+
     def _initial_hessian_from_cmaes(
         self,
         eigenvectors: NDArray[np.float64],
@@ -465,11 +501,14 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             if hasattr(cmaes_config, flag):
                 setattr(cmaes_config, flag, True)
 
+        handler = self.resolve_constraint_handler(problem)
+
         _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.CMAES,
             problem.function,
             x0,
             cmaes_config,
+            constraint_handler=handler,
             stopping_condition=self.cmaes_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -509,6 +548,7 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
             problem.function,
             cmaes_optimizer.mean,  # type: ignore[union-attr]
             lbfgsb_config,
+            constraint_handler=handler,
             stopping_condition=self.lbfgsb_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -581,6 +621,10 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     strategy for the refinement phase. ``None`` keeps the optimizer default
     (``CentralFD``)."""
 
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override, applied to *both* phases so warm-up and
+    refinement agree on the region. ``None`` uses the problem's."""
+
     def run_phases(
         self,
         problem: Problem,
@@ -606,11 +650,14 @@ class CMAESLocalHandoff(HandoffAlgorithm):
             if hasattr(cmaes_config, flag):
                 setattr(cmaes_config, flag, True)
 
+        handler = self.resolve_constraint_handler(problem)
+
         _raw_cmaes_optimizer = AlgorithmFactory.create_optimizer(
             AlgorithmChoice.CMAES,
             problem.function,
             x0,
             cmaes_config,
+            constraint_handler=handler,
             stopping_condition=self.cmaes_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -651,6 +698,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
             problem.function,
             cmaes_optimizer.mean,
             local_config,
+            constraint_handler=handler,
             stopping_condition=self.local_stopping_condition,
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
@@ -763,6 +811,10 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
 
     lbfgsb_gradient_strategy: GradientStrategy | None = None
 
+    constraint_handler: ConstraintHandler | None = None
+    """Feasible-region override, shared by the CMA-ES backbone and every
+    probe. ``None`` uses the problem's."""
+
     def run(
         self,
         problem: Problem,
@@ -785,6 +837,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
         """
         rng = np.random.default_rng(seed)
         dimensions = problem.dimensions
+        handler = self.resolve_constraint_handler(problem)
 
         reference_config = self.cmaes_config_factory(dimensions)
         population_size = reference_config.population_size
@@ -829,6 +882,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 problem.function,
                 x0,
                 cmaes_config,
+                constraint_handler=handler,
                 stopping_condition=MaxEvaluations(slice_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
@@ -892,6 +946,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
                 problem.function,
                 cmaes.mean,
                 lbfgsb_config,
+                constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
