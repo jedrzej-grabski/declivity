@@ -111,8 +111,7 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
             rng=self.rng,
             x0=self.initial_point,
             pop_size=n + 1,
-            lower_bounds=self.lower_bounds,
-            upper_bounds=self.upper_bounds,
+            constraint_handler=self.constraint_handler,
         )
         sim = self.repair_strategy.repair_population(sim, self.constraint_handler)
         fsim = self.evaluate_population(sim)

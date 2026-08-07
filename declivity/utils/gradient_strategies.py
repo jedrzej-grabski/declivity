@@ -31,6 +31,8 @@ from typing import Callable
 import numpy as np
 from numpy.typing import NDArray
 
+from declivity.utils.constraint_handlers import ConstraintHandler
+
 
 class GradientStrategy(ABC):
     """Abstract base class for gradient-computation strategies.
@@ -48,8 +50,7 @@ class GradientStrategy(ABC):
         x: NDArray[np.float64],
         eps: float,
         f_at_x: float | None = None,
-        lower_bounds: NDArray[np.float64] | None = None,
-        upper_bounds: NDArray[np.float64] | None = None,
+        constraint_handler: ConstraintHandler | None = None,
     ) -> NDArray[np.float64]:
         """Approximate ``∇f(x)``.
 
@@ -71,14 +72,17 @@ class GradientStrategy(ABC):
             and save one evaluation per gradient; central FD needs it
             only for coordinates that fall back to a one-sided
             difference at a bound.
-        lower_bounds, upper_bounds:
-            Optional box bounds, shape ``(dim,)``.  When supplied, a
-            perturbed point that would leave the box switches that
-            coordinate to a one-sided difference on the feasible side
-            (standard practice for bound-constrained solvers whose
-            iterates sit exactly on bounds).  ``None`` (or probes
-            strictly inside the box) reproduces the unconstrained
-            scheme exactly.
+        constraint_handler:
+            Optional
+            :class:`~declivity.utils.constraint_handlers.ConstraintHandler`
+            defining the feasible region.  When supplied, a perturbed
+            point the handler rejects switches that coordinate to a
+            one-sided difference on the feasible side (standard practice
+            for constrained solvers whose iterates sit exactly on a
+            bound).  ``None`` — or probes the handler accepts —
+            reproduces the unconstrained scheme exactly.  The handler is
+            the only source of feasibility here; the strategy never
+            inspects bound arrays itself.
 
         Returns
         -------
@@ -108,8 +112,7 @@ class ForwardFD(GradientStrategy):
         x: NDArray[np.float64],
         eps: float,
         f_at_x: float | None = None,
-        lower_bounds: NDArray[np.float64] | None = None,
-        upper_bounds: NDArray[np.float64] | None = None,
+        constraint_handler: ConstraintHandler | None = None,
     ) -> NDArray[np.float64]:
         if f_at_x is None:
             f_at_x = f(x)
@@ -117,14 +120,17 @@ class ForwardFD(GradientStrategy):
         gradient = np.zeros(num_vars)
         for i in range(num_vars):
             step = eps
-            if (
-                upper_bounds is not None
-                and x[i] + eps > upper_bounds[i]
-                and (lower_bounds is None or x[i] - eps >= lower_bounds[i])
-            ):
-                # Forward probe would exit the box: difference backward
-                # instead (one-sided on the feasible side).
-                step = -eps
+            if constraint_handler is not None:
+                forward = x.copy()
+                forward[i] += eps
+                if not constraint_handler.is_feasible(forward):
+                    backward = x.copy()
+                    backward[i] -= eps
+                    if constraint_handler.is_feasible(backward):
+                        # Forward probe leaves the feasible region:
+                        # difference backward instead (one-sided on the
+                        # feasible side).
+                        step = -eps
             x_probe = x.copy()
             x_probe[i] += step
             gradient[i] = (f(x_probe) - f_at_x) / step
@@ -151,35 +157,33 @@ class CentralFD(GradientStrategy):
         x: NDArray[np.float64],
         eps: float,
         f_at_x: float | None = None,
-        lower_bounds: NDArray[np.float64] | None = None,
-        upper_bounds: NDArray[np.float64] | None = None,
+        constraint_handler: ConstraintHandler | None = None,
     ) -> NDArray[np.float64]:
         num_vars = len(x)
         gradient = np.zeros(num_vars)
         for i in range(num_vars):
-            forward_ok = upper_bounds is None or x[i] + eps <= upper_bounds[i]
-            backward_ok = lower_bounds is None or x[i] - eps >= lower_bounds[i]
+            x_forward = x.copy()
+            x_backward = x.copy()
+            x_forward[i] += eps
+            x_backward[i] -= eps
+            if constraint_handler is None:
+                forward_ok = backward_ok = True
+            else:
+                forward_ok = constraint_handler.is_feasible(x_forward)
+                backward_ok = constraint_handler.is_feasible(x_backward)
             if forward_ok == backward_ok:
                 # Both probes feasible: symmetric difference.  (Also the
-                # degenerate fallback when the box is narrower than 2*eps.)
-                x_forward = x.copy()
-                x_backward = x.copy()
-                x_forward[i] += eps
-                x_backward[i] -= eps
+                # degenerate fallback when neither side fits.)
                 gradient[i] = (f(x_forward) - f(x_backward)) / (2.0 * eps)
             elif forward_ok:
-                # Backward probe would exit the box: one-sided forward,
-                # anchored on the (lazily evaluated) centre value.
+                # Backward probe leaves the feasible region: one-sided
+                # forward, anchored on the (lazily evaluated) centre value.
                 if f_at_x is None:
                     f_at_x = f(x)
-                x_forward = x.copy()
-                x_forward[i] += eps
                 gradient[i] = (f(x_forward) - f_at_x) / eps
             else:
                 if f_at_x is None:
                     f_at_x = f(x)
-                x_backward = x.copy()
-                x_backward[i] -= eps
                 gradient[i] = (f_at_x - f(x_backward)) / eps
         return gradient
 

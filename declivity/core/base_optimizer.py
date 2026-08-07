@@ -39,7 +39,24 @@ class OptimizationResult(Generic[LogDataType]):
 
 
 class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
-    """Abstract base class for optimization algorithms."""
+    """Abstract base class for optimization algorithms.
+
+    Boundary handling
+    -----------------
+    The injected :class:`~declivity.utils.constraint_handlers.ConstraintHandler`
+    is the single authority on the feasible region.  Subclasses must ask it —
+    ``max_feasible_step``, ``project_direction``, ``projected_gradient``,
+    ``feasible_step_interval``, ``is_feasible``, ``repair``, ``penalty`` — and
+    must not re-derive boundary behaviour from raw numbers.
+
+    :attr:`lower_bounds` / :attr:`upper_bounds` are a *cache of the handler's*
+    :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.bounding_box`
+    intersected with the box the caller asked for, kept because the
+    structurally box-based algorithms (L-BFGS-B's Cauchy point, population
+    sampling) need the arrays in hot loops.  They are an answer *from* the
+    handler, not a second source of truth — mutating them does not change the
+    feasible region and will desynchronise the two.
+    """
 
     def __init__(
         self,
@@ -66,17 +83,34 @@ class BaseOptimizer(ABC, Generic[LogDataType, ConfigType]):
         else:
             self.rng = np.random.default_rng(seed)
 
-        self.lower_bounds = self._process_bounds(lower_bounds, self.dimensions)
-        self.upper_bounds = self._process_bounds(upper_bounds, self.dimensions)
+        requested_lower = self._process_bounds(lower_bounds, self.dimensions)
+        requested_upper = self._process_bounds(upper_bounds, self.dimensions)
+        self.lower_bounds = requested_lower
+        self.upper_bounds = requested_upper
         self._validate_bounds()
 
         self.constraint_handler: ConstraintHandler = (
             constraint_handler
             if constraint_handler is not None
             else BoxConstraintHandler(
-                BoxStrategy.CLAMP, self.lower_bounds, self.upper_bounds
+                BoxStrategy.CLAMP, requested_lower, requested_upper
             )
         )
+
+        # The handler is the authority on the feasible region, so the cached
+        # bound arrays are *derived from it*, never an independent second
+        # opinion.  With a supplied handler the two are intersected: the
+        # ``lower_bounds`` / ``upper_bounds`` arguments describe the search box
+        # the caller wants, the handler describes the region it enforces, and a
+        # point has to satisfy both.  Intersecting can only tighten, so a
+        # handler that declares no box (the unbounded default) leaves the
+        # caller's box untouched.
+        handler_lower, handler_upper = self.constraint_handler.bounding_box(
+            self.dimensions
+        )
+        self.lower_bounds = np.maximum(requested_lower, handler_lower)
+        self.upper_bounds = np.minimum(requested_upper, handler_upper)
+        self._validate_bounds()
 
         # When to stop is an injected, modular concern — exactly like the
         # constraint handler above.  The default reproduces the framework's

@@ -35,7 +35,11 @@ from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.core.algorithm_factory import register_optimizer
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.core.population_optimizer import PopulationOptimizer
-from declivity.utils.constraint_handlers import ConstraintHandler
+from declivity.utils.constraint_handlers import (
+    BoxConstraintHandler,
+    BoxStrategy,
+    ConstraintHandler,
+)
 from declivity.utils.population_initializers import (
     MeanSigmaPopulationInitializer,
     PopulationInitializer,
@@ -127,20 +131,30 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         if config is None:
             config = CMAESConfig(dimensions=len(initial_point))
 
+        # The default sigma is derived from the search range, so the handler
+        # (the authority on that range) has to exist before ``super().__init__``
+        # rather than being built inside it.  Constructing the framework default
+        # here and passing it down keeps a single handler instance for the run.
+        if constraint_handler is None:
+            constraint_handler = BoxConstraintHandler(
+                BoxStrategy.CLAMP,
+                BaseOptimizer._process_bounds(lower_bounds, len(initial_point)),
+                BaseOptimizer._process_bounds(upper_bounds, len(initial_point)),
+            )
+
         # Resolve auto-sigma (config.sigma == 0.0) up-front so the default
         # population_initializer can be constructed with the final value.
         # The resolution stays local — the caller's config is never mutated,
         # so one config can be reused across optimizers with different bounds.
         initial_sigma = float(config.sigma)
         if initial_sigma == 0.0:
-            lb_array = BaseOptimizer._process_bounds(lower_bounds, len(initial_point))
-            ub_array = BaseOptimizer._process_bounds(upper_bounds, len(initial_point))
+            lb_array, ub_array = constraint_handler.bounding_box(len(initial_point))
             span = ub_array - lb_array
-            # An unbounded (or half-bounded) box gives an infinite span, and
+            # An unbounded (or half-bounded) region gives an infinite span, and
             # ``sigma = inf`` makes generation 0 sample non-finite candidates
-            # that trip the overflow guard in ``_tell``.  Derive the scale from
-            # the finite dimensions when there are any, else from the magnitude
-            # of the starting point.
+            # that trip the divergence guard.  Derive the scale from the finite
+            # dimensions when there are any, else from the magnitude of the
+            # starting point.
             finite_span = span[np.isfinite(span)]
             if finite_span.size > 0:
                 initial_sigma = float(np.mean(finite_span) / 5.0)
@@ -373,8 +387,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                 rng=self.rng,
                 x0=self._mean,
                 pop_size=lambda_,
-                lower_bounds=self.lower_bounds,
-                upper_bounds=self.upper_bounds,
+                constraint_handler=self.constraint_handler,
             )
 
         population = np.empty((lambda_, self.dimensions))

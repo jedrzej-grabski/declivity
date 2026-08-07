@@ -97,15 +97,16 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             rng=self.rng,
             x0=self.initial_point,
             pop_size=lambda_,
-            lower_bounds=self.lower_bounds,
-            upper_bounds=self.upper_bounds,
+            constraint_handler=self.constraint_handler,
         )
 
-        # DES.R seeds the running mean at the centre of the box.  Unbounded
-        # dimensions have no centre, so those fall back to the starting point
-        # — otherwise ``(inf + -inf)/2`` is NaN and poisons every subsequent
-        # mean evaluation.  Bounded dimensions keep the reference value.
-        box_centre = (self.upper_bounds + self.lower_bounds) / 2
+        # DES.R seeds the running mean at the centre of the box, which the
+        # handler defines.  Unbounded dimensions have no centre, so those fall
+        # back to the starting point — otherwise ``(inf + -inf)/2`` is NaN and
+        # poisons every subsequent mean evaluation.  Bounded dimensions keep
+        # the reference value.
+        handler_lower, handler_upper = self.constraint_handler.bounding_box(N)
+        box_centre = (handler_upper + handler_lower) / 2
         cumulative_mean = np.where(
             np.isfinite(box_centre), box_centre, self.initial_point
         )

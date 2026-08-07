@@ -1,9 +1,34 @@
 """
 Constraint handler abstractions and box-constraint implementations.
 
-Replaces the BoundaryHandler/BoundaryHandlerType strategy pattern with a
-proper ABC that is open to inequality constraints, user-supplied callables,
-and parameterised penalty functions in future slices.
+A :class:`ConstraintHandler` is the **single authority on the feasible
+region**.  Nothing else in the framework decides what "in bounds" means:
+optimizers, population initializers, and gradient strategies all ask the
+handler, so swapping the handler swaps the geometry everywhere at once.
+
+The interface is grouped by what an optimizer needs to know:
+
+===========================  ==================================================
+Question                     Method
+===========================  ==================================================
+Is this point allowed?       :meth:`~ConstraintHandler.is_feasible`,
+                             :meth:`~ConstraintHandler.feasibility_distance`
+Put it back inside.          :meth:`~ConstraintHandler.repair`,
+                             :meth:`~ConstraintHandler.repair_batch`
+Punish it instead.           :meth:`~ConstraintHandler.penalty`
+What box encloses me?        :meth:`~ConstraintHandler.bounding_box`
+How far along this ray?      :meth:`~ConstraintHandler.feasible_step_interval`,
+                             :meth:`~ConstraintHandler.max_feasible_step`
+Which way can I still move?  :meth:`~ConstraintHandler.project_direction`,
+                             :meth:`~ConstraintHandler.projected_gradient`
+===========================  ==================================================
+
+Only the first group is abstract.  Everything in the *geometry* half has a
+default derived from :meth:`~ConstraintHandler.bounding_box`, so a subclass
+that declares its enclosing box gets correct ray spans, direction
+projections, and KKT measures for free — and a subclass that declares
+nothing behaves as unconstrained, which is the right answer for a handler
+that only penalises.
 """
 
 from abc import ABC, abstractmethod
@@ -12,6 +37,52 @@ from typing import final, override
 
 import numpy as np
 from numpy.typing import NDArray
+
+from declivity.utils.optimality import projected_gradient as _box_projected_gradient
+
+MAX_FEASIBLE_STEP = 1e10
+"""Cap returned by :meth:`ConstraintHandler.max_feasible_step` for a ray that
+is unbounded in the search direction.  Line searches want a finite ``stpmax``;
+this is large enough never to bind on a real problem."""
+
+
+def _box_step_interval(
+    x: NDArray[np.float64],
+    direction: NDArray[np.float64],
+    lower_bounds: NDArray[np.float64],
+    upper_bounds: NDArray[np.float64],
+) -> tuple[float, float]:
+    """Ratio test: the span of ``x + alpha * direction`` that stays in a box.
+
+    For each coordinate the direction actually moves, the two bounds give the
+    step lengths at which that coordinate reaches them; the feasible interval
+    is the intersection over coordinates.  Coordinates with a zero direction
+    component never leave the box, so they are excluded.
+
+    This is the same computation SciPy performs in
+    ``scipy.optimize._optimize._line_for_search``.  Either bound may be
+    infinite, in which case the matching end of the interval is infinite too.
+    A returned ``(0.0, 0.0)`` means no non-zero step is feasible.
+    """
+    (nonzero,) = np.asarray(direction).nonzero()
+    if nonzero.size == 0:
+        # A zero direction never moves: no step length is excluded.
+        return (-np.inf, np.inf)
+
+    lower = lower_bounds[nonzero]
+    upper = upper_bounds[nonzero]
+    x_nz = x[nonzero]
+    d_nz = direction[nonzero]
+    low = (lower - x_nz) / d_nz
+    high = (upper - x_nz) / d_nz
+
+    # Moving in +d hits the upper bound last, in -d the lower bound;
+    # ``where`` selects per coordinate without branching.
+    pos = d_nz > 0
+    alpha_min = float(np.max(np.where(pos, low, 0) + np.where(pos, 0, high)))
+    alpha_max = float(np.min(np.where(pos, high, 0) + np.where(pos, 0, low)))
+
+    return (alpha_min, alpha_max) if alpha_max >= alpha_min else (0.0, 0.0)
 
 
 class BoxStrategy(Enum):
@@ -25,21 +96,26 @@ class ConstraintHandler(ABC):
     """
     Abstract base class for constraint-handling strategies.
 
-    A ConstraintHandler is responsible for four orthogonal concerns:
+    A ConstraintHandler is responsible for five orthogonal concerns:
 
     * **Feasibility test** — ``is_feasible`` / ``feasibility_distance``
     * **Repair** — project or bounce an infeasible point back into the feasible
       region.  The default implementation is a no-op (returns *x* unchanged).
     * **Penalty** — augment an objective value to discourage infeasibility.
       The default implementation is a no-op (returns *f_x* unchanged).
-    * **Directional feasibility** — ``feasible_step_interval``, the range of
-      step lengths along a search ray that stays feasible.  Line-search
-      optimizers (Powell) use it to confine the search *a priori* instead of
-      repairing afterwards.  The default returns ``None`` ("cannot describe my
-      feasible set along a ray"), which tells such an optimizer to fall back to
-      repairing the points it accepts.
+    * **Enclosing box** — ``bounding_box``, the tightest axis-aligned box
+      containing the feasible region.  Coordinate-wise algorithms (L-BFGS-B's
+      Cauchy point, finite-difference probes, population sampling) need a box
+      and cannot work with an arbitrary region; this is how they get one.
+      Defaults to unbounded.
+    * **Directional feasibility** — ``feasible_step_interval`` /
+      ``max_feasible_step`` / ``project_direction`` / ``projected_gradient``:
+      how far a search ray may travel, and which directions are still
+      available at an active constraint.  All four default to the answers
+      implied by ``bounding_box``.
 
-    Subclasses should override only the hooks they need.
+    Subclasses should override only the hooks they need — declaring
+    ``bounding_box`` alone gives correct defaults for the whole geometry half.
     """
 
     @abstractmethod
@@ -85,6 +161,106 @@ class ConstraintHandler(ABC):
         The default implementation returns *f_x* unchanged (no penalty).
         """
         return f_x
+
+    # ------------------------------------------------------------------
+    # Geometry — everything below has a default derived from bounding_box.
+    # ------------------------------------------------------------------
+
+    def bounding_box(
+        self, dimensions: int
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """
+        Tightest axis-aligned box ``(lower, upper)`` containing the feasible
+        region, as two arrays of length *dimensions*.
+
+        This is how the framework asks "what are the bounds?" — there is no
+        other source.  Algorithms that are *structurally* box-based (L-BFGS-B's
+        generalized Cauchy point walks per-coordinate breakpoints; population
+        initializers scale their spread by the search range; finite-difference
+        probes must not step outside) read the box from here.
+
+        The default is unbounded (``-inf``/``+inf``), which is correct for a
+        handler that constrains nothing or expresses its constraints purely as
+        a :meth:`penalty`.  A handler with a bounded feasible set should
+        override this even when the set is not a box — a *conservative*
+        enclosing box still gives the coordinate-wise algorithms something
+        valid to work with, and the sharper hooks below can refine it.
+        """
+        return (
+            np.full(dimensions, -np.inf, dtype=float),
+            np.full(dimensions, np.inf, dtype=float),
+        )
+
+    def max_feasible_step(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> float:
+        """
+        Largest ``alpha >= 0`` such that ``x + alpha * direction`` is feasible.
+
+        The scalar ``stpmax`` a gradient line search expects.  Taken from
+        :meth:`feasible_step_interval` when the handler provides one; a handler
+        that returns ``None`` there falls back to the ratio test against
+        :meth:`bounding_box`.  That fallback matters: it is only a *cap* (the
+        accepted point is still repaired), so using the conservative enclosing
+        box keeps the line search from wandering arbitrarily far outside the
+        feasible region — while an unconstrained handler, whose box is
+        infinite, still gets the full :data:`MAX_FEASIBLE_STEP`.
+        """
+        interval = self.feasible_step_interval(x, direction)
+        if interval is None:
+            lower, upper = self.bounding_box(len(x))
+            interval = _box_step_interval(x, direction, lower, upper)
+        return float(min(max(interval[1], 0.0), MAX_FEASIBLE_STEP))
+
+    def project_direction(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """
+        Drop the components of *direction* that immediately leave the feasible
+        region from *x*.
+
+        At an active constraint a search direction can have components that
+        cannot move at all.  Leaving them in makes
+        :meth:`max_feasible_step` zero and strands the optimizer even though
+        the remaining coordinates are free; removing them yields the step
+        along the still-feasible subspace.
+
+        The default zeroes components pushing outward at an active *box* bound.
+        Returns a new array; identical to the input when nothing is active
+        (in particular, always so for an unbounded handler).
+        """
+        lower, upper = self.bounding_box(len(x))
+        projected = np.array(direction, dtype=np.float64, copy=True)
+        blocked = ((x <= lower) & (projected < 0)) | ((x >= upper) & (projected > 0))
+        projected[blocked] = 0.0
+        return projected
+
+    def projected_gradient(
+        self, x: NDArray[np.float64], gradient: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        """
+        KKT first-order optimality measure at *x* — the gradient with the
+        components that push into an active constraint removed.
+
+        This is the quantity a constrained optimizer must drive to zero: at a
+        constrained optimum the raw gradient need not vanish, only its feasible
+        part.  The default is the box projection
+        (:func:`declivity.utils.optimality.projected_gradient`), which reduces
+        *identically* to the plain gradient when the box is unbounded — so an
+        optimizer testing this reproduces an unconstrained ``‖grad‖`` test
+        exactly.
+        """
+        lower, upper = self.bounding_box(len(x))
+        return _box_projected_gradient(x, gradient, lower, upper)
+
+    def projected_gradient_inf_norm(
+        self, x: NDArray[np.float64], gradient: NDArray[np.float64]
+    ) -> float:
+        """Infinity norm of :meth:`projected_gradient` (0.0 when empty)."""
+        projected = self.projected_gradient(x, gradient)
+        if len(projected) == 0:
+            return 0.0
+        return float(np.max(np.abs(projected)))
 
     def feasible_step_interval(
         self, x: NDArray[np.float64], direction: NDArray[np.float64]
@@ -195,42 +371,30 @@ class BoxConstraintHandler(ConstraintHandler):
         return f_x
 
     @override
+    def bounding_box(
+        self, dimensions: int
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """The box itself — this handler *is* its bounding box."""
+        if len(self.lower_bounds) != dimensions:
+            raise ValueError(
+                f"BoxConstraintHandler was built for "
+                f"{len(self.lower_bounds)} dimensions but asked for "
+                f"{dimensions}."
+            )
+        return self.lower_bounds, self.upper_bounds
+
+    @override
     def feasible_step_interval(
         self, x: NDArray[np.float64], direction: NDArray[np.float64]
     ) -> tuple[float, float]:
-        """Ratio test for the span of a ray that stays inside the box.
+        """Exact ray span for a box — the shared :func:`_box_step_interval`.
 
-        For each coordinate the direction actually moves, the two bounds give
-        the step lengths at which that coordinate reaches them; the feasible
-        interval is the intersection over coordinates.  Coordinates with a
-        zero direction component never leave the box, so they are excluded.
-
-        This is the same computation SciPy performs in
-        ``scipy.optimize._optimize._line_for_search``, which is what keeps
-        Powell's bounded trajectory bit-identical to SciPy's.  Both bounds may
-        be infinite, in which case the corresponding end of the interval is
-        infinite too.
+        Because the box *is* the feasible region, the ratio test is exact here
+        rather than a conservative enclosure, and it reproduces SciPy's
+        ``_line_for_search``, which is what keeps Powell's bounded trajectory
+        bit-identical to SciPy's.
         """
-        (nonzero,) = np.asarray(direction).nonzero()
-        if nonzero.size == 0:
-            # A zero direction never moves: every step keeps x exactly where
-            # it is, so no step length is excluded.
-            return (-np.inf, np.inf)
-
-        lower = self.lower_bounds[nonzero]
-        upper = self.upper_bounds[nonzero]
-        x_nz = x[nonzero]
-        d_nz = direction[nonzero]
-        low = (lower - x_nz) / d_nz
-        high = (upper - x_nz) / d_nz
-
-        # Moving in +d hits the upper bound last, in -d the lower bound;
-        # ``where`` selects per coordinate without branching.
-        pos = d_nz > 0
-        alpha_min = float(np.max(np.where(pos, low, 0) + np.where(pos, 0, high)))
-        alpha_max = float(np.min(np.where(pos, high, 0) + np.where(pos, 0, low)))
-
-        return (alpha_min, alpha_max) if alpha_max >= alpha_min else (0.0, 0.0)
+        return _box_step_interval(x, direction, self.lower_bounds, self.upper_bounds)
 
     # ------------------------------------------------------------------
     # Internal repair implementations

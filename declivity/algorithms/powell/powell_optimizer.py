@@ -221,7 +221,7 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         # untouched, keeping trajectories byte-identical.  The projection
         # itself goes through the injected handler, whose default CLAMP
         # strategy *is* the clip SciPy performs.
-        if np.any(x < self.lower_bounds) or np.any(x > self.upper_bounds):
+        if not self.constraint_handler.is_feasible(x):
             warnings.warn(
                 "Initial guess is not within the specified bounds",
                 stacklevel=2,

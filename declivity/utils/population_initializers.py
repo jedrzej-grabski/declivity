@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
+from declivity.utils.constraint_handlers import ConstraintHandler
+
 if TYPE_CHECKING:
     from declivity.utils.initial_geometry import InitialGeometry
 
@@ -42,8 +44,7 @@ class PopulationInitializer(ABC):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         """Generate an initial population.
 
@@ -55,10 +56,16 @@ class PopulationInitializer(ABC):
             Starting point / mean, shape ``(dim,)``.
         pop_size:
             Number of individuals to generate.
-        lower_bounds:
-            Per-dimension lower bounds, shape ``(dim,)``.
-        upper_bounds:
-            Per-dimension upper bounds, shape ``(dim,)``.
+        constraint_handler:
+            The run's
+            :class:`~declivity.utils.constraint_handlers.ConstraintHandler` —
+            the only source of information about the feasible region.  Use
+            :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.bounding_box`
+            for the search range to scale by, and ``is_feasible`` / ``repair``
+            to keep the individuals inside it.  The population an initializer
+            returns is not required to be feasible: the optimizer applies its
+            :class:`~declivity.utils.repair_strategies.RepairStrategy`
+            afterwards.
 
         Returns
         -------
@@ -94,9 +101,9 @@ class NormalPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(len(x0))
         span = upper_bounds - lower_bounds
         if not np.all(np.isfinite(span)):
             fallback = max(1.0, float(np.max(np.abs(x0)))) if len(x0) else 1.0
@@ -133,8 +140,7 @@ class MeanSigmaPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         # Generate in (dim, pop_size) layout to match MF-CMA-ES's RNG sequence.
         d = rng.standard_normal((len(x0), pop_size))
@@ -162,9 +168,9 @@ class UniformPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(len(x0))
         del x0  # intentionally unused — R-DES draws independently of par
         low = self.fraction * lower_bounds
         high = self.fraction * upper_bounds
@@ -211,8 +217,7 @@ class SimplexPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         del rng  # deterministic construction — interface compatibility only
         dim = len(x0)
@@ -222,6 +227,7 @@ class SimplexPopulationInitializer(PopulationInitializer):
                 f"vertices; got pop_size={pop_size}."
             )
 
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(dim)
         x0 = np.clip(np.asarray(x0, dtype=float), lower_bounds, upper_bounds)
 
         sim = np.empty((dim + 1, dim), dtype=float)
@@ -312,8 +318,7 @@ class CovarianceSimplexInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         del rng  # deterministic construction — interface compatibility only
         dim = len(x0)
@@ -323,6 +328,7 @@ class CovarianceSimplexInitializer(PopulationInitializer):
                 f"vertices; got pop_size={pop_size}."
             )
 
+        lower_bounds, upper_bounds = constraint_handler.bounding_box(dim)
         x0 = np.clip(np.asarray(x0, dtype=float), lower_bounds, upper_bounds)
 
         base_size = self.base_size
@@ -388,8 +394,7 @@ class IdentityPopulationInitializer(PopulationInitializer):
         rng: np.random.Generator,
         x0: NDArray[np.float64],
         pop_size: int,
-        lower_bounds: NDArray[np.float64],
-        upper_bounds: NDArray[np.float64],
+        constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
         raise NotImplementedError(
             "IdentityPopulationInitializer is a structural placeholder and "

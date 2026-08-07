@@ -9,12 +9,13 @@ interface: the line search, gradient strategy, constraint handler, and
 stopping condition are all pluggable framework components.
 
 SciPy's ``method='BFGS'`` is unconstrained; here the default bounds are
-±inf (identical behaviour).  When finite box bounds are supplied, the
-optimizer reuses L-BFGS-B's constraint handling — the line-search step is
-capped by :func:`~declivity.utils.line_search.max_feasible_step`, accepted
-points are repaired by the constraint handler, and convergence is measured
-on the projected gradient (which reduces to the plain gradient when
-unbounded, so parity with SciPy is unaffected).
+±inf (identical behaviour).  Every boundary decision is delegated to the
+injected :class:`~declivity.utils.constraint_handlers.ConstraintHandler`:
+it projects the search direction at active constraints, caps the
+line-search step (``max_feasible_step``), repairs accepted points, and
+supplies the projected gradient used as the convergence measure.  All four
+reduce to their unconstrained forms under the default ±inf handler, so
+parity with SciPy is unaffected.
 
 References:
     R. Fletcher, "Practical Methods of Optimization", 2nd ed., Wiley (1987).
@@ -36,12 +37,7 @@ from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.gradient_strategies import CentralFD, GradientStrategy
 from declivity.utils.initial_geometry import InitialGeometry
-from declivity.utils.line_search import (
-    LineSearchStrategy,
-    MoreThuenteLineSearch,
-    max_feasible_step,
-)
-from declivity.utils.optimality import projected_gradient
+from declivity.utils.line_search import LineSearchStrategy, MoreThuenteLineSearch
 from declivity.utils.stopping_conditions import StoppingCondition
 
 if TYPE_CHECKING:
@@ -127,6 +123,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             x=x,
             eps=self._finite_diff_epsilon,
             f_at_x=function_value_at_x,
+            constraint_handler=self.constraint_handler,
         )
 
     def _compute_directional_derivative(
@@ -155,38 +152,17 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
     def _gradient_norm(
         self, x: NDArray[np.float64], gradient: NDArray[np.float64]
     ) -> float:
-        """Norm of the projected gradient under ``config.norm``.
+        """Norm of the handler's projected gradient under ``config.norm``.
 
-        Equals ``vecnorm(gradient, ord=norm)`` when bounds are infinite (the
-        projected gradient does not clip anything), so it reproduces SciPy's
+        Equals ``vecnorm(gradient, ord=norm)`` when the handler is
+        unconstrained (its projection clips nothing), so it reproduces SciPy's
         ``vecnorm(gfk, ord=norm)`` test in the unconstrained regime while
-        remaining a valid KKT measure at active bounds.
+        remaining a valid KKT measure at active constraints.
         """
-        pg = projected_gradient(x, gradient, self.lower_bounds, self.upper_bounds)
+        pg = self.constraint_handler.projected_gradient(x, gradient)
         if len(pg) == 0:
             return 0.0
         return float(np.linalg.norm(pg, ord=self.config.norm))
-
-    # Bound geometry
-
-    def _project_onto_active_bounds(
-        self, x: NDArray[np.float64], direction: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
-        """Zero the components of ``direction`` that point out of the box.
-
-        A coordinate sitting on a bound with a direction component pushing
-        further outward contributes nothing but a zero
-        :func:`~declivity.utils.line_search.max_feasible_step`.  Dropping it
-        leaves the step along the still-free coordinates, which is what
-        L-BFGS-B does when it fixes a variable at its bound.  With infinite
-        bounds no coordinate is ever active, so the returned direction is the
-        input unchanged and SciPy parity is untouched.
-        """
-        projected = np.array(direction, dtype=np.float64, copy=True)
-        at_lower = (x <= self.lower_bounds) & (projected < 0)
-        at_upper = (x >= self.upper_bounds) & (projected > 0)
-        projected[at_lower | at_upper] = 0.0
-        return projected
 
     # Initial inverse Hessian
 
@@ -217,7 +193,12 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         n = self.dimensions
         identity = np.eye(n)
 
-        x = self.constraint_handler.repair(self.initial_point.copy())
+        # Annotated explicitly: ``x`` is reassigned from values that flow
+        # through the line-search closures, and those closures capture ``x`` as
+        # a default argument — without an annotation the inference is circular.
+        x: NDArray[np.float64] = self.constraint_handler.repair(
+            self.initial_point.copy()
+        )
         self._cached_gradient = None
 
         function_value, gradient = self._evaluate_function_and_gradient(x)
@@ -250,29 +231,27 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
 
             direction = np.asarray(-(inverse_hessian @ gradient), dtype=np.float64)
 
-            # Bound projection: a component pushing outward at an already
-            # active bound cannot move, and leaving it in makes the largest
-            # feasible step exactly zero — which would end the run even though
-            # every other coordinate is still free.  Zeroing those components
-            # is the same projection L-BFGS-B applies to its steepest-descent
-            # fallback.  No-op when unbounded (the SciPy-parity regime), since
-            # no coordinate can then sit on a bound.
-            direction = self._project_onto_active_bounds(x, direction)
+            # Constraint projection: a component pushing outward at an
+            # already active constraint cannot move, and leaving it in makes
+            # the largest feasible step exactly zero — which would end the run
+            # even though every other coordinate is still free.  The handler
+            # decides which components those are; with an unconstrained
+            # handler (the SciPy-parity regime) nothing is ever active and the
+            # direction passes through untouched.
+            direction = self.constraint_handler.project_direction(x, direction)
             directional_derivative = float(np.dot(gradient, direction))
 
             # Ascent-direction guard: if bound clamping (or a degenerate Hk)
             # made ``direction`` non-descent, fall back to projected steepest
             # descent with active-bound components zeroed (as in L-BFGS-B).
             if directional_derivative >= 0:
-                direction = self._project_onto_active_bounds(x, -gradient)
+                direction = self.constraint_handler.project_direction(x, -gradient)
                 directional_derivative = float(np.dot(gradient, direction))
                 if directional_derivative >= 0:
                     termination_message = "Cannot find descent direction"
                     break
 
-            max_feas_step = max_feasible_step(
-                x, direction, self.lower_bounds, self.upper_bounds
-            )
+            max_feas_step = self.constraint_handler.max_feasible_step(x, direction)
             if max_feas_step <= 0:
                 termination_message = "Maximum feasible step is zero"
                 break

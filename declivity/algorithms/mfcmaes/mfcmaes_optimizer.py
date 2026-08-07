@@ -179,8 +179,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             rng=self.rng,
             x0=self.mean,
             pop_size=self.config.population_size,
-            lower_bounds=self.lower_bounds,
-            upper_bounds=self.upper_bounds,
+            constraint_handler=self.constraint_handler,
         )
         initial_arx = initial_pop.T  # (dim, pop_size)
         initial_d = (initial_arx - self.mean[:, np.newaxis]) / self.sigma
