@@ -25,13 +25,19 @@ class ConstraintHandler(ABC):
     """
     Abstract base class for constraint-handling strategies.
 
-    A ConstraintHandler is responsible for three orthogonal concerns:
+    A ConstraintHandler is responsible for four orthogonal concerns:
 
     * **Feasibility test** — ``is_feasible`` / ``feasibility_distance``
     * **Repair** — project or bounce an infeasible point back into the feasible
       region.  The default implementation is a no-op (returns *x* unchanged).
     * **Penalty** — augment an objective value to discourage infeasibility.
       The default implementation is a no-op (returns *f_x* unchanged).
+    * **Directional feasibility** — ``feasible_step_interval``, the range of
+      step lengths along a search ray that stays feasible.  Line-search
+      optimizers (Powell) use it to confine the search *a priori* instead of
+      repairing afterwards.  The default returns ``None`` ("cannot describe my
+      feasible set along a ray"), which tells such an optimizer to fall back to
+      repairing the points it accepts.
 
     Subclasses should override only the hooks they need.
     """
@@ -79,6 +85,40 @@ class ConstraintHandler(ABC):
         The default implementation returns *f_x* unchanged (no penalty).
         """
         return f_x
+
+    def feasible_step_interval(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> tuple[float, float] | None:
+        """
+        Return ``(alpha_min, alpha_max)`` such that ``x + alpha * direction``
+        is feasible for every ``alpha`` in that closed interval, or ``None``.
+
+        This is the *a priori* counterpart of :meth:`repair`: a line-search
+        optimizer that knows the feasible span of a ray never has to produce
+        an infeasible point in the first place.  It is the mechanism by which
+        Powell enforces constraints — see
+        :class:`~declivity.algorithms.powell.powell_optimizer.PowellOptimizer`.
+
+        Returning ``None`` (the default) means "my feasible set is not an
+        interval along this ray, or I cannot compute one cheaply".  Callers
+        must then search unconstrained and route every point they evaluate or
+        accept through :meth:`repair` instead.
+
+        **Override this for polytopes, not for curved sets.**  A box or a set
+        of linear constraints has a boundary made of flat pieces, so a point on
+        the boundary still has feasible directions to travel; confining the
+        search is then better than repairing, because a repaired point is a
+        different point from the one the caller asked for.  A *strictly convex*
+        region (ball, ellipsoid) is the opposite case: every straight ray from a
+        boundary point leaves immediately, so the interval collapses to
+        ``(0.0, 0.0)`` and a line-search optimizer stalls the moment it touches
+        the boundary.  Such handlers should keep the ``None`` default and let
+        the caller project instead — projection can slide along the curve.
+
+        A degenerate ``(0.0, 0.0)`` means no non-zero step is feasible.
+        """
+        del x, direction
+        return None
 
 
 @final
@@ -153,6 +193,44 @@ class BoxConstraintHandler(ConstraintHandler):
     def penalty(self, x: NDArray[np.float64], f_x: float) -> float:
         """No-op — box constraints are handled by repair, not penalty."""
         return f_x
+
+    @override
+    def feasible_step_interval(
+        self, x: NDArray[np.float64], direction: NDArray[np.float64]
+    ) -> tuple[float, float]:
+        """Ratio test for the span of a ray that stays inside the box.
+
+        For each coordinate the direction actually moves, the two bounds give
+        the step lengths at which that coordinate reaches them; the feasible
+        interval is the intersection over coordinates.  Coordinates with a
+        zero direction component never leave the box, so they are excluded.
+
+        This is the same computation SciPy performs in
+        ``scipy.optimize._optimize._line_for_search``, which is what keeps
+        Powell's bounded trajectory bit-identical to SciPy's.  Both bounds may
+        be infinite, in which case the corresponding end of the interval is
+        infinite too.
+        """
+        (nonzero,) = np.asarray(direction).nonzero()
+        if nonzero.size == 0:
+            # A zero direction never moves: every step keeps x exactly where
+            # it is, so no step length is excluded.
+            return (-np.inf, np.inf)
+
+        lower = self.lower_bounds[nonzero]
+        upper = self.upper_bounds[nonzero]
+        x_nz = x[nonzero]
+        d_nz = direction[nonzero]
+        low = (lower - x_nz) / d_nz
+        high = (upper - x_nz) / d_nz
+
+        # Moving in +d hits the upper bound last, in -d the lower bound;
+        # ``where`` selects per coordinate without branching.
+        pos = d_nz > 0
+        alpha_min = float(np.max(np.where(pos, low, 0) + np.where(pos, 0, high)))
+        alpha_max = float(np.min(np.where(pos, high, 0) + np.where(pos, 0, low)))
+
+        return (alpha_min, alpha_max) if alpha_max >= alpha_min else (0.0, 0.0)
 
     # ------------------------------------------------------------------
     # Internal repair implementations

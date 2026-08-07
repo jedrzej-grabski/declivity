@@ -29,16 +29,50 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
 
     Constraint handling
     -------------------
-    Powell enforces the box *geometrically*: :meth:`_feasible_step_interval`
-    clips the line-search interval so no trial point can leave the box in the
-    first place.  The injected
-    :class:`~declivity.utils.constraint_handlers.ConstraintHandler` therefore
-    only has repair work to do on the initial point, and its ``penalty`` hook
-    (applied by :meth:`BaseOptimizer.evaluate`) on every evaluation.  Repairing
-    accepted points on top of the interval clipping would perturb the last bits
-    of a trajectory that is validated bit-identical against SciPy
-    (``experiments/cross_validation/powell_vs_scipy.py``), so it is deliberately
-    not done — use a handler's ``penalty`` to express non-box constraints here.
+    The injected
+    :class:`~declivity.utils.constraint_handlers.ConstraintHandler` owns the
+    whole feasible region, through three of its hooks:
+
+    * :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.feasible_step_interval`
+      — the handler decides how far the line search may travel along each
+      direction.  This is Powell's primary constraint mechanism, and the one
+      the default box handler uses.
+    * :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.repair`
+      — projects the initial point, and, for handlers that return ``None``
+      from ``feasible_step_interval``, every point the line search evaluates
+      or accepts.
+    * :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.penalty`
+      — applied to every evaluation by :meth:`BaseOptimizer.evaluate`, for
+      soft constraints.
+
+    Which of the first two a custom handler should offer depends on the
+    *shape* of its feasible set, and the answer is not "always the interval":
+
+    * **Polytopes** (boxes, half-spaces, linear constraints) — implement the
+      interval.  Their boundary contains line segments, so a point on the
+      boundary still has feasible directions to move along, and confining the
+      search beats repairing: a repaired point is a *different* point from the
+      one the line search asked for, and the direction-replacement heuristic
+      then reasons about a step Powell never took.
+    * **Curved sets** (balls, ellipsoids, anything strictly convex) — return
+      ``None`` and rely on repair.  Every straight ray leaving a point *on* a
+      curved boundary is immediately infeasible, so the interval degenerates to
+      ``{0}`` and Powell stalls at the first boundary point it reaches.
+      Projection instead lets it slide along the boundary.  Measured on
+      ``min ||x - 3·1||²`` over the unit ball in 4-D (optimum ``f = 25`` at
+      ``x = 0.5·1``): the interval-aware handler traps near ``(1,0,0,0)`` at
+      ``f ≈ 30.9``, while the repair-only handler reaches ``f = 25.0``.
+
+    Both regimes keep every evaluated point feasible; they differ in how well
+    Powell can move once it is on the boundary.
+
+    With the default :class:`BoxConstraintHandler` the interval reproduces
+    SciPy's ``_line_for_search`` exactly, so the bounded trajectory stays
+    bit-identical (``experiments/cross_validation/powell_vs_scipy.py``).  Note
+    that no repair happens on that path *by design*: at the interval endpoint
+    ``x + alpha_max * d`` can land a rounding error outside the bound, and
+    clipping it there perturbs the run — the interval, not the clip, is what
+    keeps Powell feasible.
     """
 
     def __init__(
@@ -103,20 +137,16 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
     def _feasible_step_interval(
         self, x: NDArray[np.float64], direction: NDArray[np.float64]
     ) -> tuple[float, float]:
+        """Step-length range along ``direction`` that the handler calls feasible.
 
-        (nonzero,) = direction.nonzero()
-        lower = self.lower_bounds[nonzero]
-        upper = self.upper_bounds[nonzero]
-        x_nz = x[nonzero]
-        d_nz = direction[nonzero]
-        low = (lower - x_nz) / d_nz
-        high = (upper - x_nz) / d_nz
-
-        pos = d_nz > 0
-        lmin = float(np.max(np.where(pos, low, 0) + np.where(pos, 0, high)))
-        lmax = float(np.min(np.where(pos, high, 0) + np.where(pos, 0, low)))
-
-        return (lmin, lmax) if lmax >= lmin else (0.0, 0.0)
+        Delegates to
+        :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.feasible_step_interval`.
+        A handler that cannot describe its feasible set along a ray returns
+        ``None``; the search is then unconstrained and feasibility is enforced
+        by repair instead (see :meth:`_search_along`).
+        """
+        interval = self.constraint_handler.feasible_step_interval(x, direction)
+        return (-np.inf, np.inf) if interval is None else interval
 
     # Directional minimization
 
@@ -132,14 +162,36 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         ``step_vector = alpha * direction`` — the same contract as
         SciPy's ``_linesearch_powell``.  A zero direction is a no-op
         that reuses ``fval`` without spending evaluations.
+
+        Two constraint regimes, decided by the injected handler:
+
+        * The handler bounds the ray (every box handler does) — the search is
+          confined to that interval and every point it visits is feasible by
+          construction, so nothing is repaired.  This is SciPy's scheme, and
+          keeping repair *out* of it is what preserves the bit-identical
+          trajectory: at the interval endpoint ``x + alpha_max * d`` can land a
+          rounding error outside the bound, and clipping it there perturbs the
+          whole run.
+        * The handler cannot describe the ray (``None``) — the search runs
+          unconstrained and every evaluated and accepted point is projected
+          with :meth:`ConstraintHandler.repair`.
         """
         if not np.any(direction):
             return fval, x, direction
 
-        interval = self._feasible_step_interval(x, direction)
+        bounded_interval = self.constraint_handler.feasible_step_interval(x, direction)
+        repair_needed = bounded_interval is None
+        interval = (-np.inf, np.inf) if repair_needed else bounded_interval
 
-        def phi(alpha: float, _x=x, _d=direction) -> float:
-            return self.evaluate(_x + alpha * _d)
+        if repair_needed:
+
+            def phi(alpha: float, _x=x, _d=direction) -> float:
+                return self.evaluate(self.constraint_handler.repair(_x + alpha * _d))
+
+        else:
+
+            def phi(alpha: float, _x=x, _d=direction) -> float:
+                return self.evaluate(_x + alpha * _d)
 
         result = self._line_search.search(
             phi,
@@ -147,6 +199,10 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
             tol=self.config.xtol * 100.0,
             maxiter=self.config.ls_maxiter,
         )
+
+        if repair_needed:
+            x_new = self.constraint_handler.repair(x + result.alpha * direction)
+            return result.f_min, x_new, x_new - x
 
         step_vector = result.alpha * direction
         return result.f_min, x + step_vector, step_vector
@@ -257,13 +313,19 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                 # cancellation) — nothing to extrapolate or replace.
                 continue
 
-            if np.all(np.isneginf(self.lower_bounds)) and np.all(
-                np.isposinf(self.upper_bounds)
-            ):
-                lmax = 1.0
-            else:
-                _, lmax = self._feasible_step_interval(x, direc1)
+            # The extrapolated point obeys the same handler-owned interval as
+            # the line searches.  An unbounded ray gives ``lmax = inf``, so
+            # ``min(lmax, 1.0)`` is the unit step SciPy takes when there are no
+            # bounds — the two cases need no separate branch.
+            extrapolation_interval = self.constraint_handler.feasible_step_interval(
+                x, direc1
+            )
+            lmax = (
+                np.inf if extrapolation_interval is None else extrapolation_interval[1]
+            )
             x2 = x + min(lmax, 1.0) * direc1
+            if extrapolation_interval is None:
+                x2 = self.constraint_handler.repair(x2)
             fx2 = self.evaluate(x2)
             if fx2 < best_fitness:
                 best_fitness = fx2
