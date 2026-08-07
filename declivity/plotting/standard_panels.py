@@ -12,8 +12,8 @@ Adding a new panel is one line. To attach ``"my_metric"`` to CMA-ES::
         ),
     )
 
-Multi-series panels overlay several fields on one axes — useful for the
-classic "best + mean + median" convergence view::
+Multi-series panels overlay several fields on one axes, for the
+best/mean/median convergence view::
 
     Panel(
         key=PanelKey.CONVERGENCE,
@@ -46,14 +46,12 @@ from declivity.algorithms.choices import AlgorithmChoice
 from declivity.plotting.panel import Panel, PanelRegistry, Series
 from declivity.plotting.types import LineStyle, PanelKey, XAxis, YScale
 
-# Floor used for log-scale fitness plots — runs that converge to (effectively)
-# zero would otherwise blow up on log axes.
+# Floor for log-scale fitness plots; runs that converge to zero would
+# otherwise blow up on a log axis.
 _FITNESS_FLOOR = 1e-30
 
 
-# ===========================================================================
-# DES
-# ===========================================================================
+# DES.
 
 PanelRegistry.register(
     AlgorithmChoice.DES,
@@ -84,7 +82,7 @@ PanelRegistry.register(
         field="condition_number",
         yscale=YScale.LOG,
     ),
-    # Non-default — available, but excluded from the headline view.
+    # Non-default: available, but excluded from the headline view.
     Panel(
         key=PanelKey.WORST_FITNESS,
         title="Worst Fitness",
@@ -105,14 +103,11 @@ PanelRegistry.register(
 )
 
 
-# ===========================================================================
-# CMA-ES
+# CMA-ES.
 #
-# Note: CMA-ES populates ``BaseLogData.mean_fitness`` with f(mean) — the
-# fitness *evaluated at the distribution mean*, not the population
-# average. The Series label calls this out as "Mean f(m)" so the overlay
-# stays honest.
-# ===========================================================================
+# CMA-ES populates ``BaseLogData.mean_fitness`` with f(mean), the fitness at
+# the distribution mean rather than the population average, so the Series
+# label reads "Mean f(m)".
 
 PanelRegistry.register(
     AlgorithmChoice.CMAES,
@@ -182,7 +177,7 @@ PanelRegistry.register(
         field="mean_vector_norm",
         yscale=YScale.LOG,
     ),
-    # Non-default — available via plot_metrics(panels=[...]) or PanelSet.ALL.
+    # Non-default: available via plot_metrics(panels=[...]) or PanelSet.ALL.
     Panel(
         key=PanelKey.WORST_FITNESS,
         title="Worst Fitness",
@@ -229,9 +224,7 @@ PanelRegistry.register(
 )
 
 
-# ===========================================================================
-# MF-CMA-ES
-# ===========================================================================
+# MF-CMA-ES.
 
 PanelRegistry.register(
     AlgorithmChoice.MFCMAES,
@@ -294,7 +287,7 @@ PanelRegistry.register(
         field="mean_vector_norm",
         yscale=YScale.LOG,
     ),
-    # Non-default — subsumed by the overlay or rarely useful headline data.
+    # Non-default: subsumed by the overlay, or rarely useful.
     Panel(
         key=PanelKey.WORST_FITNESS,
         title="Worst Fitness",
@@ -316,15 +309,11 @@ PanelRegistry.register(
 )
 
 
-# ===========================================================================
-# L-BFGS-B
+# L-BFGS-B.
 #
-# L-BFGS-B is single-point — no population, so no mean/worst/std fitness.
-# Diagnostic flags gate most logging (gradient_norm, theta, etc.) so empty
-# panels are expected when those flags are off; the plotter draws an empty
-# axes in that case (clear feedback that the diag flag is off, not a
-# silent skip).
-# ===========================================================================
+# Single-point, so no mean/worst/std fitness.  Diagnostic flags gate most
+# logging (gradient_norm, theta, ...); with a flag off the plotter draws an
+# empty axes rather than skipping the panel.
 
 PanelRegistry.register(
     AlgorithmChoice.LBFGSB,
@@ -388,8 +377,8 @@ PanelRegistry.register(
         field="line_search_iters",
         yscale=YScale.LINEAR,
     ),
-    # Non-default — function_value and the individual gradient norms are
-    # subsumed by the multi-series convergence / gradient_norms panels.
+    # Non-default: subsumed by the multi-series convergence / gradient_norms
+    # panels.
     Panel(
         key=PanelKey.FUNCTION_VALUE,
         title="Function Value",
@@ -415,10 +404,9 @@ PanelRegistry.register(
         yscale=YScale.LOG,
         default=False,
     ),
-    # Iteration-axis variants — useful for L-BFGS-B variant studies that
-    # want to compare e.g. different line searches on a per-iteration
-    # basis (an evals axis would penalize the variant that does more
-    # evals per iter on the line search). Non-default; opt in via
+    # Iteration-axis variants, for comparing e.g. different line searches
+    # per iteration, where an evals axis would penalize the variant that
+    # spends more evaluations per iteration.  Non-default; opt in via
     # panels=[PanelKey.CONVERGENCE_BY_ITER, ...].
     Panel(
         key=PanelKey.CONVERGENCE_BY_ITER,
@@ -442,15 +430,13 @@ PanelRegistry.register(
 )
 
 
-# ===========================================================================
-# BFGS
+# BFGS.
 #
-# Single-point and gradient-based, like L-BFGS-B, so it registers the same
-# semantic keys (CONVERGENCE, STEP_SIZE, GRADIENT_NORM) — that is what makes
-# ``plot_comparison({...})`` overlay BFGS against L-BFGS-B / Powell /
-# Nelder-Mead without an explicit ``panels=``. Everything except CONVERGENCE
-# is gated by a diag_* flag, so an empty axes means the flag is off.
-# ===========================================================================
+# Single-point and gradient-based like L-BFGS-B, so it registers the same
+# semantic keys (CONVERGENCE, STEP_SIZE, GRADIENT_NORM) and
+# ``plot_comparison({...})`` overlays it against the other local methods
+# without an explicit ``panels=``.  Everything except CONVERGENCE is gated
+# by a diag_* flag.
 
 PanelRegistry.register(
     AlgorithmChoice.BFGS,
@@ -495,9 +481,8 @@ PanelRegistry.register(
         field="hessian_condition",
         yscale=YScale.LOG,
     ),
-    # Non-default — subsumed by the convergence overlay / an iteration-axis
-    # variant for line-search comparisons (an evals axis penalizes the
-    # variant that spends more evaluations inside the line search).
+    # Non-default: subsumed by the convergence overlay, or by an
+    # iteration-axis variant for line-search comparisons.
     Panel(
         key=PanelKey.FUNCTION_VALUE,
         title="Function Value",
@@ -529,15 +514,12 @@ PanelRegistry.register(
 )
 
 
-# ===========================================================================
-# Powell
+# Powell.
 #
-# Single-point and derivative-free — no population, no gradients. One
-# record per outer iteration (one sweep over the direction set), logged
-# at the same boundary as scipy's per-iteration callback. Diagnostic
-# flags gate most fields (delta, step_norm, direction-set geometry), so
-# empty panels signal an off flag, as with L-BFGS-B.
-# ===========================================================================
+# Single-point and derivative-free: no population, no gradients.  One record
+# per outer iteration (one sweep over the direction set), logged at the same
+# boundary as scipy's per-iteration callback.  Diagnostic flags gate most
+# fields (delta, step_norm, direction-set geometry).
 
 PanelRegistry.register(
     AlgorithmChoice.POWELL,
@@ -589,7 +571,7 @@ PanelRegistry.register(
         field="line_search_evals",
         yscale=YScale.LINEAR,
     ),
-    # Non-default — function_value is subsumed by the convergence panel.
+    # Non-default: subsumed by the convergence panel.
     Panel(
         key=PanelKey.FUNCTION_VALUE,
         title="Function Value",
@@ -612,15 +594,12 @@ PanelRegistry.register(
 )
 
 
-# ===========================================================================
-# Nelder-Mead
+# Nelder-Mead.
 #
-# The simplex is the population, so the population panels (worst/mean/
-# std fitness) apply. STEP_SIZE maps to the simplex extent — the
-# quantity tested against xatol and the natural "search scale" of the
-# method — so cross-algorithm STEP_SIZE overlays stay meaningful.
-# CONDITION_NUMBER reads the vertex-covariance spectrum (diag_eigen).
-# ===========================================================================
+# The simplex is the population, so the population panels (worst/mean/std
+# fitness) apply.  STEP_SIZE maps to the simplex extent, the quantity tested
+# against xatol.  CONDITION_NUMBER reads the vertex-covariance spectrum
+# (diag_eigen).
 
 PanelRegistry.register(
     AlgorithmChoice.NELDERMEAD,
@@ -675,8 +654,8 @@ PanelRegistry.register(
         field="simplex_volume",
         yscale=YScale.LOG,
     ),
-    # Non-default — the operation timeline is a dissection tool, and
-    # worst fitness is already in the convergence overlay.
+    # Non-default: the operation timeline is a dissection tool, and worst
+    # fitness is already in the convergence overlay.
     Panel(
         key=PanelKey.SIMPLEX_OPERATION,
         title="Simplex Operation",

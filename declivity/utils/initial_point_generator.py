@@ -1,19 +1,17 @@
 """Pluggable initial-point generation for optimization problems.
 
 Two concrete implementations ship by default:
-- UniformInitialPointGenerator: reproduces Problem.starting_point's previous
-  rng.uniform(lower, upper, size=dim) behavior exactly (bit-identical RNG).
+- UniformInitialPointGenerator: ``rng.uniform(lower, upper, size=dim)`` over
+  the handler's bounding box.
 - FixedInitialPointGenerator: wraps a pre-supplied NDArray and returns a copy,
   ignoring RNG and the feasible region.
 
 Pick via the InitialPointGeneratorType discoverability enum:
     ipg = InitialPointGeneratorType.UNIFORM.build()
 
-Like every other injected component, a generator learns about the feasible
-region from a :class:`~declivity.utils.constraint_handlers.ConstraintHandler`
-rather than from bound arrays handed to it — the same contract
-:class:`~declivity.utils.population_initializers.PopulationInitializer` uses
-for the population case.
+A generator learns about the feasible region from a
+:class:`~declivity.utils.constraint_handlers.ConstraintHandler` rather than
+from bound arrays.
 """
 
 from abc import ABC, abstractmethod
@@ -45,10 +43,9 @@ class InitialPointGenerator(ABC):
         Args:
             rng: A seeded NumPy Generator (``np.random.default_rng(seed)``).
             dimensions: Number of decision variables.
-            constraint_handler: The run's feasible region — the only source
-                of information about it.  Use ``bounding_box(dimensions)`` for
-                a range to sample from, and ``is_feasible`` / ``repair`` to
-                keep the point inside a region that is not a box.
+            constraint_handler: The run's feasible region.  Use
+                ``bounding_box(dimensions)`` for a range to sample from, and
+                ``is_feasible`` / ``repair`` for a region that is not a box.
 
         Returns:
             Starting point array of shape ``(dimensions,)``.
@@ -59,13 +56,8 @@ class UniformInitialPointGenerator(InitialPointGenerator):
     """Samples uniformly at random within the handler's bounding box.
 
     Calls ``rng.uniform(lower_bounds, upper_bounds, size=dimensions)`` on the
-    box the handler declares, which is bit-identical to the previous
-    behaviour for the box handlers every benchmark uses (NumPy broadcasts
-    identically for scalar vs array arguments to rng.uniform).
-
-    For a handler whose feasible region is *not* a box, the sample is drawn
-    from the enclosing box and then repaired, so the point is feasible before
-    any optimizer sees it.  This is a no-op for box handlers.
+    box the handler declares.  For a non-box feasible region the sample is
+    drawn from the enclosing box and then repaired.
     """
 
     def generate_point(
@@ -82,14 +74,12 @@ class UniformInitialPointGenerator(InitialPointGenerator):
 
 
 class UniformBoxInitialPointGenerator(InitialPointGenerator):
-    """Samples uniformly from a *fixed* box, ignoring the feasible region.
+    """Samples uniformly from a fixed box, ignoring the feasible region.
 
-    Useful when the initial-mean region must differ from the feasible box —
-    e.g. reproducing a reference that draws the starting mean from
-    ``U[-100, 100]^d`` regardless of an asymmetric feasible box such as
-    ``[-180, 20]^d``. The ``constraint_handler`` passed to ``generate_point``
-    is intentionally ignored in favour of the fixed box supplied at
-    construction, so the point it returns may be infeasible by design.
+    For when the initial-mean region must differ from the feasible box, e.g.
+    reproducing a reference that draws the starting mean from
+    ``U[-100, 100]^d`` over an asymmetric feasible box such as
+    ``[-180, 20]^d``.  The returned point may be infeasible.
 
     Args:
         lower: Lower corner of the sampling box (broadcast over dimensions).
@@ -106,18 +96,15 @@ class UniformBoxInitialPointGenerator(InitialPointGenerator):
         dimensions: int,
         constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        del constraint_handler  # intentionally ignored — see the class docstring
+        del constraint_handler  # ignored; see the class docstring
         return rng.uniform(self.lower, self.upper, size=dimensions)
 
 
 class FixedInitialPointGenerator(InitialPointGenerator):
     """Always returns the same pre-supplied point.
 
-    The point is returned verbatim, *without* a feasibility check: pinning
-    ``x0`` is usually done to reproduce an exact trajectory, and silently
-    moving it would defeat that.  Each optimizer repairs its own starting
-    point, so an infeasible fixed point is still handled — just visibly, by
-    the handler, at the start of the run.
+    The point is returned verbatim, without a feasibility check.  Each
+    optimizer repairs its own starting point.
 
     Args:
         point: The fixed starting point to return.  A copy is returned on
@@ -133,7 +120,7 @@ class FixedInitialPointGenerator(InitialPointGenerator):
         dimensions: int,
         constraint_handler: ConstraintHandler,
     ) -> NDArray[np.float64]:
-        del rng, dimensions, constraint_handler  # fixed point — nothing to consult
+        del rng, dimensions, constraint_handler
         return self.point.copy()
 
 

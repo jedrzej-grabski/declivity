@@ -1,21 +1,18 @@
-"""Declarative diagnostic plotting — single-run entry points.
+"""Declarative diagnostic plotting: single-run entry points.
 
 Two functions, both thin shells over the shared renderer in
 :py:mod:`declivity.plotting.unified`:
 
 - :py:func:`plot_metrics` — every (or selected) panel for a single run.
-  Just :func:`~declivity.plotting.unified.plot_panels` handed one
-  ``OptimizationResult``.
 - :py:func:`plot_comparison` — one panel per semantic key, every algorithm
   overlaid on the same axes.
 
 Both consume ``OptimizationResult``s and render through the same
-``draw_groups`` / ``draw_single_run`` core that the benchmark plotters use,
-so a :class:`~declivity.plotting.panel.Panel` registered once drives single runs,
-overlays, and multi-seed bands alike. Adding a new panel is one line in
+``draw_groups`` / ``draw_single_run`` core the benchmark plotters use.
+Adding a new panel is one line in
 :py:mod:`declivity.plotting.standard_panels`.
 
-(``plot_evaluation_bars`` lives here too — a non-panel summary bar chart.)
+``plot_evaluation_bars``, a non-panel summary bar chart, also lives here.
 """
 
 from collections.abc import Sequence

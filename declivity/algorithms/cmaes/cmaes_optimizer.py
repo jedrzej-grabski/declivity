@@ -1,24 +1,20 @@
 """Framework-native CMA-ES optimizer.
 
-This file owns the full algorithm — mean / sigma / covariance / evolution
-paths / eigendecomposition all live on the optimizer instance and step
-forward inside ``optimize()`` using the framework's primitives:
+Mean, sigma, covariance, evolution paths and eigendecomposition all live on
+the optimizer instance and step forward inside ``optimize()`` using the
+framework's primitives:
 
-* :class:`~declivity.utils.constraint_handlers.ConstraintHandler` — feasibility
-  test and per-point repair.
-* :class:`~declivity.utils.repair_strategies.RepairStrategy` — population-level
-  repair policy applied to every generation's λ candidates.
+* :class:`~declivity.utils.constraint_handlers.ConstraintHandler` —
+  feasibility test and per-point repair.
+* :class:`~declivity.utils.repair_strategies.RepairStrategy` —
+  population-level repair applied to every generation's λ candidates.
 * :class:`~declivity.utils.population_initializers.PopulationInitializer` —
-  seeds the iteration-0 population from ``N(m, σ²I)`` (matches the
-  algorithm's natural starting distribution but routes through the
-  swappable factory the rest of the framework uses).
-* ``BaseOptimizer.evaluate`` + caller-owned ``rng``.
+  seeds the iteration-0 population from ``N(m, σ²I)``.
+* ``BaseOptimizer.evaluate`` plus a caller-owned ``rng``.
 
-The previous version delegated to ``cmaes_reference.CMA``; that port now
-exists only as a historical oracle under
+``cmaes_reference.CMA`` is retained as the oracle in
 ``experiments/cross_validation/cmaes_vs_reference.py``.  See
-``docs/cmaes_framework_integration.md`` for the migration story and the
-empirical evidence that convergence behaviour is preserved.
+``docs/cmaes_framework_integration.md``.
 """
 
 from __future__ import annotations
@@ -61,22 +57,18 @@ _SIGMA_MAX = 1e32
 class CMAESState:
     """Immutable snapshot of a CMA-ES optimizer's evolvable state.
 
-    Captures everything the algorithm needs to resume exactly where it
-    left off: the sampling distribution (``mean``, ``sigma``,
-    ``covariance``), both evolution paths, the generation counter, and the
-    function-value history that drives the ``tolfun`` termination test.
+    Holds the sampling distribution (``mean``, ``sigma``, ``covariance``),
+    both evolution paths, the generation counter, and the function-value
+    history that drives the ``tolfun`` termination test.
 
     Obtain one with :meth:`CMAESOptimizer.get_state`; restart from it with
-    ``CMAESOptimizer(..., initial_state=state)``. Resuming with the *same*
-    RNG (pass the same ``np.random.Generator`` as ``seed``) reproduces a
-    single continuous run bit-for-bit — the property the interleaved
-    CMA-ES + L-BFGS-B scheme relies on so its CMA-ES backbone matches a
-    standalone CMA-ES run with the same seed.
+    ``CMAESOptimizer(..., initial_state=state)``.  Resuming with the same RNG
+    (pass the same ``np.random.Generator`` as ``seed``) reproduces a single
+    continuous run bit-for-bit.
 
-    Note that config-derived constants (weights, learning rates, ...) are
-    *not* part of the state: they are recomputed from the dimension and
-    population size, which must match between the snapshot and the
-    optimizer it is restored into.
+    Config-derived constants (weights, learning rates, ...) are not part of
+    the state; they are recomputed from the dimension and population size,
+    which must match between the snapshot and the optimizer restoring it.
     """
 
     mean: NDArray[np.float64]
@@ -87,11 +79,10 @@ class CMAESState:
     generation: int
     funhist_values: NDArray[np.float64]
 
-    # Cached eigendecomposition of ``covariance`` (``C = B diag(D**2) B.T``).
-    # Restoring it lets a resumed run reuse the exact same ``(B, D)`` instead
-    # of re-running ``eigh`` on a reconstructed ``C`` — LAPACK would otherwise
-    # return eigenvectors that differ in the last few bits, drifting the run.
-    # ``None`` when no decomposition has been computed yet.
+    # Cached eigendecomposition of ``covariance`` (``C = B diag(D**2) B.T``),
+    # so a resumed run reuses the same ``(B, D)`` rather than re-running
+    # ``eigh``, which differs in the last bits.  ``None`` before the first
+    # decomposition.
     eigenvectors: NDArray[np.float64] | None = None
     eigenvalues_sqrt: NDArray[np.float64] | None = None
 
@@ -99,19 +90,16 @@ class CMAESState:
 @final
 @register_optimizer(AlgorithmChoice.CMAES, CMAESConfig)
 class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
-    """Hansen-style active CMA-ES, framework-native.
+    """Hansen-style active CMA-ES.
 
-    Constraint handling is fully delegated to the injected
-    :class:`~declivity.utils.repair_strategies.RepairStrategy` (default:
-    :class:`~declivity.utils.repair_strategies.LamarckianRepair`, which
-    routes the λ candidates through
-    :meth:`ConstraintHandler.repair_batch`).  The iteration-0
-    population is produced by the injected
+    Constraint handling is delegated to the injected
+    :class:`~declivity.utils.repair_strategies.RepairStrategy` (default
+    :class:`~declivity.utils.repair_strategies.LamarckianRepair`).  The
+    iteration-0 population comes from the injected
     :class:`~declivity.utils.population_initializers.PopulationInitializer`
-    (default: :class:`~declivity.utils.population_initializers.MeanSigmaPopulationInitializer`
-    with the resolved initial sigma, which reproduces the canonical
-    ``N(m, σ²I)`` start).  Both seams are live — swapping the defaults
-    changes the algorithm's behaviour.
+    (default
+    :class:`~declivity.utils.population_initializers.MeanSigmaPopulationInitializer`
+    with the resolved initial sigma, the canonical ``N(m, σ²I)`` start).
     """
 
     def __init__(
@@ -132,9 +120,8 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             config = CMAESConfig(dimensions=len(initial_point))
 
         # The default sigma is derived from the search range, so the handler
-        # (the authority on that range) has to exist before ``super().__init__``
-        # rather than being built inside it.  Constructing the framework default
-        # here and passing it down keeps a single handler instance for the run.
+        # must exist before ``super().__init__`` rather than being built
+        # inside it.
         if constraint_handler is None:
             constraint_handler = BoxConstraintHandler(
                 BoxStrategy.CLAMP,
@@ -143,18 +130,15 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             )
 
         # Resolve auto-sigma (config.sigma == 0.0) up-front so the default
-        # population_initializer can be constructed with the final value.
-        # The resolution stays local — the caller's config is never mutated,
-        # so one config can be reused across optimizers with different bounds.
+        # population_initializer can be constructed with the final value.  The
+        # caller's config is not mutated.
         initial_sigma = float(config.sigma)
         if initial_sigma == 0.0:
             lb_array, ub_array = constraint_handler.bounding_box(len(initial_point))
             span = ub_array - lb_array
-            # An unbounded (or half-bounded) region gives an infinite span, and
-            # ``sigma = inf`` makes generation 0 sample non-finite candidates
-            # that trip the divergence guard.  Derive the scale from the finite
-            # dimensions when there are any, else from the magnitude of the
-            # starting point.
+            # An unbounded region gives an infinite span, so derive the scale
+            # from the finite dimensions when there are any, else from the
+            # magnitude of the starting point.
             finite_span = span[np.isfinite(span)]
             if finite_span.size > 0:
                 initial_sigma = float(np.mean(finite_span) / 5.0)
@@ -182,9 +166,8 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         self._mean: NDArray[np.float64] = self.initial_point.copy()
         self._initial_sigma: float = initial_sigma
         self._sigma: float = initial_sigma
-        # config.tolx is derived from config.sigma; when auto-sigma resolved
-        # locally (config.sigma == 0.0 → config.tolx == 0.0), re-derive it
-        # from the resolved value instead of writing back into the config.
+        # config.tolx is derived from config.sigma, so with auto-sigma
+        # (config.sigma == 0.0 → config.tolx == 0.0) re-derive it here.
         self._tolx: float = (
             self.config.tolx if self.config.sigma != 0.0 else 1e-12 * initial_sigma
         )
@@ -197,17 +180,13 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         self._generation = 0
         self._funhist_values = np.full(self.config.funhist_term * 2, np.inf)
 
-        # With a restored state, generation-0 sampling must honour the
-        # restored sigma/covariance instead of the construction-time
-        # PopulationInitializer (see _generate_population).
+        # With a restored state, generation-0 sampling honours the restored
+        # sigma/covariance instead of the PopulationInitializer.
         self._restored_from_state = initial_state is not None
         if initial_state is not None:
             self._apply_state(initial_state)
 
-    # ------------------------------------------------------------------
-    # Public state — preserved for the CMA-ES → L-BFGS-B handoff and for
-    # pausing / resuming the optimizer (interleaved memetic schemes).
-    # ------------------------------------------------------------------
+    # Public state, used by the handoff runners and for pausing / resuming.
 
     def get_state(self) -> CMAESState:
         """Snapshot the evolvable state for a later :class:`CMAESState` resume."""
@@ -242,10 +221,8 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         self._p_sigma = state.evolution_path_sigma.astype(float, copy=True)
         self._generation = int(state.generation)
         self._funhist_values = state.funhist_values.astype(float, copy=True)
-        # Restore the cached eigendecomposition verbatim when present so the
-        # resumed run reuses the exact same (B, D) rather than re-deriving
-        # them from C (which drifts in the last bits). Falls back to a lazy
-        # rebuild from C when the snapshot predates any decomposition.
+        # Restore the cached eigendecomposition when present; otherwise it is
+        # rebuilt lazily from C.
         self._B = (
             None
             if state.eigenvectors is None
@@ -279,9 +256,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         C = self._C.copy()
         return _decompose(C, self._mean.copy(), min(C.shape[0], C.shape[1]))
 
-    # ------------------------------------------------------------------
     # Core algorithm.
-    # ------------------------------------------------------------------
 
     def optimize(self) -> OptimizationResult["CMAESLogData"]:
         self.evaluations = 0
@@ -293,21 +268,19 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         lambda_ = self.config.population_size
 
         while not self.should_stop(self._generation, best_fitness):
-            # ---- Generate the λ-candidate population ----------------------
+            # Generate the λ-candidate population.
             population = self._generate_population(lambda_)
             population = self.repair_strategy.repair_population(
                 population, self.constraint_handler
             )
 
-            # Divergence guard.  A run whose distribution has blown past the
-            # representable range cannot recover; report it as a termination
-            # reason rather than raising, so one bad seed in a sweep does not
-            # abort the whole benchmark.
+            # Divergence guard: a distribution past the representable range
+            # cannot recover, so terminate instead of raising.
             if not np.all(np.abs(population) < _MEAN_MAX):
                 message = "Diverged: sampled parameters exceeded the safe range."
                 break
 
-            # ---- Evaluate -----------------------------------------------
+            # Evaluate.
             fitness_values = np.empty(lambda_)
             for k in range(lambda_):
                 fitness_values[k] = self.evaluate(population[k])
@@ -315,7 +288,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                     best_fitness = float(fitness_values[k])
                     best_solution = population[k].copy()
 
-            # ---- Bookkeeping for the iteration log -----------------------
+            # Bookkeeping for the iteration log.
             worst_fitness = float(np.max(fitness_values))
             median_fitness = float(np.median(fitness_values))
             repaired_mean = self.constraint_handler.repair(self._mean)
@@ -324,10 +297,10 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
                 best_fitness = float(mean_fitness_value)
                 best_solution = repaired_mean.copy()
 
-            # ---- Update distribution -------------------------------------
+            # Update distribution.
             self._tell(population, fitness_values)
 
-            # ---- Logging --------------------------------------------------
+            # Logging.
             B, D = self._eigen_decomposition()
             eigenvalues_sorted = np.sort(D**2) if self.config.diag_eigen else None
 
@@ -366,21 +339,15 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             algorithm=AlgorithmChoice.CMAES,
         )
 
-    # ------------------------------------------------------------------
     # Sampling.
-    # ------------------------------------------------------------------
 
     def _generate_population(self, lambda_: int) -> NDArray[np.float64]:
         """Produce the λ candidates for the current generation.
 
         Iteration 0 of a fresh run routes through the injected
-        :class:`PopulationInitializer` so the initial sampling shape is
-        swappable.  Subsequent iterations — and every iteration of a run
-        restored from a :class:`CMAESState` (whose sigma/covariance must
-        be honoured even at ``generation == 0``) — sample from
-        ``N(m, σ²C)`` using the algorithm's current eigendecomposition —
-        there is no framework primitive that owns the correlated
-        covariance, so this stays internal.
+        :class:`PopulationInitializer`.  Later iterations, and every iteration
+        of a run restored from a :class:`CMAESState`, sample from ``N(m, σ²C)``
+        using the current eigendecomposition.
         """
         if self._generation == 0 and not self._restored_from_state:
             return self.population_initializer.generate_population(
@@ -425,8 +392,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
         self._generation += 1
 
-        # Stable sort by fitness — matches Python list.sort tie-breaking
-        # behaviour used by the reference.
+        # Stable sort matches the reference's tie-breaking.
         order = np.argsort(fitness_values, kind="stable")
         sorted_pop = population[order]
         sorted_fit = fitness_values[order]
@@ -438,7 +404,7 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
 
         # Eigendecomposition prior to the C update.
         B, D = self._eigen_decomposition()
-        self._B, self._D = None, None  # invalidate cache — C is about to change
+        self._B, self._D = None, None  # C is about to change
 
         weights = self.config.weights
         mu = self.config.mu
@@ -503,17 +469,12 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
             + cmu * rank_mu
         )
 
-    # ------------------------------------------------------------------
     # Termination.
-    # ------------------------------------------------------------------
 
     def _termination_reason(self) -> str | None:
-        """Return an *algorithm-internal* convergence message, or ``None``.
-
-        The shared evaluation / time / target budget is owned by the
-        injected :class:`StoppingCondition` (tested in the main-loop
-        guard); this method only reports CMA-ES-specific convergence
-        (``tolfun`` / ``tolx`` / conditioning)."""
+        """Return a CMA-ES-internal convergence message (``tolfun`` / ``tolx``
+        / conditioning), or ``None``.  The evaluation / time / target budget
+        is the injected :class:`StoppingCondition`'s job."""
         B, D = self._eigen_decomposition()
         dC = np.diag(self._C)
         sigma = self._sigma

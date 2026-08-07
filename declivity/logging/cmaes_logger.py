@@ -42,10 +42,9 @@ class CMAESLogData(PopulationLogData):
     mean_vector_norm: list[float] = field(default_factory=list)
     """Norm of mean vector"""
 
-    # NOTE: CMA-ES populates the inherited ``mean_fitness`` field with f(m) —
-    # the fitness evaluated at the distribution mean, not the population
-    # average. The "midpoint_fitness" semantic panel key in standard_panels
-    # routes here so plots can label it correctly.
+    # CMA-ES populates the inherited ``mean_fitness`` field with f(m), the
+    # fitness at the distribution mean rather than the population average.
+    # The "midpoint_fitness" panel key routes here.
 
     # Covariance matrix properties
     covariance_determinant: list[float] = field(default_factory=list)
@@ -61,8 +60,8 @@ class CMAESLogData(PopulationLogData):
     coordinate_std: list[NDArray[np.float64]] = field(default_factory=list)
     """Standard deviation in each coordinate"""
 
-    # Full covariance matrix (stored only for the final generation to avoid
-    # excessive memory usage; use covariance_matrix[-1] after optimization)
+    # Full covariance matrix, stored only for the final generation; read
+    # covariance_matrix[-1] after optimization.
     covariance_matrix: list[NDArray[np.float64]] = field(default_factory=list)
     """Full covariance matrix C (logged when diag_eigen is enabled)"""
 
@@ -158,8 +157,7 @@ class CMAESLogger(BaseLogger[CMAESLogData]):
                 self.logs.max_eigenvalue.append(float(eigenvalues[-1]))
                 self.logs.min_eigenvalue.append(float(eigenvalues[0]))
 
-        # Step-size (cheap scalar — always logged so the default Step Size
-        # panel is never blank)
+        # Step size: a cheap scalar, always logged.
         self.logs.sigma.append(sigma)
 
         # Evolution paths
@@ -185,10 +183,10 @@ class CMAESLogger(BaseLogger[CMAESLogData]):
             self.logs.coordinate_std.append(coord_std)
 
             if self.config.diag_covariance_matrix:
-                # Store every generation (expensive but allows tracking evolution)
+                # Store every generation.
                 self.logs.covariance_matrix.append(covariance_matrix.copy())
             else:
-                # Store only the latest generation to keep memory bounded
+                # Store only the latest generation.
                 if len(self.logs.covariance_matrix) > 0:
                     self.logs.covariance_matrix[-1] = covariance_matrix.copy()
                 else:

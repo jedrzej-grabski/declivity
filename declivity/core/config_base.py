@@ -11,11 +11,8 @@ Two-level hierarchy:
 L-BFGS-B inherits directly from :class:`BaseConfig`.  DES, CMA-ES, and
 MF-CMA-ES inherit from :class:`PopulationBaseConfig`.
 
-Termination is **not** a configuration concern.  When to stop is a
-modular, injected :class:`~declivity.utils.stopping_conditions.StoppingCondition`
-(the historical ``budget: int`` field was extracted into
-:class:`~declivity.utils.stopping_conditions.MaxEvaluations`), the same
-way constraint handling and repair are injected rather than configured.
+Termination is not a configuration concern: when to stop is an injected
+:class:`~declivity.utils.stopping_conditions.StoppingCondition`.
 """
 
 from dataclasses import dataclass, field

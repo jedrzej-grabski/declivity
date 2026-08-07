@@ -1,8 +1,7 @@
 """Objective-function landscape plots.
 
-These don't fit the :class:`Panel` model — they take a callable and a
-region, not a LogData. They live in their own module so the panel system
-stays focused on time-series diagnostics.
+These take a callable and a region rather than a LogData, so they live
+outside the :class:`Panel` model.
 
 Two entry points:
 

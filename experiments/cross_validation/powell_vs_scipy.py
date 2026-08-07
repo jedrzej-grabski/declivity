@@ -312,9 +312,8 @@ def plot_divergence(
 
 
 def plot_agreement_matrix(summary: pd.DataFrame, path: Path, title: str) -> None:
-    """One glanceable figure: max deviation across all seeds and iterations
-    per (function x dim) row and metric column.  All-zero cells are the
-    headline result — annotated '0 (exact)'."""
+    """Max deviation across all seeds and iterations, per (function x dim)
+    row and metric column.  All-zero cells are annotated '0 (exact)'."""
     metrics = ["max_f_rel_diff", "max_x_diff", "max_direc_diff", "max_evals_diff"]
     labels = ["|f diff| (rel)", "||x diff||", "max |direc diff|", "|evals diff|"]
 

@@ -7,17 +7,17 @@ injected :class:`~declivity.utils.population_initializers.SimplexPopulationIniti
 repaired through the injected ``ConstraintHandler`` (CLAMP == SciPy's
 bounds clipping), and the shrink step routes through the
 ``RepairStrategy`` seam.  Both implementations are deterministic given
-``x0``, so beyond "same minimum" we can demand "same trajectory": the
-*full simplex* (all n+1 vertices and their fitness values), the simplex
-extent / fitness spread (the xatol/fatol test quantities), and the
-evaluation counters should track SciPy iteration for iteration.
+``x0``, so the comparison is on the full trajectory: the full simplex
+(all n+1 vertices and their fitness values), the simplex extent / fitness
+spread (the xatol/fatol test quantities), and the evaluation counters
+should track SciPy iteration for iteration.
 
-SciPy's callback only exposes the best vertex, so this experiment reads
-the full internal state via **frame introspection**: the per-iteration
-callback walks up the call stack to the live ``_minimize_neldermead``
-frame and records ``sim`` / ``fsim`` / ``fcalls`` from its locals.  The
-oracle is the *installed, unmodified* SciPy (pinned 1.15.x — the frame
-locals are version-coupled).
+SciPy's callback only exposes the best vertex, so this experiment reads the
+full internal state by frame introspection: the per-iteration callback walks
+up the call stack to the live ``_minimize_neldermead`` frame and records
+``sim`` / ``fsim`` / ``fcalls`` from its locals.  The oracle is the
+installed, unmodified SciPy (pinned 1.15.x; the frame locals are
+version-coupled).
 
 The framework logger fires at the same boundary as SciPy's callback
 (after the operation and re-sort), so records align one-to-one by index;
@@ -29,14 +29,13 @@ Output (under ``plots/cross_validation/neldermead_vs_scipy/``):
 - ``convergence_<func>_d<dim>.png`` — best-fitness-vs-evaluations overlay
 - ``state_<func>_d<dim>.png`` — six internal-state trajectories side by side
 - ``divergence_<func>_d<dim>.png`` — per-iteration deviation (log scale),
-  overlaid with a *chaos sensitivity reference*: the same metrics for
-  scipy vs scipy started from ``x0 + 1e-12``.  Nelder-Mead trajectories
-  amplify perturbations (sharply, once a discrete accept/reject branch
-  flips), so the reference grows by orders of magnitude — which is what
-  makes the declivity-vs-scipy line sitting at *exactly zero* a strong
-  statement rather than an empty plot
-- ``agreement_matrix.png`` — one glanceable grid: max deviation across
-  all seeds and iterations per (function x dim) and metric
+  overlaid with a chaos sensitivity reference: the same metrics for scipy
+  vs scipy started from ``x0 + 1e-12``.  Nelder-Mead amplifies
+  perturbations once a discrete accept/reject branch flips, so the
+  reference grows by orders of magnitude while the declivity-vs-scipy line
+  stays at exactly zero
+- ``agreement_matrix.png`` — max deviation across all seeds and iterations
+  per (function x dim) and metric
 - ``panels_<func>_d<dim>.png`` — the framework's own diagnostic panels
   (``plot_metrics`` with ``PanelSet.ALL``) for the declivity run
 - ``summary.csv`` — one row per (function x dim x seed)
@@ -326,14 +325,11 @@ def plot_divergence(
     """Per-iteration deviation between the two implementations.
 
     The declivity-vs-scipy deviation is expected to sit at *exactly zero*
-    (bit-identical simplices); on its own that renders as an
-    uninformative flat line at the log floor.  ``chaos_reference``
-    supplies the context that makes the zero meaningful: the same
-    metrics for scipy vs scipy started from ``x0 + 1e-12``.  Nelder-Mead
-    trajectories amplify perturbations (and diverge sharply the moment a
-    discrete accept/reject branch flips), so that seed difference grows
-    by orders of magnitude — any real implementation difference would
-    show up the same way.
+    (bit-identical simplices), which on its own renders as a flat line at
+    the log floor.  ``chaos_reference`` adds the same metrics for scipy vs
+    scipy started from ``x0 + 1e-12``.  Nelder-Mead amplifies perturbations
+    once a discrete accept/reject branch flips, so that seed difference
+    grows by orders of magnitude.
     """
     diffs = compute_diffs(logs, trace)
     f_diff, sim_diff, fsim_diff, evals_diff = diffs.pop("_series")
@@ -411,9 +407,8 @@ def plot_divergence(
 
 
 def plot_agreement_matrix(summary: pd.DataFrame, path: Path, title: str) -> None:
-    """One glanceable figure: max deviation across all seeds and iterations
-    per (function x dim) row and metric column.  All-zero cells are the
-    headline result — annotated '0 (exact)'."""
+    """Max deviation across all seeds and iterations, per (function x dim)
+    row and metric column.  All-zero cells are annotated '0 (exact)'."""
     metrics = ["max_f_rel_diff", "max_sim_diff", "max_fsim_diff", "max_evals_diff"]
     labels = [
         "|f best diff| (rel)",

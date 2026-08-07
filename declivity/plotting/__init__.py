@@ -21,9 +21,8 @@ Adding a new panel: one ``PanelRegistry.register(...)`` call. See
 :py:mod:`declivity.plotting.standard_panels` for the four built-in algorithms.
 """
 
-# Importing standard_panels triggers all panel registrations as a side
-# effect. Keep this before re-exports so downstream imports see a populated
-# registry.
+# Importing standard_panels registers every panel, so it has to come before
+# the re-exports.
 from declivity.plotting import standard_panels  # noqa: F401
 from declivity.plotting.benchmark import (
     plot_benchmark_boxplot,

@@ -4,11 +4,10 @@ This experiment exercises the two seams that were wired into
 :class:`~declivity.algorithms.cmaes.CMAESOptimizer` during the framework
 integration milestone:
 
-* :class:`~declivity.utils.repair_strategies.RepairStrategy` — policy layer.
-  Default ``LamarckianRepair`` (routes each λ candidate through
-  ``ConstraintHandler.repair_batch``) vs ``IdentityRepair`` (skip
-  repair entirely — the algorithm carries possibly-infeasible
-  candidates through, exercising the policy seam end-to-end).
+* :class:`~declivity.utils.repair_strategies.RepairStrategy`: default
+  ``LamarckianRepair``, which routes each λ candidate through
+  ``ConstraintHandler.repair_batch``, versus ``IdentityRepair``, which
+  skips repair and carries possibly-infeasible candidates through.
 * :class:`~declivity.utils.population_initializers.PopulationInitializer` —
   ``MeanSigmaPopulationInitializer`` (default, samples ``N(m, σ²I)``)
   vs ``NormalPopulationInitializer`` (DES-style ``rng.normal`` around
@@ -16,22 +15,18 @@ integration milestone:
 
 Three variants are run through the standard
 :class:`~declivity.benchmarking.Benchmark` harness across five seeds and
-three problems (Sphere, Rosenbrock, Rastrigin — 10D each).  The
-expected outcome:
+three problems (Sphere, Rosenbrock, Rastrigin, 10D each).  Expected:
 
-1. ``LamarckianRepair`` (default) and ``IdentityRepair`` track each
-   other closely on bound-feasible problems, because the iteration-0
-   population stays inside the box and the optimiser keeps sampling
-   inside it — the policy choice rarely fires.
+1. ``LamarckianRepair`` (default) and ``IdentityRepair`` track each other
+   closely on bound-feasible problems, since the iteration-0 population
+   stays inside the box and the optimiser keeps sampling inside it.
 2. ``NormalPopulationInitializer`` produces a wider iteration-0
-   distribution, leaving a visible trajectory difference on
-   multimodal problems.
+   distribution, leaving a visible trajectory difference on multimodal
+   problems.
 
-This script also exercises the
-``repair_strategy`` / ``population_initializer`` fields on
-:class:`~declivity.benchmarking.SingleAlgorithm` — the canonical way to swap
-evolutionary components through the standard benchmarking surface
-without writing a custom :class:`BenchmarkAlgorithm`.
+The variants are configured through the ``repair_strategy`` /
+``population_initializer`` fields on
+:class:`~declivity.benchmarking.SingleAlgorithm`.
 
 Output goes to ``plots/cross_validation/cmaes_components/``.
 """

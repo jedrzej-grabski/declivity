@@ -61,18 +61,13 @@ def calculate_ft(
     Returns:
         New Ft value
     """
-    # Reshape buffer to get individual steps
     steps = steps_buffer.reshape(-1, n_dim)
-    steps = steps[-path_length:]  # Take last path_length steps
+    steps = steps[-path_length:]
 
-    # Calculate direct path
     direct_path = np.sum(steps, axis=0)
     direct_path_norm = norm(direct_path)
-
-    # Calculate total path
     total_path = np.sum([norm(step) for step in steps])
 
-    # Calculate new Ft
     return current_ft * math.exp(
         1
         / (math.sqrt(n_dim) + 1)
@@ -84,19 +79,15 @@ def delete_inf_nan(x: NDArray[np.float64]) -> NDArray[np.float64]:
     """
     Replace any NaN or Inf values with a large finite value.
 
-    Mirror of ``deleteInfsNaNs`` (DES.R lines 413–417), which sends *every*
-    non-finite value to ``+DBL_MAX`` — including ``-inf``.
+    Mirror of ``deleteInfsNaNs`` (DES.R lines 413–417), which sends every
+    non-finite value to ``+DBL_MAX``, including ``-inf``.
 
-    That makes it deliberately different from
-    ``BoxConstraintHandler._remove_inf_nan``, which is direction-preserving
-    (``-inf`` maps to ``DBL_MIN``) so that a subsequent clip lands each value on
-    the *correct* bound.  Do not "unify" the two: DES calls this on its raw
-    population before repair purely for reference parity — its correctness is
-    established by cross-validation against DES.R — and under this version a
-    diverged ``-inf`` coordinate ends up clamped to the *upper* bound, which is
-    what R does.  This is float hygiene for the sampling math (an ``inf`` in the
-    population poisons ``pop_mean`` and every mean that follows), not a
-    feasibility decision, so it is not the constraint handler's job.
+    Distinct from ``BoxConstraintHandler._remove_inf_nan``, which is
+    direction-preserving (``-inf`` maps to ``DBL_MIN``) so a subsequent clip
+    lands each value on the correct bound.  DES calls this on its raw
+    population before repair for parity with DES.R, where a diverged
+    ``-inf`` coordinate ends up clamped to the upper bound.  It is float
+    hygiene for the sampling math, not a feasibility decision.
 
     Args:
         x: Array that may contain NaN or Inf values

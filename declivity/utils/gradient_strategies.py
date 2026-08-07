@@ -1,25 +1,18 @@
 """
 Gradient-computation strategies for derivative-based optimisers.
 
-Each concrete class encapsulates how the gradient ``∇f(x)`` is
-approximated from black-box function evaluations, making the choice
-pluggable without touching the optimiser body.  Optimisers receive a
-strategy at construction time and call its
-:meth:`~GradientStrategy.compute` method whenever they need a gradient
-— exactly the same pattern as :class:`~declivity.utils.repair_strategies.RepairStrategy`
-and :class:`~declivity.utils.population_initializers.PopulationInitializer`.
+Each concrete class encapsulates how the gradient ``∇f(x)`` is approximated
+from black-box function evaluations.  Optimisers receive a strategy at
+construction time and call its :meth:`~GradientStrategy.compute` method
+whenever they need a gradient.
 
-Hierarchy
----------
-- :class:`GradientStrategy` — abstract base (single abstract method)
+- :class:`GradientStrategy` — abstract base
 - :class:`ForwardFD` — one-sided 2-point difference, ``N+1`` evals, ``O(ε)`` error
 - :class:`CentralFD` — symmetric 2-point difference, ``2N`` evals, ``O(ε²)`` error
 
-The strategy accepts a *callable* ``f`` rather than a reference to the
-owning optimiser so that evaluation-count bookkeeping stays a concern
-of the caller: pass in the optimiser's ``evaluate`` method, and every
-function evaluation made by the strategy will increment the budget
-counter naturally.
+The strategy takes a callable ``f`` rather than a reference to the owning
+optimiser, so passing the optimiser's ``evaluate`` method keeps
+evaluation-count bookkeeping with the caller.
 """
 
 from __future__ import annotations
@@ -57,10 +50,9 @@ class GradientStrategy(ABC):
         Parameters
         ----------
         f:
-            Evaluator that returns the (penalised) objective value at a
-            single point.  Strategies must route every required
-            evaluation through this callable so that evaluation-budget
-            accounting stays in the caller's hands.
+            Evaluator returning the (penalised) objective value at a single
+            point.  Strategies route every evaluation through it so the
+            caller keeps the evaluation-budget accounting.
         x:
             Point at which the gradient is sought, shape ``(dim,)``.
         eps:
@@ -75,14 +67,10 @@ class GradientStrategy(ABC):
         constraint_handler:
             Optional
             :class:`~declivity.utils.constraint_handlers.ConstraintHandler`
-            defining the feasible region.  When supplied, a perturbed
-            point the handler rejects switches that coordinate to a
-            one-sided difference on the feasible side (standard practice
-            for constrained solvers whose iterates sit exactly on a
-            bound).  ``None`` — or probes the handler accepts —
-            reproduces the unconstrained scheme exactly.  The handler is
-            the only source of feasibility here; the strategy never
-            inspects bound arrays itself.
+            defining the feasible region.  When supplied, a perturbed point
+            the handler rejects switches that coordinate to a one-sided
+            difference on the feasible side.  ``None`` reproduces the
+            unconstrained scheme.
 
         Returns
         -------
@@ -95,15 +83,13 @@ class GradientStrategy(ABC):
 class ForwardFD(GradientStrategy):
     """One-sided 2-point finite difference.
 
-    Computes ``gᵢ = (f(x + ε·eᵢ) − f(x)) / ε`` for each coordinate
-    ``i``.  Total cost: ``N + 1`` evaluations (or ``N`` if ``f(x)`` is
-    supplied via ``f_at_x``).  Truncation error is ``O(ε)`` from the
-    Taylor expansion ``f(x+ε) = f(x) + ε·f'(x) + O(ε²)``.
+    Computes ``gᵢ = (f(x + ε·eᵢ) − f(x)) / ε`` for each coordinate ``i``.
+    Costs ``N + 1`` evaluations, or ``N`` when ``f(x)`` is supplied via
+    ``f_at_x``.  Truncation error is ``O(ε)``.
 
-    Cheaper than central FD but less accurate near a stationary point,
-    where central FD's symmetric cancellation of even-order terms wins.
-    This is scipy's default for ``scipy.optimize.minimize`` when no
-    analytical gradient is supplied.
+    Cheaper than central FD but less accurate near a stationary point.  This
+    is scipy's default for ``scipy.optimize.minimize`` without an analytical
+    gradient.
     """
 
     def compute(
@@ -127,9 +113,7 @@ class ForwardFD(GradientStrategy):
                     backward = x.copy()
                     backward[i] -= eps
                     if constraint_handler.is_feasible(backward):
-                        # Forward probe leaves the feasible region:
-                        # difference backward instead (one-sided on the
-                        # feasible side).
+                        # Forward probe is infeasible: difference backward.
                         step = -eps
             x_probe = x.copy()
             x_probe[i] += step
@@ -140,15 +124,12 @@ class ForwardFD(GradientStrategy):
 class CentralFD(GradientStrategy):
     """Symmetric 2-point finite difference (framework default).
 
-    Computes ``gᵢ = (f(x + ε·eᵢ) − f(x − ε·eᵢ)) / (2ε)`` for each
-    coordinate ``i``.  Total cost: ``2N`` evaluations.  Truncation
-    error is ``O(ε²)`` because odd-order terms of the Taylor expansion
-    cancel pairwise.
+    Computes ``gᵢ = (f(x + ε·eᵢ) − f(x − ε·eᵢ)) / (2ε)`` for each coordinate
+    ``i``.  Costs ``2N`` evaluations; truncation error is ``O(ε²)`` because
+    odd-order Taylor terms cancel pairwise.
 
-    Twice as expensive per gradient as :class:`ForwardFD` but
-    substantially more accurate, particularly in the late phase of
-    convergence when ``‖∇f(x)‖`` is small and forward-FD truncation
-    becomes the dominant error.
+    Twice as expensive per gradient as :class:`ForwardFD` but more accurate,
+    particularly late in convergence when ``‖∇f(x)‖`` is small.
     """
 
     def compute(
@@ -172,12 +153,10 @@ class CentralFD(GradientStrategy):
                 forward_ok = constraint_handler.is_feasible(x_forward)
                 backward_ok = constraint_handler.is_feasible(x_backward)
             if forward_ok == backward_ok:
-                # Both probes feasible: symmetric difference.  (Also the
-                # degenerate fallback when neither side fits.)
+                # Both probes feasible, or neither: symmetric difference.
                 gradient[i] = (f(x_forward) - f(x_backward)) / (2.0 * eps)
             elif forward_ok:
-                # Backward probe leaves the feasible region: one-sided
-                # forward, anchored on the (lazily evaluated) centre value.
+                # Backward probe is infeasible: one-sided forward.
                 if f_at_x is None:
                     f_at_x = f(x)
                 gradient[i] = (f(x_forward) - f_at_x) / eps
@@ -191,13 +170,10 @@ class CentralFD(GradientStrategy):
 class _RayRestrictedHandler(ConstraintHandler):
     """The feasible region seen by the 1-D restriction ``phi(t) = f(x + t*d)``.
 
-    A :class:`GradientStrategy` asks its handler whether a *perturbed point*
-    is feasible.  When the strategy is differentiating along a ray, the point
-    it perturbs is the scalar ``t``, not the vector it maps to — so the real
-    handler cannot be passed straight through.  This adapter translates each
-    feasibility question back into the full space and forwards it, which keeps
-    the feasible region the run's *actual* handler's decision rather than a
-    box re-derived at the call site.
+    When a strategy differentiates along a ray it perturbs the scalar ``t``,
+    not the vector it maps to, so the real handler cannot be passed straight
+    through.  This adapter maps each feasibility question back into the full
+    space and forwards it.
     """
 
     def __init__(
@@ -233,23 +209,16 @@ def directional_derivative(
 ) -> float:
     """Approximate ``phi'(0)`` for ``phi(t) = f(x + t * direction)``.
 
-    The ``phi'(alpha)`` a :class:`~declivity.utils.line_search.gradient.GradientLineSearch`
-    needs, obtained by handing the *same injected*
-    :class:`GradientStrategy` the 1-D restriction of the objective along the
-    ray.  Routing it through the strategy is what keeps a single injected
-    component in charge of *all* finite differencing in a run: differencing
-    ``∇f`` with central differences while the line search silently used its own
-    hardcoded scheme would make the ``gradient_strategy=`` seam only half live.
+    The ``phi'(alpha)`` a
+    :class:`~declivity.utils.line_search.gradient.GradientLineSearch` needs,
+    obtained by handing the same injected :class:`GradientStrategy` the 1-D
+    restriction of the objective along the ray.
 
-    ``constraint_handler`` is wrapped in a :class:`_RayRestrictedHandler`, so a
-    probe that would leave the feasible region switches that difference to the
-    feasible side exactly as it does for a coordinate gradient — relevant
-    because a line search is allowed to land *on* the boundary
-    (``max_feasible_step``), which puts the outward probe outside it.
+    ``constraint_handler`` is wrapped in a :class:`_RayRestrictedHandler`, so
+    an infeasible probe switches that difference to the feasible side as it
+    does for a coordinate gradient.
 
-    With ``CentralFD`` (the framework default) and ``f_at_x`` supplied this
-    costs the same two evaluations as a hand-rolled central difference, in the
-    same order.
+    With ``CentralFD`` and ``f_at_x`` supplied this costs two evaluations.
     """
     ray_handler = (
         None
@@ -290,5 +259,4 @@ class GradientStrategyType(Enum):
             return ForwardFD()
         elif self is GradientStrategyType.CENTRAL_FD:
             return CentralFD()
-        # Exhaustive match — new members must extend this method.
         raise NotImplementedError(f"No build() implementation for {self!r}")

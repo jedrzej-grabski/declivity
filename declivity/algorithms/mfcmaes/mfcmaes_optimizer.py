@@ -109,23 +109,18 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
     ) -> NDArray[np.float64]:
         """The reference's ``pen`` multiplier for each column of *samples*.
 
-        MF-CMA-ES scales raw fitness by ``1 + <squared infeasibility>`` (R lines
-        232–233), so an out-of-bounds sample loses selection pressure in
-        proportion to how far out it is.  "How far out" is a feasibility
-        question, so it goes to the handler's
+        MF-CMA-ES scales raw fitness by ``1 + <squared infeasibility>`` (R
+        lines 232–233), taking the infeasibility from the handler's
         :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.feasibility_distance`.
 
-        For the default CLAMP box that is ``sum of squared bound violations`` —
-        identical to the reference's ``colSums((arx - vx)^2)``, since ``vx`` is
-        the clamped image there.  Computing it from ``arx - vx`` instead, as
-        this used to, silently breaks for any handler whose repair is not a
-        clamp: under ``BOUNCE_BACK`` the difference is a *reflection* distance
-        (large for a point barely out of bounds), and under a repair-free
-        penalty handler it is zero no matter how infeasible the sample is.
+        For the default CLAMP box that is the sum of squared bound
+        violations, identical to the reference's ``colSums((arx - vx)^2)``.
+        Deriving it from ``arx - vx`` would instead give a reflection
+        distance under ``BOUNCE_BACK``, and zero under a penalty-only
+        handler.
 
-        Non-finite penalties are pinned exactly as the reference does
-        (``pen[!is.finite(pen)] <- .Machine$double.xmax / 2``), which also
-        covers a diverged sample whose distance overflows.
+        Non-finite penalties are pinned as the reference does
+        (``pen[!is.finite(pen)] <- .Machine$double.xmax / 2``).
         """
         penalty = np.array(
             [
@@ -154,27 +149,22 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         return int(np.sum(~self._feasible_mask(samples)))
 
     def _generate_population(self, generation: int) -> NDArray[np.float64]:
-        # Get decay factors for current generation.  Match the reference
-        # (R lines 136–138): always reverse the FULL window-length table
-        # and cyclically shift by ``generation - 1``; before the archive
-        # fills, its zero columns absorb the meaningless decay entries.
+        # Decay factors for the current generation (R lines 136–138): reverse
+        # the full window-length table and cyclically shift by
+        # ``generation - 1``.  Before the archive fills, its zero columns
+        # absorb the unused decay entries.
         decay = self.decay_table[::-1].copy()  # length = window
         decay = self._shift_array(decay, generation - 1)
 
-        # decay index of archive column c is ``c // mu`` (its generation
-        # slot); weight index is ``c % mu`` (its selection rank) — the
-        # d_history layout is slot-major (see :meth:`_d_range`), so
-        # ``np.tile`` (not the reference's ``np.repeat``, which pairs the
-        # weight by ``c // window``) gives each column sqrt(weight of its
-        # rank).  Identical numerically under the uniform weights both
-        # implementations use.
+        # Archive column c has decay index ``c // mu`` (its generation slot)
+        # and weight index ``c % mu`` (its selection rank).  d_history is
+        # slot-major (see :meth:`_d_range`), so ``np.tile`` gives each column
+        # sqrt(weight of its rank).
         decay_rep = np.repeat(decay, self.config.mu)  # length = window * mu
         w = np.tile(np.sqrt(self.config.weights), self.config.window)
 
-        # Late-iter decay-table underflow makes the matmul multiply
-        # denormalised numbers — numpy reports spurious "divide by
-        # zero" / "invalid" / "overflow" warnings even though the
-        # accumulated result is mathematically well-defined.
+        # Late-iteration decay-table underflow makes the matmul multiply
+        # denormalised numbers, which raises spurious numpy warnings.
         with np.errstate(
             divide="ignore", invalid="ignore", over="ignore", under="ignore"
         ):
@@ -242,9 +232,7 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             [self.evaluate(initial_vx[:, i]) for i in range(initial_vx.shape[1])]
         )
         # ``arfitness = raw * pen`` (R lines 163, 179).  Penalty is the
-        # quadratic distance from the unclamped sample to its repaired
-        # image, which is zero for in-bounds points and grows
-        # quadratically with the violation otherwise.
+        # quadratic distance from the unclamped sample to its repaired image.
         initial_fitness = initial_raw * initial_pen
 
         arindex = np.argsort(initial_fitness)
@@ -266,10 +254,9 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         p_idx = self._p_index(1)
         self.p_history[:, p_idx] = self.pc
 
-        # Track the best raw-fitness individual among in-bounds samples
-        # only — R lines 181–186.  Penalised fitness wins selection, but
-        # the reported ``best_fit`` is the un-penalised value among the
-        # feasible subset.
+        # Track the best raw-fitness individual among in-bounds samples only
+        # (R lines 181–186): penalised fitness wins selection, but the
+        # reported ``best_fit`` is un-penalised.
         valid_mask = self._feasible_mask(initial_arx)
         if np.any(valid_mask):
             valid_raw = initial_raw[valid_mask]
@@ -298,8 +285,8 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
             mean_vector=self.mean,
         )
 
-        # Same algorithm-internal ``tolfun`` convergence test as the main
-        # loop (see below) — the reference applies it on iteration 1 too.
+        # Same ``tolfun`` test as the main loop; the reference applies it on
+        # iteration 1 too.
         if float(initial_fitness[arindex[0]]) <= self.config.tolfun:
             message = "Target fitness reached."
 
@@ -369,18 +356,14 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
                 mean_vector=self.mean,
             )
 
-            # Match R: ``terminate.stopfitness`` checks the best penalised
-            # fitness from this generation against ``stopfitness``.  The
-            # shared evaluation / time / target budget is owned by the
-            # injected stopping condition (the main-loop guard above); this
-            # is the algorithm-internal ``tolfun`` convergence test only.
+            # R's ``terminate.stopfitness``: the best penalised fitness of
+            # this generation against ``stopfitness``.
             if float(fitness_values[arindex[0]]) <= self.config.tolfun:
                 message = "Target fitness reached."
                 break
 
-            # R-DES-style "flatland escape": when the best and the
-            # ⌊λ/2⌋-th individual tie, the population has collapsed onto
-            # a flat patch — bump sigma to escape (R lines 232–238).
+            # Flatland escape: when the best and the ⌊λ/2⌋-th individual tie,
+            # bump sigma (R lines 232–238).
             if self.config.do_flatland_escape:
                 cmp_idx = min(
                     1 + self.config.population_size // 2,
@@ -433,16 +416,14 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
     def _update_sigma_ppmf(
         self, vx: NDArray[np.float64], fitness_values: NDArray[np.float64]
     ) -> None:
-        """
-        Update step size using PPMF rule.
-        This matches the R code exactly.
-        If use_ppmf is False, sigma remains constant.
+        """Update the step size with the PPMF rule.
+
+        With ``use_ppmf`` disabled sigma stays constant.
         """
         if not self.config.use_ppmf:
-            # Keep sigma constant.  The reference's ``sigma_updater =
-            # "identity"`` makes no midpoint call, so spend no evaluation
-            # here either — log NaN for the midpoint-derived fields to
-            # keep the diagnostic series aligned.
+            # The reference's ``sigma_updater = "identity"`` makes no midpoint
+            # call, so spend no evaluation here; log NaN for the
+            # midpoint-derived fields to keep the diagnostic series aligned.
             self.midpoint_fitness = float("nan")
             self.p_succ = float("nan")
             return
@@ -456,11 +437,8 @@ class MFCMAESOptimizer(PopulationOptimizer["MFCMAESLogData", MFCMAESConfig]):
         num_successes = np.sum(fitness_values < self.prev_midpoint_fitness)
         self.p_succ = num_successes / self.config.population_size
 
-        # PPMF update — matches sigma_updaters.R lines 54–67.  The R
-        # source multiplies the exponent by ``damps_ppmf``; an earlier
-        # version of this file divided by it, which damped the update
-        # by a factor of ``damps_ppmf**2`` per iteration and shifted the
-        # whole sigma trajectory.
+        # PPMF update (sigma_updaters.R lines 54–67): the exponent is
+        # multiplied by ``damps_ppmf``.
         self.sigma = self.sigma * np.exp(
             self.config.damps_ppmf
             * (self.p_succ - self.config.p_target_ppmf)

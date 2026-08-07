@@ -1,20 +1,17 @@
 """Enums for the declarative plotting API.
 
-Every enum here subclasses :class:`~enum.StrEnum`, so an enum value
-*is* its string representation::
+Every enum here subclasses :class:`~enum.StrEnum`, so an enum value is its
+string representation::
 
     PanelKey.CONVERGENCE == "convergence"        # True
     str(PanelKey.CONVERGENCE) == "convergence"   # True
-    list(PanelKey) == [...]                       # iterable for introspection
 
-That means existing call sites that pass raw strings (``panels=["convergence"]``)
-keep working unchanged, while new code can use the enum (``panels=[PanelKey.CONVERGENCE]``)
-to get IDE autocomplete and refactor safety.
+Call sites can pass either raw strings (``panels=["convergence"]``) or the
+enum (``panels=[PanelKey.CONVERGENCE]``).
 
-The enums cover the *fixed vocabulary* the framework exposes — panel
-semantics, axis directions, scale modes, line styles. Free-form things
-(LogData field names, plot titles, hex colors) remain plain strings
-because the framework can't enumerate them up front.
+The enums cover the fixed vocabulary the framework exposes: panel semantics,
+axis directions, scale modes, line styles.  Free-form values (LogData field
+names, plot titles, hex colors) stay plain strings.
 """
 
 from enum import StrEnum

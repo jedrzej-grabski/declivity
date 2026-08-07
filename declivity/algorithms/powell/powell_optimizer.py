@@ -22,57 +22,15 @@ if TYPE_CHECKING:
 class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
     """Powell's method — derivative-free conjugate-direction minimization.
 
-    Single-point method: inherits :class:`BaseOptimizer` directly, like
-    L-BFGS-B.  The direction set starts as the identity (coordinate
-    descent) unless ``initial_directions`` overrides it, and evolves via
-    Powell's replacement heuristic.
+    The direction set starts as the identity unless ``initial_directions``
+    overrides it, and evolves via Powell's replacement heuristic.
 
-    Constraint handling
-    -------------------
-    The injected
-    :class:`~declivity.utils.constraint_handlers.ConstraintHandler` owns the
-    whole feasible region, through three of its hooks:
-
-    * :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.feasible_step_interval`
-      — the handler decides how far the line search may travel along each
-      direction.  This is Powell's primary constraint mechanism, and the one
-      the default box handler uses.
-    * :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.repair`
-      — projects the initial point, and, for handlers that return ``None``
-      from ``feasible_step_interval``, every point the line search evaluates
-      or accepts.
-    * :meth:`~declivity.utils.constraint_handlers.ConstraintHandler.penalty`
-      — applied to every evaluation by :meth:`BaseOptimizer.evaluate`, for
-      soft constraints.
-
-    Which of the first two a custom handler should offer depends on the
-    *shape* of its feasible set, and the answer is not "always the interval":
-
-    * **Polytopes** (boxes, half-spaces, linear constraints) — implement the
-      interval.  Their boundary contains line segments, so a point on the
-      boundary still has feasible directions to move along, and confining the
-      search beats repairing: a repaired point is a *different* point from the
-      one the line search asked for, and the direction-replacement heuristic
-      then reasons about a step Powell never took.
-    * **Curved sets** (balls, ellipsoids, anything strictly convex) — return
-      ``None`` and rely on repair.  Every straight ray leaving a point *on* a
-      curved boundary is immediately infeasible, so the interval degenerates to
-      ``{0}`` and Powell stalls at the first boundary point it reaches.
-      Projection instead lets it slide along the boundary.  Measured on
-      ``min ||x - 3·1||²`` over the unit ball in 4-D (optimum ``f = 25`` at
-      ``x = 0.5·1``): the interval-aware handler traps near ``(1,0,0,0)`` at
-      ``f ≈ 30.9``, while the repair-only handler reaches ``f = 25.0``.
-
-    Both regimes keep every evaluated point feasible; they differ in how well
-    Powell can move once it is on the boundary.
-
-    With the default :class:`BoxConstraintHandler` the interval reproduces
-    SciPy's ``_line_for_search`` exactly, so the bounded trajectory stays
-    bit-identical (``experiments/cross_validation/powell_vs_scipy.py``).  Note
-    that no repair happens on that path *by design*: at the interval endpoint
-    ``x + alpha_max * d`` can land a rounding error outside the bound, and
-    clipping it there perturbs the run — the interval, not the clip, is what
-    keeps Powell feasible.
+    Constraints come from the injected
+    :class:`~declivity.utils.constraint_handlers.ConstraintHandler`.  When it
+    bounds a ray via ``feasible_step_interval`` the line search is confined to
+    that interval; when it returns ``None`` the search runs unconstrained and
+    every point is passed through ``repair``.  ``penalty`` applies to every
+    evaluation in either case.
     """
 
     def __init__(
@@ -111,10 +69,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                 raise ValueError(
                     "Pass either initial_directions or initial_geometry, not both."
                 )
-            # principal_directions() returns eigenvectors as COLUMNS; Powell
-            # stores one search direction per ROW, so transpose. Seeding the
-            # direction set with the CMA-ES covariance eigenvectors un-rotates
-            # coordinate descent onto the landscape's principal axes.
+            # principal_directions() returns eigenvectors as columns; Powell
+            # stores one direction per row.
             initial_directions = initial_geometry.principal_directions().T
 
         if initial_directions is None:
@@ -143,22 +99,12 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         """Minimize the objective along ``direction`` from ``x``.
 
         Returns ``(f_min, x_new, step_vector)`` where
-        ``step_vector = alpha * direction`` — the same contract as
-        SciPy's ``_linesearch_powell``.  A zero direction is a no-op
-        that reuses ``fval`` without spending evaluations.
+        ``step_vector = alpha * direction``.  A zero direction is a no-op that
+        reuses ``fval`` without spending evaluations.
 
-        Two constraint regimes, decided by the injected handler:
-
-        * The handler bounds the ray (every box handler does) — the search is
-          confined to that interval and every point it visits is feasible by
-          construction, so nothing is repaired.  This is SciPy's scheme, and
-          keeping repair *out* of it is what preserves the bit-identical
-          trajectory: at the interval endpoint ``x + alpha_max * d`` can land a
-          rounding error outside the bound, and clipping it there perturbs the
-          whole run.
-        * The handler cannot describe the ray (``None``) — the search runs
-          unconstrained and every evaluated and accepted point is projected
-          with :meth:`ConstraintHandler.repair`.
+        When the handler bounds the ray the search is confined to that
+        interval and nothing is repaired; when it returns ``None`` the search
+        runs unconstrained and every point is passed through ``repair``.
         """
         if not np.any(direction):
             return fval, x, direction
@@ -200,11 +146,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         n = self.dimensions
 
         x = self.initial_point.copy()
-        # SciPy clips an out-of-bounds initial guess into the box (with a
-        # warning) before the first evaluation; feasible starts are
-        # untouched, keeping trajectories byte-identical.  The projection
-        # itself goes through the injected handler, whose default CLAMP
-        # strategy *is* the clip SciPy performs.
+        # An out-of-bounds initial guess is projected (with a warning) before
+        # the first evaluation; feasible starts are untouched.
         if not self.constraint_handler.is_feasible(x):
             warnings.warn(
                 "Initial guess is not within the specified bounds",
@@ -220,8 +163,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
 
         iteration = 0
         termination_message = None
-        # Whether the direction set changed at the end of the *previous*
-        # iteration
+        # Whether the direction set changed at the end of the previous
+        # iteration.
         direction_replaced = False
 
         while not self.should_stop(iteration, best_fitness):
@@ -278,11 +221,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     f"ftol bound {decrease_bound:.2e}"
                 )
                 break
-            # Budget check placed exactly where SciPy tests maxfun/maxiter:
-            # after the ftol test, before the extrapolated point spends
-            # another evaluation.  ``termination_message`` stays None so the
-            # final-message logic falls through to ``self.stop_message``,
-            # identical to the top-of-loop exit.
+            # Budget check after the ftol test, before the extrapolated point
+            # spends another evaluation.
             if self.should_stop(iteration, best_fitness):
                 break
             if np.isnan(fx) and np.isnan(fval):
@@ -293,14 +233,10 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
             direc1 = x - x_prev_iter
             x_prev_iter = x.copy()
             if not np.any(direc1):
-                # No net movement (only possible through exact
-                # cancellation) — nothing to extrapolate or replace.
                 continue
 
-            # The extrapolated point obeys the same handler-owned interval as
-            # the line searches.  An unbounded ray gives ``lmax = inf``, so
-            # ``min(lmax, 1.0)`` is the unit step SciPy takes when there are no
-            # bounds — the two cases need no separate branch.
+            # The extrapolated point obeys the same handler interval as the
+            # line searches; an unbounded ray gives lmax = inf.
             extrapolation_interval = self.constraint_handler.feasible_step_interval(
                 x, direc1
             )
@@ -315,9 +251,8 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                 best_fitness = fx2
                 best_solution = x2.copy()
 
-            # Powell's replacement test: drop the direction of largest
-            # decrease and adopt the aggregate displacement if that is
-            # profitable
+            # Replacement test: drop the direction of largest decrease and
+            # adopt the aggregate displacement if that is profitable.
             if fx > fx2:
                 t = 2.0 * (fx + fx2 - 2.0 * fval)
                 temp = fx - fval - delta

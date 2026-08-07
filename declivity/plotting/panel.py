@@ -1,18 +1,16 @@
 """Declarative panel specification for diagnostic plots.
 
-A ``Panel`` describes one diagnostic plot — what to read off a LogData,
-how to label it, what scale to use. Panels are registered per algorithm
-under semantic keys (e.g. ``"step_size"``), so the same key resolves to
-``sigma`` on CMA-ES, ``Ft`` on DES, and ``step_length`` on L-BFGS-B. This
-makes cross-algorithm comparison declarative: ask the registry which
-keys are common to a set of algorithms, then plot them overlaid.
+A ``Panel`` describes one diagnostic plot: what to read off a LogData, how
+to label it, what scale to use.  Panels are registered per algorithm under
+semantic keys (e.g. ``"step_size"``), so the same key resolves to ``sigma``
+on CMA-ES, ``Ft`` on DES, and ``step_length`` on L-BFGS-B.  Ask the registry
+which keys are common to a set of algorithms to plot them overlaid.
 
-A panel can be **single-series** (one ``field``) or **multi-series**
-(several :class:`Series` overlaid on the same axes — useful for
-convergence-style views with best/mean/median together). Multi-series
-is honoured by :py:func:`plot_metrics`; :py:func:`plot_comparison` only
-uses the first series of each panel because its overlay axis is the
-algorithm, not the field.
+A panel is either single-series (one ``field``) or multi-series (several
+:class:`Series` on the same axes, for a best/mean/median convergence view).
+Multi-series is honoured by :py:func:`plot_metrics`;
+:py:func:`plot_comparison` uses only the first series of each panel, since
+its overlay axis is the algorithm rather than the field.
 
 Example:
 
@@ -84,8 +82,8 @@ class Panel:
     Attributes:
         key: Semantic identifier used for registration and cross-algorithm
             matching. Two algorithms can register different ``field``s
-            under the same ``key`` — that is what makes
-            :py:meth:`PanelRegistry.common` produce comparable metrics.
+            under the same ``key``, which is how
+            :py:meth:`PanelRegistry.common` finds comparable metrics.
         title: Plot title.
         ylabel: Y-axis label.
         field: Single-series convenience. Internally normalized to

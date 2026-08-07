@@ -30,9 +30,8 @@ def _trace_to_dict(trace: RunTrace) -> dict:
         "handoff_eval": trace.handoff_eval,
         "handoff_iter": trace.handoff_iter,
     }
-    # Retained scalar-per-step diagnostics (sigma, condition_number, ...).
-    # Omitted from the JSON when empty so bare traces stay compact and old
-    # readers are unaffected.
+    # Retained scalar-per-step diagnostics (sigma, condition_number, ...),
+    # omitted from the JSON when empty.
     if trace.series:
         payload["series"] = {
             name: [float(v) for v in values] for name, values in trace.series.items()
@@ -59,8 +58,7 @@ def _trace_from_dict(payload: dict) -> RunTrace:
             if payload.get("handoff_iter") is not None
             else None
         ),
-        # Backward-compatible: traces.json written before retained series
-        # existed simply have no "series" key.
+        # traces.json written before retained series have no "series" key.
         series={
             name: [float(v) for v in values]
             for name, values in payload.get("series", {}).items()

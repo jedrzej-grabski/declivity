@@ -1,21 +1,16 @@
 """Result of a single (problem, algorithm, seed) run.
 
-A ``RunTrace`` is a **trimmed ``LogData``** plus run identity and summary
-metadata. It stores the convergence trace as two parallel lists:
+A ``RunTrace`` is a trimmed ``LogData`` plus run identity and summary
+metadata.  It stores the convergence trace as two parallel lists:
 ``evaluations`` is the cumulative function-evaluation count at each logged
-step; ``best_fitness`` is the best objective value seen so far. Both are
-monotone (non-decreasing and non-increasing respectively).
+step, ``best_fitness`` the best objective value so far.  Both are monotone.
 
-Beyond those, ``series`` holds any *additional* cheap scalar-per-step
-diagnostics that were retained from the full ``LogData`` at run time
-(e.g. ``sigma``, ``condition_number``, ``mean_fitness``). This is what lets
-the same panel that drew ``sigma`` on a single run also draw an aggregated
-``sigma`` band across a benchmark's seeds — the persisted record and the
-in-memory ``LogData`` expose the *same* named series via :meth:`get_series`,
-so one plotter serves both. Heavy per-iteration fields (population matrices,
-eigenvalue vectors, the per-step ``best_solution``) are deliberately *not*
-retained — they don't survive persistence at scale and can't be aggregated
-into a band anyway.
+``series`` holds any additional cheap scalar-per-step diagnostics retained
+from the full ``LogData`` at run time (``sigma``, ``condition_number``,
+``mean_fitness``, ...).  The persisted record and the in-memory ``LogData``
+expose the same named series via :meth:`get_series`, so one plotter serves
+both.  Heavy per-iteration fields (population matrices, eigenvalue vectors,
+the per-step ``best_solution``) are not retained.
 
 For chained algorithms (e.g. CMA-ES -> L-BFGS-B handoff) the lists are
 concatenated and ``handoff_eval`` marks the boundary.
@@ -26,9 +21,8 @@ from typing import Any
 
 import numpy as np
 
-# Per-iteration fields that are too heavy to persist per seed and/or cannot
-# be aggregated into a cross-seed band (they are lists of vectors/matrices,
-# not scalars). ``capture_scalar_series`` always skips these.
+# Per-iteration fields too heavy to persist per seed, and not aggregatable
+# into a cross-seed band. ``capture_scalar_series`` always skips these.
 HEAVY_LOGDATA_FIELDS = frozenset({"best_solution", "population", "eigenvalues"})
 
 # Fields that live as first-class attributes on RunTrace, so they are never
@@ -38,7 +32,7 @@ _TOP_LEVEL_SERIES = frozenset({"evaluations", "best_fitness"})
 
 @dataclass
 class RunTrace:
-    """A single run's convergence record — a trimmed ``LogData`` + metadata."""
+    """A single run's convergence record: a trimmed ``LogData`` + metadata."""
 
     algorithm: str
     """Algorithm name (matches the AlgorithmRun that produced this)."""
@@ -79,14 +73,12 @@ class RunTrace:
     def get_series(self, name: str) -> list[float] | None:
         """Return the per-step array for ``name``, or ``None`` if not present.
 
-        This is the :class:`~declivity.plotting.unified.RunSeries` contract: the
-        plotter asks for a panel's ``field`` / ``x_field`` by name and gets
-        back an array regardless of whether the source is a full ``LogData``
-        or a trimmed, persisted ``RunTrace``. ``evaluations`` and
-        ``best_fitness`` resolve to the first-class lists; everything else
-        resolves out of :attr:`series` (so only *retained* diagnostics are
-        available — an un-retained field returns ``None``, which the plotter
-        renders as an empty series rather than an error).
+        The :class:`~declivity.plotting.unified.RunSeries` contract: the
+        plotter asks for a panel's ``field`` / ``x_field`` by name whether
+        the source is a full ``LogData`` or a trimmed ``RunTrace``.
+        ``evaluations`` and ``best_fitness`` resolve to the first-class
+        lists; everything else comes from :attr:`series`, so an un-retained
+        field returns ``None`` and the plotter draws an empty series.
         """
         if name == "evaluations":
             return [float(v) for v in self.evaluations]
@@ -104,25 +96,23 @@ def capture_scalar_series(
     """Trim a ``LogData`` to its cheap, aggregatable scalar-per-step fields.
 
     Returns ``{field_name: [values]}`` for every list-of-scalars field whose
-    length matches ``best_fitness`` — i.e. the genuinely per-step scalar
-    diagnostics (``sigma``, ``mean_fitness``, ``condition_number``,
-    ``iteration``, ...). ``best_fitness`` and ``evaluations`` are skipped
-    (they are first-class on :class:`RunTrace`), as are the heavy
-    vector/matrix fields in :data:`HEAVY_LOGDATA_FIELDS`.
+    length matches ``best_fitness``: the per-step scalar diagnostics
+    (``sigma``, ``mean_fitness``, ``condition_number``, ``iteration``, ...).
+    ``best_fitness`` and ``evaluations`` are skipped, being first-class on
+    :class:`RunTrace`, as are the heavy vector/matrix fields in
+    :data:`HEAVY_LOGDATA_FIELDS`.
 
     Args:
         log_data: Any ``LogData`` instance (a dataclass; introspected via
             ``vars``).
-        retain: If given, restrict capture to exactly these field names
-            (still subject to the scalar/length filter). ``None`` (default)
-            captures every qualifying scalar field — "auto" mode, so a panel
-            registered for a metric just works on benchmarks without extra
-            configuration.
+        retain: If given, restrict capture to these field names, still
+            subject to the scalar/length filter.  ``None`` (default)
+            captures every qualifying scalar field.
         exclude: Field names to skip on top of the built-in heavy set.
 
     The length filter doubles as a diag-flag gate: a field only logged when
-    a ``diag_*`` flag is on (e.g. ``condition_number``) has length 0 when the
-    flag is off, so it is silently skipped.
+    a ``diag_*`` flag is on has length 0 when the flag is off, so it is
+    skipped.
     """
     base = getattr(log_data, "best_fitness", None)
     base_len = len(base) if base is not None else 0

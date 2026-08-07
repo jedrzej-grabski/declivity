@@ -1,15 +1,13 @@
-"""Specialized one-off diagnostic plots that don't fit the panel model.
+"""Diagnostic plots that do not fit the panel model.
 
-The :class:`Panel` system is built around per-iteration time series.
-Anything else — matrix comparisons, eigenvalue spectra, contour plots —
-lives in a sibling module so the panel API stays focused.
+The :class:`Panel` system is built around per-iteration time series;
+matrix comparisons, eigenvalue spectra and contour plots live here instead.
 
 Currently provides:
 
-- :py:func:`plot_matrix_diagonal_comparison` — sorted absolute diagonals
-  of one or more matrices against a reference. Used by the covariance
-  transformation study to ask "does the matrix we built capture the
-  per-variable curvature of the true Hessian?"
+- :py:func:`plot_matrix_diagonal_comparison` — sorted absolute diagonals of
+  one or more matrices against a reference, used by the covariance
+  transformation study.
 """
 
 from pathlib import Path

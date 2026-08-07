@@ -1,30 +1,25 @@
 """Cross-validation: framework-native CMA-ES vs the historical reference port.
 
-The framework-native :class:`~declivity.algorithms.cmaes.CMAESOptimizer` is a
-clean rewrite that uses the framework's
+The framework-native :class:`~declivity.algorithms.cmaes.CMAESOptimizer`
+uses the framework's
 :class:`~declivity.utils.repair_strategies.RepairStrategy` and
-:class:`~declivity.utils.population_initializers.PopulationInitializer` seams.
-In the *default* configuration the two implementations consume the RNG
-stream differently (the framework's
-``MeanSigmaPopulationInitializer`` draws a ``(dim, λ)`` block at
-iteration 0; the reference draws ``λ`` independent ``dim``-vectors) and
-the framework clamps infeasible candidates rather than rejecting them.
+:class:`~declivity.utils.population_initializers.PopulationInitializer`
+seams.  In the default configuration the two implementations consume the
+RNG stream differently (``MeanSigmaPopulationInitializer`` draws a
+``(dim, λ)`` block at iteration 0; the reference draws ``λ`` independent
+``dim``-vectors) and the framework clamps infeasible candidates rather than
+rejecting them.
 
-For this cross-validation oracle, the framework run is driven by hand
-with **reference-matched sampling**:
+Here the framework run is driven by hand with reference-matched sampling:
 
-* per-individual ``standard_normal(dim)`` calls (so the RNG sequence
-  matches the reference exactly),
-* up to ``n_max_resampling`` rejection attempts before clamping (matching
-  ``CMA.ask``).
+* per-individual ``standard_normal(dim)`` calls, so the RNG sequence
+  matches the reference,
+* up to ``n_max_resampling`` rejection attempts before clamping, matching
+  ``CMA.ask``.
 
-With those two adjustments the framework and the reference are
-bit-identical at every generation — the convergence overlays sit
-exactly on top of each other and the per-element max-diff heatmap is at
-or near floating-point noise.  That isolates "is the framework rewrite
-correct?" from "does the framework's default sampling/repair shape
-behave like the reference?" (the latter is what
-``experiments/cross_validation/cmaes_components.py`` covers).
+With those two adjustments the two are bit-identical at every generation.
+The default sampling / repair shape is covered separately by
+``experiments/cross_validation/cmaes_components.py``.
 
 Output (under ``plots/cross_validation/cmaes_vs_reference/``):
 

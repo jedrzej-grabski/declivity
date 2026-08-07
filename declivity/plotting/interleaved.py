@@ -1,24 +1,21 @@
 """Staircase plot for the interleaved CMA-ES <-> L-BFGS-B scheme.
 
-A dedicated, single-run diagnostic that the panel/registry system does not
-cover: it overlays three curves derived from one
+A single-run diagnostic outside the panel/registry system.  It overlays
+three curves derived from one
 :class:`~declivity.benchmarking.algorithm_run.InterleaveResult`:
 
-- the **overall-best staircase** (the headline curve) — monotone, combining
-  CMA-ES progress with each L-BFGS-B drop;
-- the **CMA-ES backbone** — best-so-far over CMA-ES generations only, which
-  stays *above* the overall best between bursts;
-- the **L-BFGS-B bursts** — the sharp drops, coloured separately so the
-  refinement events stand out.
+- the overall-best staircase: monotone, combining CMA-ES progress with each
+  L-BFGS-B drop;
+- the CMA-ES backbone: best-so-far over CMA-ES generations only, which stays
+  above the overall best between bursts;
+- the L-BFGS-B bursts: the sharp drops, coloured separately.
 
-An optional standalone-CMA-ES baseline can be overlaid for reference; with a
-shared seed it is the same trajectory as the backbone (the interleaving
-resumes CMA-ES byte-for-byte), just stretched along the evaluation axis by
-the budget the probes consume.
+An optional standalone-CMA-ES baseline can be overlaid.  With a shared seed
+it is the same trajectory as the backbone, stretched along the evaluation
+axis by the budget the probes consume.
 
-This is the multi-seed counterpart's sibling: where
-:func:`declivity.plotting.plot_benchmark_convergence` shows medians across seeds,
-this dissects a *single* run so the staircase mechanism is legible.
+Where :func:`declivity.plotting.plot_benchmark_convergence` shows medians
+across seeds, this dissects a single run.
 """
 
 from pathlib import Path
@@ -88,8 +85,8 @@ def plot_interleaved_convergence(
             zorder=1,
         )
 
-    # CMA-ES backbone — best over CMA-ES generations only; stays above the
-    # overall best because it ignores the L-BFGS-B drops.
+    # CMA-ES backbone: best over CMA-ES generations only, ignoring the
+    # L-BFGS-B drops.
     if result.cmaes_evaluations:
         ax.semilogy(
             result.cmaes_evaluations,
@@ -101,7 +98,7 @@ def plot_interleaved_convergence(
             zorder=2,
         )
 
-    # Overall-best staircase — the headline curve.
+    # Overall-best staircase.
     ax.semilogy(
         result.overall_evaluations,
         clip(result.overall_best),

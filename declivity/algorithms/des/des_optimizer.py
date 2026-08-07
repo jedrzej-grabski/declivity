@@ -85,9 +85,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         worst_fitness = None
         iter_count = 0
 
-        # Matches DES.R: histHead starts one slot before the first write
-        # and is advanced at the top of every iteration, so iteration 1
-        # writes slot 0.
+        # histHead starts one slot before the first write and is advanced at
+        # the top of every iteration, so iteration 1 writes slot 0 (DES.R).
         hist_head = -1
         history: list[NDArray[np.float64]] = []
         ft = init_ft
@@ -100,11 +99,9 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             constraint_handler=self.constraint_handler,
         )
 
-        # DES.R seeds the running mean at the centre of the box, which the
-        # handler defines.  Unbounded dimensions have no centre, so those fall
-        # back to the starting point — otherwise ``(inf + -inf)/2`` is NaN and
-        # poisons every subsequent mean evaluation.  Bounded dimensions keep
-        # the reference value.
+        # DES.R seeds the running mean at the centre of the box.  Unbounded
+        # dimensions have no centre — ``(inf + -inf)/2`` is NaN — so those fall
+        # back to the starting point.
         handler_lower, handler_upper = self.constraint_handler.bounding_box(N)
         box_centre = (handler_upper + handler_lower) / 2
         cumulative_mean = np.where(
@@ -123,8 +120,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             population if lamarckian else population_repaired
         )
 
-        # Track the best of the initial population.  This feeds only
-        # logging, should_stop, and the result — not the sampling math.
+        # Best of the initial population; feeds logging, should_stop and the
+        # result, not the sampling math.
         finite = np.isfinite(fitness)
         if np.any(finite):
             init_best = int(np.argmin(np.where(finite, fitness, np.inf)))
@@ -134,14 +131,13 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             ].copy()
 
         old_mean = np.zeros(N)
-        # Matches DES.R line 215: ``newMean <- par`` — the algorithm
-        # carries the user-supplied initial point as the first mean.
+        # DES.R line 215: ``newMean <- par``.
         new_mean = self.initial_point.copy()
         worst_fitness = np.max(fitness)
 
-        # Log-weighted column average (DES.R line 220 uses weightsPop on
-        # the (dim, lambda)-laid population; in our (lambda, dim) layout
-        # the weights apply along axis 0).
+        # Log-weighted column average (DES.R line 220 lays the population out
+        # as (dim, lambda); here it is (lambda, dim), so weights apply along
+        # axis 0).
         pop_mean = weights_pop @ population
         mu_mean = new_mean
 
@@ -152,12 +148,9 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
         chi_N = np.sqrt(2) * gamma((N + 1) / 2) / gamma(N / 2)
         hist_norm = 1 / np.sqrt(2)
         # Decay base of the auxiliary-noise term (DES.R line 299).  At N = 1
-        # the reference expression ``1 - 2/N**2`` is -1, and Python's float
-        # power returns a *complex* number for a negative base with the
-        # fractional exponent ``iter/2`` — which then propagates through the
-        # whole population.  Clamping at zero keeps every N >= 2 bit-identical
-        # to the reference and makes the 1-D case degrade to "no auxiliary
-        # noise after the first iteration" instead of crashing.
+        # the reference expression ``1 - 2/N**2`` is -1, and a negative base
+        # with the fractional exponent ``iter/2`` returns a complex number;
+        # clamping at zero leaves N >= 2 unchanged.
         noise_decay_base = max(0.0, 1 - 2 / N**2)
         counter_repaired = 0
 
@@ -184,9 +177,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                 ),
                 best_solution=best_solution,
                 mean_fitness=float(np.mean(fitness)),
-                # pc[:, hist_head] is written later this iteration; the
-                # freshest column is the previous slot (negative index
-                # wraps the ring, zeros before the first write).
+                # pc[:, hist_head] is written later this iteration, so the
+                # freshest column is the previous slot.
                 evolution_path=pc[:, hist_head - 1].copy(),
                 eigenvalues=(
                     np.linalg.eigvalsh(np.cov(population.T))[::-1]
@@ -237,8 +229,7 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     mu_eff,
                 )
 
-            # Evolution-path update (matches DES.R lines 276–279).
-            # First-iter branch: ``(1 - cp) * 0 + sqrt(mu*cp*(2-cp)) * step``.
+            # Evolution-path update (DES.R lines 276–279).
             if hist_head == 0:
                 pc[:, hist_head] = np.sqrt(mu * cp * (2 - cp)) * step
             else:
@@ -246,9 +237,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     mu * cp * (2 - cp)
                 ) * step
 
-            # Sample from history — equals the reference's
-            # ``histHead + 1 if iter < histSize else histSize`` since
-            # hist_head == (iter_count - 1) % hist_size.
+            # Sample from history.  Equals the reference's
+            # ``histHead + 1 if iter < histSize else histSize``.
             limit = min(iter_count, hist_size)
             history_sample = self.rng.choice(limit, lambda_, replace=True)
             history_sample2 = self.rng.choice(limit, lambda_, replace=True)
@@ -275,11 +265,9 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
                     * pc[:, history_sample2[i]]
                 )
 
-            # Generate new population — DES.R line 299.  The ``tol``
-            # factor (≈ 1e-12) is load-bearing: it scales the auxiliary
-            # noise term down to a numerical perturbation rather than
-            # the O(1/chi_N) Gaussian that destabilises late-stage
-            # convergence on multimodal problems.
+            # Generate new population (DES.R line 299).  The ``tol`` factor
+            # (~1e-12) scales the auxiliary noise term down to a numerical
+            # perturbation.
             population = (
                 new_mean.reshape(1, -1)
                 + ft * diffs.T
@@ -328,8 +316,8 @@ class DESOptimizer(PopulationOptimizer[DESLogData, DESConfig]):
             ):
                 worst_fitness = fitness[worst_idx]
 
-            # Check if the mean point is better — skipped when a hard
-            # evaluation cap is already exhausted.
+            # Check if the mean point is better; skipped when the evaluation
+            # cap is already exhausted.
             cumulative_mean = 0.8 * cumulative_mean + 0.2 * new_mean
             cumulative_mean_repaired = self.constraint_handler.repair(cumulative_mean)
             remaining = self.stopping_condition.remaining_evaluations(self.evaluations)
