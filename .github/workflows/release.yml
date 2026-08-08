@@ -1,0 +1,52 @@
+name: Release
+
+# Build and publish declivity to PyPI whenever a version tag is pushed.
+# Publishing uses PyPI Trusted Publishing (OIDC) — no API token is stored
+# in the repository.
+#
+# One-time PyPI setup (https://pypi.org/manage/account/publishing/):
+#   Owner:            jedrzej-grabski
+#   Repository name:  declivity
+#   Workflow name:    release.yml
+#   Environment name: pypi
+#
+#   Cut a release:
+#     1. bump `version` in pyproject.toml, commit, merge to main
+#     2. git tag v0.1.1 && git push --tags
+#   CI then builds the sdist + wheel and publishes them to PyPI.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # Mandatory for Trusted Publishing: lets the job mint an OIDC token
+      # that PyPI verifies instead of a long-lived API token.
+      id-token: write
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Verify the built artifacts
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
