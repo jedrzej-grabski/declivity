@@ -1,0 +1,8 @@
+# Per-repo no-mistakes overrides.
+
+# This repository has no CI workflows configured (no .github/workflows).
+# Declare that explicitly so the no-mistakes CI step treats a PR with zero
+# registered checks as all-checks-passed instead of waiting indefinitely
+# (default ci_timeout is 168h). Honored only from the trusted default-branch
+# copy of this file, so a feature branch cannot set this itself.
+no_ci: true
