@@ -10,6 +10,7 @@ CLAUDE.md
 
 # Generated outputs — reproducible from the example scripts
 plots/
+results/
 
 
 # Byte-compiled / optimized / DLL files
