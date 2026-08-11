@@ -50,12 +50,16 @@ from declivity.benchmarking import (
 from declivity.cec.problem import CEC_LOWER_BOUND, CEC_UPPER_BOUND, CECProblem
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.core.config_base import BaseConfig
-from declivity.utils.benchmark_functions import RotatedFunction
+from declivity.utils.benchmark_functions import Ellipsoid, RotatedFunction
 from declivity.utils.initial_point_generator import UniformBoxInitialPointGenerator
 
 BOUNDED = "bounded"
 UNBOUNDED = "unbounded"
 VARIANTS = (BOUNDED, UNBOUNDED)
+
+CEC_OBJECTIVE = "cec"
+ELLIPSOID_OBJECTIVE = "ellipsoid"
+OBJECTIVES = (CEC_OBJECTIVE, ELLIPSOID_OBJECTIVE)
 
 SAMPLING_LOWER = CEC_LOWER_BOUND
 SAMPLING_UPPER = CEC_UPPER_BOUND
@@ -188,28 +192,61 @@ def ensure_setup(
 
 
 def build_family(
-    edition: CECEdition,
-    function_number: int,
+    edition: CECEdition | None,
+    function_number: int | None,
     dim: int,
     variant: str,
     rotate: bool,
     setup_root: Path,
+    objective: str = CEC_OBJECTIVE,
 ) -> ProblemFamily:
-    name = f"{edition.name}-F{function_number}"
+    """Build a ``ProblemFamily`` for either the CEC suite or the Ellipsoid
+    objective, sharing the same rotation/bounds/sampling plumbing.
+
+    ``edition``/``function_number`` select the CEC problem and are only
+    meaningful when ``objective == "cec"``; passing them alongside
+    ``objective == "ellipsoid"`` is rejected rather than silently ignored,
+    since a caller supplying them almost certainly expects them to matter.
+    """
+    if objective == ELLIPSOID_OBJECTIVE:
+        if edition is not None or function_number is not None:
+            raise ValueError(
+                "edition/function_number are not applicable when "
+                "objective='ellipsoid'; pass edition=None, function_number=None."
+            )
+        name = f"Ellipsoid-d{dim}"
+
+        def make_base() -> CECProblem | Ellipsoid:
+            return Ellipsoid(dim, lower=SAMPLING_LOWER, upper=SAMPLING_UPPER)
+
+    elif objective == CEC_OBJECTIVE:
+        if edition is None or function_number is None:
+            raise ValueError(
+                "edition/function_number are required when objective='cec'."
+            )
+        name = f"{edition.name}-F{function_number}"
+
+        def make_base() -> CECProblem | Ellipsoid:
+            return CECProblem(edition, function_number, dim)
+
+    else:
+        raise ValueError(
+            f"Unknown objective {objective!r}; expected one of {OBJECTIVES}."
+        )
 
     def factory(seed: int) -> Problem:
-        function = CECProblem(edition, function_number, dim)
-        objective = function
+        function = make_base()
+        objective_fn = function
         if rotate:
             _, rotation = ensure_setup(setup_root, dim, seed, rotate=True, write=False)
             assert rotation is not None
-            objective = RotatedFunction(
+            objective_fn = RotatedFunction(
                 function, rotation=rotation, name_suffix=f"rot-seed{seed}"
             )
         bounded = variant == BOUNDED
         return Problem(
             name=name,
-            function=objective,
+            function=objective_fn,
             dimensions=dim,
             lower_bound=SAMPLING_LOWER if bounded else -np.inf,
             upper_bound=SAMPLING_UPPER if bounded else np.inf,
