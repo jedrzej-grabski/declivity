@@ -41,6 +41,8 @@ from declivity.plotting.unified import (
     draw_groups,
     grid_dims,
     save_if_path,
+    thin_linear_grid,
+    thin_log_grid,
 )
 
 
@@ -304,6 +306,7 @@ def plot_convergence_overlay(
     iqr_alpha: float = 0.15,
     num_grid_points: int = 300,
     annotate_final: bool = True,
+    xmax: float | None = None,
     secondary_iter_lambda: int | None = None,
     secondary_label: str = "CMA-ES iterations",
     secondary_location: float = -0.16,
@@ -332,7 +335,9 @@ def plot_convergence_overlay(
         secondary_iter_lambda: If set, add a secondary x-axis showing
             iterations ``= evaluations / (lambda + 1)``. ``None`` omits it.
         annotate_final: Append the (median) final fitness to each legend label.
-        save_path: If set, the figure is written here (dpi 150).
+        xmax: Clip the evaluation axis here — trims flat converged tails that
+            would otherwise compress the interesting region.
+        save_path: If set, the figure is written here.
 
     Returns:
         The matplotlib :class:`Figure`.
@@ -366,7 +371,11 @@ def plot_convergence_overlay(
     if title:
         ax.set_title(title, fontsize=12)
     ax.set_yscale("log")
-    ax.grid(True, alpha=0.25, which="both")
+    if xmax is not None:
+        ax.set_xlim(left=0.0, right=xmax)
+    thin_log_grid(ax, "y", max_ticks=7)
+    thin_linear_grid(ax, "x", max_ticks=6)
+    ax.grid(True, alpha=0.18, linewidth=0.7, which="major")
     # legend_loc stays a plain str in this signature; matplotlib 3.11 narrowed
     # loc to a Literal union, which a str cannot satisfy statically.
     ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
@@ -416,6 +425,119 @@ def _problem_optimum(problem: Problem) -> float:
         stacklevel=3,
     )
     return 0.0
+
+
+def plot_suite_ecdf(
+    traces: dict[tuple[str, str], list[RunTrace]],
+    problems: Iterable[Problem],
+    algorithms: Iterable[AlgorithmRun],
+    *,
+    n_thresholds: int = 50,
+    num_grid_points: int = 200,
+    threshold_floor: float = DEFAULT_THRESHOLD_FLOOR,
+    gap_to_optimum: bool = True,
+    annotate_auc: bool = True,
+    title: str | None = None,
+    show_subtitle: bool = True,
+    xlabel: str = "Function Evaluations",
+    ylabel: str = "Fraction of targets reached",
+    linewidth: float = 2.2,
+    legend_loc: str = "best",
+    legend_fontsize: int = 9,
+    figsize: tuple[float, float] = (9.0, 6.2),
+    save_path: Path | str | None = None,
+) -> Figure:
+    """Aggregated ECDF over a whole problem suite: one curve per algorithm.
+
+    The COCO-style figure: each problem contributes its own log-spaced target
+    grid (gap to its own ``f*``, pooled over every algorithm's runs on that
+    problem), every ``(problem, target)`` pair weighs equally, and an
+    algorithm's curve is the mean over problems of its per-problem mean ECDF
+    on one shared evaluation-budget grid.  The single-problem view is
+    :func:`plot_benchmark_ecdf`.
+    """
+    problems_list = list(problems)
+    algorithms_list = list(algorithms)
+    if not problems_list:
+        raise ValueError("problems must be non-empty")
+
+    pooled_all = [
+        trace
+        for problem in problems_list
+        for algorithm in algorithms_list
+        for trace in traces.get((problem.name, algorithm.name), [])
+    ]
+    if not pooled_all:
+        raise ValueError("No traces found for the given problems/algorithms")
+    x_grid = series_grid(pooled_all, "evaluations", num_grid_points)
+
+    per_problem: list[tuple[Problem, float, NDArray[np.float64]]] = []
+    for problem in problems_list:
+        pooled = [
+            trace
+            for algorithm in algorithms_list
+            for trace in traces.get((problem.name, algorithm.name), [])
+        ]
+        if not pooled:
+            continue
+        optimum = _problem_optimum(problem) if gap_to_optimum else 0.0
+        thresholds = threshold_grid(
+            pooled,
+            n_thresholds=n_thresholds,
+            floor=threshold_floor,
+            global_minimum=optimum,
+            gap_to_optimum=gap_to_optimum,
+        )
+        per_problem.append((problem, optimum, thresholds))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    seed_counts: list[int] = []
+    for algorithm in algorithms_list:
+        curves: list[NDArray[np.float64]] = []
+        for problem, optimum, thresholds in per_problem:
+            algorithm_traces = traces.get((problem.name, algorithm.name), [])
+            if not algorithm_traces:
+                continue
+            seed_counts.append(len(algorithm_traces))
+            curves.append(
+                aggregate_ecdf(
+                    algorithm_traces,
+                    thresholds,
+                    x_grid,
+                    global_minimum=optimum,
+                    gap_to_optimum=gap_to_optimum,
+                )
+            )
+        if not curves:
+            continue
+        curve = np.mean(curves, axis=0)
+        label = algorithm.name
+        if annotate_auc:
+            label = f"{label} (AUC={ecdf_auc(x_grid, curve):.3f})"
+        ax.plot(x_grid, curve, label=label, color=algorithm.color, linewidth=linewidth)
+
+    ax.set_xscale("log")
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_ylim(0.0, 1.02)
+    subtitle = (
+        f"{len(per_problem)} problems, "
+        f"n_seeds={max(seed_counts) if seed_counts else 0}, "
+        f"{n_thresholds} targets per problem"
+        f"{'' if gap_to_optimum else ', raw fitness'}"
+    )
+    if show_subtitle:
+        ax.set_title(f"{title}\n{subtitle}" if title else subtitle, fontsize=12)
+    elif title:
+        ax.set_title(title, fontsize=12)
+    thin_log_grid(ax, "x")
+    ax.grid(True, alpha=0.18, linewidth=0.7, which="major")
+    ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
+    ax.tick_params(axis="both", labelsize=10)
+    fig.tight_layout()
+
+    save_if_path(fig, save_path)
+    return fig
 
 
 def plot_benchmark_ecdf(
@@ -528,7 +650,8 @@ def plot_benchmark_ecdf(
         f"{'' if gap_to_optimum else ', raw fitness'})"
     )
     ax.set_title(f"{title}\n{subtitle}" if title else subtitle, fontsize=12)
-    ax.grid(True, alpha=0.25, which="both")
+    thin_log_grid(ax, "x")
+    ax.grid(True, alpha=0.18, linewidth=0.7, which="major")
     # See plot_convergence_overlay: matplotlib 3.11 narrowed loc to a Literal
     # union that a plain str cannot satisfy statically.
     ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
