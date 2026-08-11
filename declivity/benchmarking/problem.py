@@ -176,3 +176,63 @@ class Problem:
         return self.initial_point_generator.generate_point(
             rng, self.dimensions, self.resolved_constraint_handler()
         )
+
+
+class ProblemFamily:
+    """One statistical problem, a different deterministic instance per seed.
+
+    Wraps a ``seed -> Problem`` factory so studies that randomise the problem
+    *instance* per seed — a fresh rotation or shift of the same objective —
+    still flow through :class:`~declivity.benchmarking.Benchmark`: the runner
+    resolves ``instance(seed)`` before each job, and every instance shares the
+    family ``name`` so traces aggregate as one problem.
+
+    All instances must share dimensions and bounds; metadata accessors
+    (``dimensions``, ``function``, ...) read the template instance.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        factory: Callable[[int], Problem],
+        template_seed: int = 0,
+    ) -> None:
+        self.name = name
+        self._factory = factory
+        self._template_seed = template_seed
+        self._instances: dict[int, Problem] = {}
+
+    def instance(self, seed: int) -> Problem:
+        """The (cached) concrete :class:`Problem` for ``seed``."""
+        if seed not in self._instances:
+            problem = self._factory(seed)
+            problem.name = self.name
+            self._instances[seed] = problem
+        return self._instances[seed]
+
+    @property
+    def template(self) -> Problem:
+        """A representative instance, for metadata and plot annotations."""
+        return self.instance(self._template_seed)
+
+    @property
+    def dimensions(self) -> int:
+        return self.template.dimensions
+
+    @property
+    def lower_bound(self) -> float:
+        return self.template.lower_bound
+
+    @property
+    def upper_bound(self) -> float:
+        return self.template.upper_bound
+
+    @property
+    def function(self) -> Callable[[NDArray[np.float64]], float]:
+        return self.template.function
+
+    def resolved_constraint_handler(self) -> ConstraintHandler:
+        return self.template.resolved_constraint_handler()
+
+    def starting_point(self, seed: int) -> NDArray[np.float64]:
+        return self.instance(seed).starting_point(seed)
