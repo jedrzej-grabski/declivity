@@ -34,10 +34,12 @@ _EIGENVALUE_FLOOR = 1e-30
 
 
 class HandoffTransform(StrEnum):
-    """How to turn a source covariance ``C`` into an initial curvature ``B_0``.
+    """How to turn a source covariance ``C`` into an initial curvature *shape*.
 
-    The CMA-ES covariance ``C`` is proportional to ``B^{-1}`` (large variance =
-    flat = small curvature), so the useful transforms invert it.  Used by
+    Shape only: no magnitude/scale decision lives here (see
+    :class:`HessianScaling` for that orthogonal axis).  The CMA-ES covariance
+    ``C`` is proportional to ``B^{-1}`` (large variance = flat = small
+    curvature), so the useful transform inverts it.  Used by
     :meth:`InitialGeometry.from_covariance`, the one-shot ``CMAESLBFGSBHandoff``
     / ``CMAESLocalHandoff``, and the ``InterleavedCMAESLBFGSB`` scheme.
     """
@@ -46,26 +48,80 @@ class HandoffTransform(StrEnum):
     """Use ``C^{-1}`` directly. The L-BFGS-B model becomes a true quadratic
     approximation of the CMA-ES posterior around the warm-up mean."""
 
-    SIGMA_INVERSE = "sigma_inverse"
-    """Use ``(sigma^2 C)^{-1}``, which accounts for the CMA-ES global
-    step-size scaling."""
-
     IDENTITY = "identity"
     """Drop the covariance and use the isotropic default ``B_0 = I``.  The
     control case: same starting point, no covariance information."""
+
+
+class HessianScaling(StrEnum):
+    """A scalar magnitude factor applied to the curvature ``B_0`` produced by
+    :class:`HandoffTransform`.
+
+    Orthogonal to ``HandoffTransform``: the transform decides *shape*, this
+    decides *magnitude*.  Used by :class:`InitialGeometry` and
+    :func:`snapshot_geometry`.
+    """
+
+    NONE = "none"
+    """No scaling: ``factor = 1.0``, i.e. ``B_0`` unchanged."""
+
+    SIGMA = "sigma"
+    """Divide ``B_0`` by ``sigma**2``, accounting for the CMA-ES global
+    step-size scaling.  Combined with ``HandoffTransform.INVERSE`` this
+    reproduces the old fused ``sigma_inverse`` transform."""
+
+    UNIT = "unit"
+    """Divide ``B_0`` by its Frobenius norm, giving a matrix of unit norm."""
+
+    IDENTITY_NORM = "identity_norm"
+    """Divide ``B_0`` by its Frobenius norm and multiply by ``sqrt(n)``, so
+    the result has the same norm as the ``n x n`` identity matrix
+    (``||I_n||_F = sqrt(n)``)."""
+
+
+def scaling_factor(
+    scaling: "HessianScaling | str",
+    matrix: NDArray[np.float64],
+    num_dimensions: int,
+    sigma: float,
+) -> float:
+    """The scalar multiplier :class:`HessianScaling` applies to ``matrix``.
+
+    ``matrix`` is the *unscaled* B_0 (2D dense, 1D diagonal, or scalar-filled
+    array); ``np.linalg.norm`` gives the Frobenius norm for 2D and the
+    Euclidean 2-norm for 1D, which coincide for a diagonal matrix.
+    """
+    scaling = HessianScaling(str(scaling))
+    if scaling == HessianScaling.NONE:
+        return 1.0
+    if scaling == HessianScaling.SIGMA:
+        return 1.0 / (sigma * sigma)
+
+    norm = float(np.linalg.norm(matrix))
+    if norm == 0.0 or not np.isfinite(norm):
+        # A degenerate (zero or non-finite) norm would divide-by-zero /
+        # propagate NaN; fall back to no scaling rather than corrupt B_0.
+        return 1.0
+    if scaling == HessianScaling.UNIT:
+        return 1.0 / norm
+    if scaling == HessianScaling.IDENTITY_NORM:
+        return np.sqrt(num_dimensions) / norm
+
+    valid = ", ".join(repr(value.value) for value in HessianScaling)
+    raise ValueError(f"Unknown hessian scaling: {scaling!r}. Use one of {valid}.")
 
 
 def covariance_to_hessian_matrix(
     transform: "HandoffTransform | str",
     eigenvectors: NDArray[np.float64],
     eigenvalues_sqrt: NDArray[np.float64],
-    sigma: float,
 ) -> NDArray[np.float64] | None:
     """Turn a covariance eigendecomposition ``(B, D)`` into a curvature matrix.
 
     ``C = B @ diag(D**2) @ B.T``; the returned matrix is the L-BFGS-B initial
     Hessian ``B_0``, proportional to ``C^{-1}``.  ``IDENTITY`` returns ``None``
-    (the L-BFGS-B default ``B_0 = I``).
+    (the L-BFGS-B default ``B_0 = I``).  Shape only -- see
+    :class:`HessianScaling` / :func:`scaling_factor` for magnitude.
     """
     transform = str(transform)
     if transform == HandoffTransform.IDENTITY:
@@ -78,9 +134,6 @@ def covariance_to_hessian_matrix(
     with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
         if transform == HandoffTransform.INVERSE:
             return (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-        if transform == HandoffTransform.SIGMA_INVERSE:
-            inverse = (eigenvectors * (1.0 / eigenvalues)) @ eigenvectors.T
-            return inverse / (sigma * sigma)
 
     valid = ", ".join(repr(value.value) for value in HandoffTransform)
     raise ValueError(f"Unknown handoff transform: {transform!r}. Use one of {valid}.")
@@ -125,29 +178,33 @@ class InitialGeometry:
         self,
         initial_hessian,
         num_dimensions: int,
+        scaling: "HessianScaling | str" = HessianScaling.NONE,
+        sigma: float = 1.0,
     ):
         # Forward-geometry fields: populated eagerly by ``from_covariance``,
-        # or lazily by ``_forward_geometry`` for a raw curvature.
+        # or lazily by ``_forward_geometry`` for a raw curvature.  Scaling is
+        # magnitude-only and deliberately does not touch these: they describe
+        # covariance *shape* (eigenvectors / anisotropy ratios), which Powell
+        # / Nelder-Mead read scale-invariantly.
         self._eigenvectors: NDArray[np.float64] | None = None
         self._forward_scales: NDArray[np.float64] | None = None
-        self._sigma: float = 1.0
+        self._scaling = HessianScaling(str(scaling))
+        self._sigma: float = float(sigma)
+
+        matrix: NDArray[np.float64] | None
 
         if initial_hessian is None:
             self._mode = InitialHessianMode.DIAGONAL
-            self._diagonal = np.ones(num_dimensions)
-            self._diagonal_inverse = np.ones(num_dimensions)
-            self._matrix = None
-            self._cholesky_factor = None
+            diagonal = np.ones(num_dimensions)
+            matrix = None
 
         elif np.isscalar(initial_hessian):
             value = float(initial_hessian)  # type: ignore[arg-type]
             if value <= 0:
                 raise ValueError("Scalar initial_hessian must be positive")
             self._mode = InitialHessianMode.DIAGONAL
-            self._diagonal = np.full(num_dimensions, value)
-            self._diagonal_inverse = np.full(num_dimensions, 1.0 / value)
-            self._matrix = None
-            self._cholesky_factor = None
+            diagonal = np.full(num_dimensions, value)
+            matrix = None
 
         elif np.ndim(initial_hessian) == 1:
             diagonal = np.asarray(initial_hessian, dtype=float)
@@ -159,10 +216,7 @@ class InitialGeometry:
             if np.any(diagonal <= 0):
                 raise ValueError("initial_hessian diagonal entries must be positive")
             self._mode = InitialHessianMode.DIAGONAL
-            self._diagonal = diagonal
-            self._diagonal_inverse = 1.0 / diagonal
-            self._matrix = None
-            self._cholesky_factor = None
+            matrix = None
 
         elif np.ndim(initial_hessian) == 2:
             matrix = np.asarray(initial_hessian, dtype=float)
@@ -173,8 +227,34 @@ class InitialGeometry:
                 )
             matrix = 0.5 * (matrix + matrix.T)
             self._mode = InitialHessianMode.DENSE
-            self._diagonal = np.diag(matrix)
-            self._matrix = matrix
+            diagonal = np.diag(matrix)
+
+        else:
+            raise ValueError(
+                "initial_hessian must be None, a scalar, a 1D array, or a 2D array"
+            )
+
+        # Apply the magnitude scaling to the *unscaled* B_0 before deriving
+        # the diagonal-inverse / Cholesky factor below, so those come out
+        # correct automatically.  The factor itself is computed from the
+        # unscaled matrix/diagonal (UNIT / IDENTITY_NORM depend on its norm).
+        factor = scaling_factor(
+            self._scaling,
+            matrix if matrix is not None else diagonal,
+            num_dimensions,
+            self._sigma,
+        )
+        diagonal = diagonal * factor
+        if matrix is not None:
+            matrix = matrix * factor
+
+        self._diagonal = diagonal
+        self._matrix = matrix
+        if self._mode == InitialHessianMode.DIAGONAL:
+            self._diagonal_inverse = 1.0 / diagonal
+            self._cholesky_factor = None
+        else:
+            assert matrix is not None
             try:
                 self._cholesky_factor = cho_factor(matrix)
             except np.linalg.LinAlgError:
@@ -183,30 +263,37 @@ class InitialGeometry:
                 )
             self._diagonal_inverse = None
 
-        else:
-            raise ValueError(
-                "initial_hessian must be None, a scalar, a 1D array, or a 2D array"
-            )
-
     # Constructors.
 
     @classmethod
-    def identity(cls, num_dimensions: int) -> "InitialGeometry":
-        """Isotropic geometry: ``B_0 = I``, unit directions, uniform scales.
+    def identity(
+        cls,
+        num_dimensions: int,
+        scaling: "HessianScaling | str" = HessianScaling.NONE,
+        sigma: float = 1.0,
+    ) -> "InitialGeometry":
+        """Isotropic geometry: ``B_0 = I`` (before scaling), unit directions,
+        uniform scales.
 
         L-BFGS-B behaves as ``config.initial_hessian=None``, Powell gets the
         coordinate directions, Nelder-Mead an isotropic simplex.
         """
-        return cls(None, num_dimensions)
+        return cls(None, num_dimensions, scaling=scaling, sigma=sigma)
 
     @classmethod
-    def from_curvature(cls, curvature, num_dimensions: int) -> "InitialGeometry":
+    def from_curvature(
+        cls,
+        curvature,
+        num_dimensions: int,
+        scaling: "HessianScaling | str" = HessianScaling.NONE,
+        sigma: float = 1.0,
+    ) -> "InitialGeometry":
         """Build directly from a curvature ``B_0`` (None / scalar / 1D / 2D).
 
-        Alias of the plain constructor, named for symmetry with
-        :meth:`from_covariance` at call sites.
+        Mostly the plain constructor, named for symmetry with
+        :meth:`from_covariance` at call sites; forwards ``scaling``/``sigma``.
         """
-        return cls(curvature, num_dimensions)
+        return cls(curvature, num_dimensions, scaling=scaling, sigma=sigma)
 
     @classmethod
     def from_covariance(
@@ -215,27 +302,28 @@ class InitialGeometry:
         eigenvalues_sqrt: NDArray[np.float64],
         sigma: float = 1.0,
         transform: "HandoffTransform | str" = HandoffTransform.INVERSE,
+        scaling: "HessianScaling | str" = HessianScaling.NONE,
     ) -> "InitialGeometry":
         """Build from a covariance eigendecomposition ``(B, D)``.
 
         ``C = B @ diag(D**2) @ B.T``.  ``transform`` selects how ``C`` becomes
-        the curvature ``B_0`` (:class:`HandoffTransform`).  The forward
-        eigendecomposition ``(B, D, sigma)`` is stored as-is, with columns
-        ordered by descending variance, so the direction / scale accessors do
-        not re-invert.  ``transform=IDENTITY`` returns an isotropic
-        :meth:`identity` geometry.
+        the curvature *shape* ``B_0`` (:class:`HandoffTransform`); ``scaling``
+        selects a separate magnitude factor applied on top
+        (:class:`HessianScaling`).  The forward eigendecomposition
+        ``(B, D, sigma)`` is stored as-is, with columns ordered by descending
+        variance, so the direction / scale accessors do not re-invert.
+        ``transform=IDENTITY`` returns an isotropic :meth:`identity` geometry
+        (with ``scaling`` still applied).
         """
         eigenvectors = np.asarray(eigenvectors, dtype=float)
         eigenvalues_sqrt = np.asarray(eigenvalues_sqrt, dtype=float)
         num_dimensions = eigenvectors.shape[0]
 
-        matrix = covariance_to_hessian_matrix(
-            transform, eigenvectors, eigenvalues_sqrt, sigma
-        )
+        matrix = covariance_to_hessian_matrix(transform, eigenvectors, eigenvalues_sqrt)
         if matrix is None:
-            return cls.identity(num_dimensions)
+            return cls.identity(num_dimensions, scaling=scaling, sigma=sigma)
 
-        geometry = cls(matrix, num_dimensions)
+        geometry = cls(matrix, num_dimensions, scaling=scaling, sigma=sigma)
 
         # Store the forward geometry of the source covariance, independent of
         # the transform, with columns ordered by descending variance.  CMA-ES

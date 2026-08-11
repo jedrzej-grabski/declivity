@@ -17,10 +17,12 @@ from declivity.utils.constraint_handlers import (
 from declivity.utils.initial_geometry import (
     GeometryMode,
     HandoffTransform,
+    HessianScaling,
     InitialGeometry,
     InitialHessian,
     InitialHessianMode,
     covariance_to_hessian_matrix,
+    scaling_factor,
 )
 from declivity.utils.initial_point_generator import (
     FixedInitialPointGenerator,
@@ -89,6 +91,7 @@ __all__ = [
     # Line-search surface
     "GradientLineSearch",
     "HandoffTransform",
+    "HessianScaling",
     "IdentityPopulationInitializer",
     "IdentityRepair",
     # Initial geometry surface (shared learned-curvature object)
@@ -129,4 +132,5 @@ __all__ = [
     "UniformInitialPointGenerator",
     "covariance_to_hessian_matrix",
     "default_stopping_condition",
+    "scaling_factor",
 ]

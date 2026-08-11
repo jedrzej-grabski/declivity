@@ -48,6 +48,7 @@ from declivity.benchmarking import (
     snapshot_geometry,
 )
 from declivity.plotting import plot_convergence_overlay, plot_suite_ecdf
+from declivity.utils.initial_geometry import HessianScaling
 from declivity.utils.stopping_conditions import MaxEvaluations
 from experiments.conditioning.common import (
     BOUNDED,
@@ -98,6 +99,7 @@ class Exp2Spec:
     probe_budget_per_dim: int = 200
     optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
     transform: str = "inverse"
+    scaling: str = str(HessianScaling.NONE)
     num_workers: int = 1
     data_root: Path = field(default=Path("results/conditioning/exp2"))
     plot_root: Path = field(default=Path("plots/conditioning/exp2"))
@@ -133,6 +135,7 @@ class Exp2Spec:
             "probe_budget_per_dim": self.probe_budget_per_dim,
             "optimizers": list(self.optimizers),
             "transform": self.transform,
+            "scaling": self.scaling,
         }
 
 
@@ -259,6 +262,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
             "seed": seed,
             "optimizer": optimizer_key,
             "transform": spec.transform,
+            "scaling": spec.scaling,
         }
         executed = 0
 
@@ -271,7 +275,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 problem,
                 snapshot.mean,
                 local_config(choice, dim, "probe"),
-                snapshot_geometry(snapshot, spec.transform),
+                snapshot_geometry(snapshot, spec.transform, spec.scaling),
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
                 seed=seed,
@@ -549,8 +553,17 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
     parser.add_argument(
         "--optimizers", type=str, nargs="+", default=None, choices=sorted(LOCAL_CHOICES)
     )
+    parser.add_argument("--transform", type=str, default="inverse", choices=["inverse"])
     parser.add_argument(
-        "--transform", type=str, default="inverse", choices=["inverse", "sigma_inverse"]
+        "--hessian-scaling",
+        type=str,
+        default="none",
+        choices=["none", "sigma", "unit", "identity_norm"],
+        help=(
+            "Magnitude factor applied on top of --transform (shape). "
+            "'sigma' divides B_0 by sigma**2, reproducing the old fused "
+            "sigma_inverse transform when combined with --transform inverse."
+        ),
     )
     parser.add_argument("--num-workers", type=int, default=1)
     parser.add_argument(
@@ -578,6 +591,7 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
         variant=args.variant,
         rotate=args.rotate,
         transform=args.transform,
+        scaling=args.hessian_scaling,
         num_workers=args.num_workers,
         data_root=args.data_root,
         plot_root=args.plot_root,
