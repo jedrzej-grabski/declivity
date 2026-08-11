@@ -84,6 +84,29 @@ Common flags (most scripts): `--num-seeds`, `--num-workers`,
 `--total-budget`, `--cmaes-warmup-budget`, `--dimensions`,
 `--output-dir`. Run any script with `--help` for its complete option list.
 
+## `conditioning/` — persisted-CMA-ES conditioning suite
+
+Staged, cache-aware pipelines over one artifact store
+(`results/conditioning/<study>/`): per-seed starting points and rotation
+matrices, CMA-ES runs recorded **once** with full state snapshots
+(`record_cmaes_path` / `save_cmaes_path`), then reused by every downstream
+stage. Each run persists its configuration as a `config.yaml` and its final
+learned state (`H⁻¹` / direction set / simplex / corrections) as a `run.npz`.
+Fully parameterizable from the CLI (dims, seeds, functions, k values,
+optimizers, budgets); `--demo` runs a small local configuration, `--replot`
+re-renders figures from persisted artifacts, `--skip-cmaes` /
+`--force-cmaes` control the expensive stage. Write-up:
+[`docs/NEW_CODE_conditioning_suite.md`](../docs/NEW_CODE_conditioning_suite.md).
+
+| Script                 | What it does                                                                                                 | Output                       |
+|------------------------|---------------------------------------------------------------------------------------------------------------|-------------------------------|
+| `exp1_conditioners.py` | **Conditioner study**: same local optimizer, same `x0`, different initial geometry (CMA-ES covariance after `k·d` iterations `C_kd`, the FD true-Hessian `H⁻¹`, and `I`) on per-seed-rotated CEC 2017 F1, bounded + unbounded, d ∈ {10,30,50,100} × 25 seeds. Per-optimizer convergence overlays, median across seeds plus a seed-0 view | `plots/conditioning/exp1/`   |
+| `exp2_hybrid.py`       | **Full hybrid**: one recorded CMA-ES path per (function, seed); local optimizers launched from every snapshot with the covariance handed off; hybrid curves for every switch interval `k·d` composed *offline* (all k share one CMA-ES run + one probe set). Composed convergence overlays with a CMA-ES-iterations axis, plus the suite-aggregated ECDF (`plot_suite_ecdf`) | `plots/conditioning/exp2/`   |
+
+Figures render in dark mode at 300 dpi, every curve anchored at the shared
+`f(x0)` and the evaluation axis clipped just past the slowest contender's last
+improvement, so the descent fills the panel instead of a flat converged tail.
+
 ## `report/` — supervisor-report regeneration
 
 | Script                  | What it does                                                                                              | Output                  |
