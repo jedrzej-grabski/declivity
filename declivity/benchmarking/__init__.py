@@ -28,6 +28,23 @@ from declivity.benchmarking.algorithm_run import (
     initial_hessian_from_cmaes,
 )
 from declivity.benchmarking.benchmark import Benchmark
+from declivity.benchmarking.cmaes_path import (
+    CMAESPath,
+    CMAESSnapshot,
+    load_cmaes_path,
+    record_cmaes_path,
+    save_cmaes_path,
+)
+from declivity.benchmarking.conditioning import (
+    LOCAL_ALGORITHMS,
+    ConditionedLocalAlgorithm,
+    compose_switch_trace,
+    local_seeding_kwargs,
+    probe_trace,
+    retag_trace,
+    run_conditioned_local,
+    snapshot_geometry,
+)
 from declivity.benchmarking.ecdf import (
     DEFAULT_THRESHOLD_FLOOR,
     aggregate_ecdf,
@@ -41,30 +58,44 @@ from declivity.benchmarking.persistence import (
     save_summary_csv,
     save_traces_json,
 )
-from declivity.benchmarking.problem import Problem
+from declivity.benchmarking.problem import Problem, ProblemFamily
 from declivity.benchmarking.run_trace import RunTrace
 
 __all__ = [
     "DEFAULT_THRESHOLD_FLOOR",
+    "LOCAL_ALGORITHMS",
     "AlgorithmRun",
     "Benchmark",
     "BenchmarkAlgorithm",
     "CMAESLBFGSBHandoff",
     "CMAESLocalHandoff",
+    "CMAESPath",
+    "CMAESSnapshot",
+    "ConditionedLocalAlgorithm",
     "HandoffAlgorithm",
     "HandoffTransform",
     "InterleaveResult",
     "InterleavedCMAESLBFGSB",
     "Problem",
+    "ProblemFamily",
     "RunTrace",
     "SingleAlgorithm",
     "aggregate_ecdf",
+    "compose_switch_trace",
     "ecdf_auc",
     "initial_hessian_from_cmaes",
+    "load_cmaes_path",
     "load_traces_json",
+    "local_seeding_kwargs",
+    "probe_trace",
+    "record_cmaes_path",
+    "retag_trace",
+    "run_conditioned_local",
     "run_ecdf",
+    "save_cmaes_path",
     "save_runs_csv",
     "save_summary_csv",
     "save_traces_json",
+    "snapshot_geometry",
     "threshold_grid",
 ]

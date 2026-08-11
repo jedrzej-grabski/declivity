@@ -123,6 +123,25 @@ class LBFGSBOptimizer(BaseOptimizer["LBFGSBLogData", LBFGSBConfig]):
         self._steps_B0_steps: NDArray[np.float64] = np.empty((0, 0))
         self._cholesky_factor_of_T: tuple | None = None
 
+    def final_corrections(
+        self,
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64], float]:
+        """The compact memory at the end of the last ``optimize()`` call:
+        ``(S, Y, theta)`` with step / gradient-difference pairs as rows.
+        Empty ``(0, n)`` arrays before any run or after a memory reset."""
+        n = self.dimensions
+        steps = (
+            np.array(self._step_vectors)
+            if self._step_vectors
+            else np.empty((0, n), dtype=float)
+        )
+        grad_diffs = (
+            np.array(self._gradient_diff_vectors)
+            if self._gradient_diff_vectors
+            else np.empty((0, n), dtype=float)
+        )
+        return steps, grad_diffs, float(self._theta)
+
     # Gradient computation
 
     def _evaluate_function_and_gradient(

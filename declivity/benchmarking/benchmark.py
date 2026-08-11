@@ -23,7 +23,7 @@ from declivity.benchmarking.persistence import (
     save_summary_csv,
     save_traces_json,
 )
-from declivity.benchmarking.problem import Problem
+from declivity.benchmarking.problem import Problem, ProblemFamily
 from declivity.benchmarking.run_trace import RunTrace
 
 
@@ -42,7 +42,7 @@ def _execute_one(
 class Benchmark:
     """Run a grid of (problem x algorithm x seed) optimization runs."""
 
-    problems: list[Problem]
+    problems: list[Problem | ProblemFamily]
     algorithms: list[AlgorithmRun]
     seeds: list[int]
     output_dir: Path
@@ -66,9 +66,16 @@ class Benchmark:
         jobs = []
         for problem in self.problems:
             for seed in self.seeds:
-                x0 = problem.starting_point(seed)
+                # A ProblemFamily resolves to its per-seed instance here, so
+                # every downstream consumer sees a concrete Problem.
+                concrete = (
+                    problem.instance(seed)
+                    if isinstance(problem, ProblemFamily)
+                    else problem
+                )
+                x0 = concrete.starting_point(seed)
                 for algorithm in self.algorithms:
-                    jobs.append((algorithm, problem, x0, seed))
+                    jobs.append((algorithm, concrete, x0, seed))
         return jobs
 
     def run(self, verbose: bool = True) -> dict[tuple[str, str], list[RunTrace]]:

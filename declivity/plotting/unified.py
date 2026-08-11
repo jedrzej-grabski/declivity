@@ -118,12 +118,36 @@ class RunGroup:
 # Low-level rendering primitives, shared by every plotter.
 
 
-def save_if_path(fig: Figure, save_path: Path | str | None) -> None:
-    """Write ``fig`` to ``save_path`` (dpi 150), creating parent dirs."""
+def save_if_path(fig: Figure, save_path: Path | str | None, dpi: int = 300) -> None:
+    """Write ``fig`` to ``save_path``, creating parent dirs."""
     if save_path is None:
         return
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+
+
+def thin_log_grid(ax, axis: str = "y", max_ticks: int = 8) -> None:
+    """Draw gridlines only where the log axis is actually labelled.
+
+    A log axis spanning many decades keeps a major tick per decade but thins
+    the *labels*, so a ``which="both"`` grid stripes the panel with unlabelled
+    lines.  This subsamples the major locator to ``max_ticks`` and drops the
+    minor locator, leaving one gridline per label.
+    """
+    import matplotlib.ticker as mticker
+
+    target = ax.yaxis if axis == "y" else ax.xaxis
+    target.set_major_locator(mticker.LogLocator(base=10.0, numticks=max_ticks))
+    target.set_minor_locator(mticker.NullLocator())
+
+
+def thin_linear_grid(ax, axis: str = "x", max_ticks: int = 6) -> None:
+    """Cap the number of ticks (and so gridlines) on a linear axis."""
+    import matplotlib.ticker as mticker
+
+    target = ax.xaxis if axis == "x" else ax.yaxis
+    target.set_major_locator(mticker.MaxNLocator(nbins=max_ticks, prune=None))
+    target.set_minor_locator(mticker.NullLocator())
 
 
 def grid_dims(num_panels: int, ncols: int) -> tuple[int, int]:

@@ -99,6 +99,15 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
             )
         self._initial_geometry = initial_geometry
         self._cached_gradient: NDArray[np.float64] | None = None
+        self._final_inverse_hessian: NDArray[np.float64] | None = None
+
+    @property
+    def final_inverse_hessian(self) -> NDArray[np.float64] | None:
+        """The inverse-Hessian approximation ``H_k`` at the end of the last
+        ``optimize()`` call (defensive copy); ``None`` before any run."""
+        if self._final_inverse_hessian is None:
+            return None
+        return self._final_inverse_hessian.copy()
 
     # Gradient computation
 
@@ -208,6 +217,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
 
         grad_norm = self._gradient_norm(x, gradient)
         if grad_norm <= config.gtol:
+            self._final_inverse_hessian = inverse_hessian
             return OptimizationResult(
                 best_solution=best_solution,
                 best_fitness=best_fitness,
@@ -379,6 +389,7 @@ class BFGSOptimizer(BaseOptimizer["BFGSLogData", BFGSConfig]):
         if termination_message is None:
             termination_message = self.stop_message
 
+        self._final_inverse_hessian = np.asarray(inverse_hessian, dtype=np.float64)
         return OptimizationResult(
             best_solution=best_solution,
             best_fitness=best_fitness,

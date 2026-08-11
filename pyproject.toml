@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.3.0",
     "joblib>=1.5.3",
     "cecpy>=0.1.7",
+    "pyyaml>=6.0.3",
 ]
 requires-python = ">=3.12"
 readme = "README.md"

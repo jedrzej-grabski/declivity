@@ -89,6 +89,16 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
             seed=seed,
         )
 
+        self._final_simplex: NDArray[np.float64] | None = None
+
+    @property
+    def final_simplex(self) -> NDArray[np.float64] | None:
+        """The ``(n+1, n)`` simplex at the end of the last ``optimize()`` call
+        (defensive copy); ``None`` before any run."""
+        if self._final_simplex is None:
+            return None
+        return self._final_simplex.copy()
+
     def _repair_point(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
         """Repair one trial vertex through the injected :class:`RepairStrategy`.
 
@@ -227,6 +237,7 @@ class NelderMeadOptimizer(PopulationOptimizer["NelderMeadLogData", NelderMeadCon
         if termination_message is None:
             termination_message = self.stop_message
 
+        self._final_simplex = sim
         return OptimizationResult(
             best_solution=best_solution,
             best_fitness=best_fitness,

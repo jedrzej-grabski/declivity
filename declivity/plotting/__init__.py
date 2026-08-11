@@ -11,6 +11,8 @@ Entry points for diagnostic plots:
 - :py:func:`plot_benchmark_boxplot` — multi-seed final-fitness boxplot.
 - :py:func:`plot_benchmark_ecdf` — per-problem ECDF overlay (fraction of
   target levels reached vs. evaluation budget), one curve per algorithm.
+- :py:func:`plot_suite_ecdf` — the same aggregated over a whole problem
+  suite, every (problem, target) pair weighing equally.
 - :py:func:`plot_function_landscape` /
   :py:func:`plot_function_landscape_grid` — 2D contour plots of an
   objective function.
@@ -29,6 +31,7 @@ from declivity.plotting.benchmark import (
     plot_benchmark_convergence,
     plot_benchmark_ecdf,
     plot_convergence_overlay,
+    plot_suite_ecdf,
 )
 from declivity.plotting.declarative import (
     plot_comparison,
@@ -69,4 +72,5 @@ __all__ = [
     "plot_matrix_diagonal_comparison",
     "plot_metrics",
     "plot_panels",
+    "plot_suite_ecdf",
 ]
