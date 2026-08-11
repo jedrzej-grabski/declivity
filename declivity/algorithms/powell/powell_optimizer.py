@@ -88,6 +88,16 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
                     "would never be optimized."
                 )
 
+        self._final_directions: NDArray[np.float64] | None = None
+
+    @property
+    def final_directions(self) -> NDArray[np.float64] | None:
+        """The direction set (rows) at the end of the last ``optimize()`` call
+        (defensive copy); ``None`` before any run."""
+        if self._final_directions is None:
+            return None
+        return self._final_directions.copy()
+
     # Directional minimization
 
     def _search_along(
@@ -272,6 +282,7 @@ class PowellOptimizer(BaseOptimizer["PowellLogData", PowellConfig]):
         if termination_message is None:
             termination_message = self.stop_message
 
+        self._final_directions = direc
         return OptimizationResult(
             best_solution=best_solution,
             best_fitness=best_fitness,
