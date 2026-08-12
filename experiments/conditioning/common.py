@@ -8,7 +8,7 @@ recomputing what already exists:
     cmaes/    per (variant, dim[, function], seed): CMAESPath (expensive, cached)
     hessian/  per (dim, seed): FD Hessian at x0            (exp1 only)
     local/    per local run: trace + final state + config.yaml
-    benchmarks/  Benchmark traces.json per stage           (what --replot reads)
+    benchmarks/  Benchmark traces.parquet per stage           (what --replot reads)
 
 Every stage checks for existing artifacts and skips them unless forced.
 """

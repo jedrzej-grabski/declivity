@@ -20,7 +20,10 @@ from numpy.typing import NDArray
 
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
-from declivity.benchmarking.persistence import load_traces_json, save_traces_json
+from declivity.benchmarking.persistence import (
+    load_traces_parquet,
+    save_traces_parquet,
+)
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace
 from declivity.utils.constraint_handlers import ConstraintHandler
@@ -218,14 +221,14 @@ def record_cmaes_path(
 
 
 def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
-    """Persist a :class:`CMAESPath` as ``trace.json`` + ``snapshots.npz`` +
+    """Persist a :class:`CMAESPath` as ``trace.parquet`` + ``snapshots.npz`` +
     ``meta.json`` under ``directory``."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
     trace = path_record.trace
-    save_traces_json(
-        {(trace.problem, trace.algorithm): [trace]}, directory / "trace.json"
+    save_traces_parquet(
+        {(trace.problem, trace.algorithm): [trace]}, directory / "trace.parquet"
     )
 
     snapshots = path_record.snapshots
@@ -244,7 +247,7 @@ def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
 def load_cmaes_path(directory: str | Path) -> CMAESPath:
     """Load a :class:`CMAESPath` previously written by :func:`save_cmaes_path`."""
     directory = Path(directory)
-    traces = load_traces_json(directory / "trace.json")
+    traces = load_traces_parquet(directory / "trace.parquet")
     (trace_list,) = traces.values()
     (trace,) = trace_list
 

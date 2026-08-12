@@ -34,7 +34,7 @@ from declivity.benchmarking import (
     ConditionedLocalAlgorithm,
     Problem,
     ProblemFamily,
-    load_traces_json,
+    load_traces_parquet,
     snapshot_geometry,
 )
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
@@ -493,11 +493,11 @@ def run_plot_stage(spec: Exp1Spec, floor: float = 1e-9) -> None:
     for scaling in spec.scalings:
         for variant in spec.variants:
             for dim in spec.dimensions:
-                traces_path = benchmark_dir(spec, scaling, variant, dim) / "traces.json"
+                traces_path = benchmark_dir(spec, scaling, variant, dim) / "traces.parquet"
                 if not traces_path.exists():
                     print(f"[plot] missing {traces_path}, skipping")
                     continue
-                traces = load_traces_json(traces_path)
+                traces = load_traces_parquet(traces_path)
                 family = family_for(spec, variant, dim)
                 template = family.template
                 optimum = problem_optimum(template)

@@ -7,7 +7,7 @@
 
 """Interactive browser for exp1 conditioning-study results.
 
-Renders convergence overlays on the fly from persisted ``traces.json`` files
+Renders convergence overlays on the fly from persisted ``traces.parquet`` files
 (never from pre-saved PNGs), so every plot stays interactive. Mirrors the
 load -> anchor -> render pipeline in
 ``experiments/conditioning/exp1_conditioners.py::run_plot_stage``.
@@ -37,7 +37,7 @@ with app.setup:
     if str(_ROOT) not in sys.path:
         sys.path.insert(0, str(_ROOT))
 
-    from declivity.benchmarking import ConditionedLocalAlgorithm, load_traces_json
+    from declivity.benchmarking import ConditionedLocalAlgorithm, load_traces_parquet
     from declivity.plotting import plot_convergence_overlay
     from experiments.conditioning.common import (
         LOCAL_LABELS,
@@ -184,7 +184,7 @@ def group_by_name(studies: list[StudyInfo]) -> dict[str, dict[int, StudyInfo]]:
 def load_shifted(
     spec: Exp1Spec, variant: str, dim: int, scaling: str, floor: float = FLOOR
 ):
-    """Load ``traces.json`` for one (variant, dim, scaling) cell and replicate
+    """Load ``traces.parquet`` for one (variant, dim, scaling) cell and replicate
     ``run_plot_stage``'s anchor/gap pipeline: gap-to-optimum, then anchor
     every curve at its seed's shared ``f(x0)`` so contenders visibly start
     from one point. Returns ``None`` if the traces file doesn't exist (e.g.
@@ -193,10 +193,10 @@ def load_shifted(
     Returns ``(shifted_traces, template_problem, contenders)`` where
     ``contenders`` is ``{optimizer_key: [ConditionedLocalAlgorithm, ...]}``.
     """
-    traces_path = benchmark_dir(spec, scaling, variant, dim) / "traces.json"
+    traces_path = benchmark_dir(spec, scaling, variant, dim) / "traces.parquet"
     if not traces_path.exists():
         return None
-    traces = load_traces_json(traces_path)
+    traces = load_traces_parquet(traces_path)
     family = family_for(spec, variant, dim)
     template = family.template
     optimum = problem_optimum(template)
@@ -270,7 +270,7 @@ def _():
 def _(mo):
     mo.md(
         "# Conditioning study browser\n"
-        "Renders convergence overlays live from persisted `traces.json` "
+        "Renders convergence overlays live from persisted `traces.parquet` "
         "files under `results/conditioning/exp1/`."
     )
     return
@@ -362,7 +362,7 @@ def _(dim_sel, mo, scaling_sel, seed0_sel, v1_study, variant_sel):
     )
     mo.stop(
         v1_result is None,
-        mo.callout(mo.md("No `traces.json` found for this selection."), kind="warn"),
+        mo.callout(mo.md("No `traces.parquet` found for this selection."), kind="warn"),
     )
     assert v1_result is not None
     v1_shifted, v1_template, v1_contenders = v1_result

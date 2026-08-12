@@ -179,7 +179,7 @@ def main() -> None:
         seeds=list(range(NUM_SEEDS)),
         output_dir=OUTPUT_DIR / "_bench",
         num_workers=4,
-        save_artifacts=False,  # showcase only; skip the traces.json/csv dump
+        save_artifacts=False,  # showcase only; skip the traces.parquet/csv dump
     )
     print(f"[2] Running {len(problems)}x{len(algorithms)}x{NUM_SEEDS} benchmark...")
     bench.run(verbose=False)

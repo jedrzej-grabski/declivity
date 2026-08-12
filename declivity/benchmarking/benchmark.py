@@ -21,7 +21,7 @@ from declivity.benchmarking.algorithm_run import AlgorithmRun
 from declivity.benchmarking.persistence import (
     save_runs_csv,
     save_summary_csv,
-    save_traces_json,
+    save_traces_parquet,
 )
 from declivity.benchmarking.problem import Problem, ProblemFamily
 from declivity.benchmarking.run_trace import RunTrace
@@ -51,7 +51,7 @@ class Benchmark:
     """Process count. 1 (default) keeps it serial; >1 uses joblib's loky backend."""
 
     save_artifacts: bool = True
-    """If True, dump traces.json + runs.csv + summary.csv into ``output_dir`` after run()."""
+    """If True, dump traces.parquet + runs.csv + summary.csv into ``output_dir`` after run()."""
 
     traces: dict[tuple[str, str], list[RunTrace]] = field(default_factory=dict)
     """Keyed by (problem.name, algorithm.name) -> list of traces (one per seed)."""
@@ -198,7 +198,9 @@ class Benchmark:
         )
 
     def _save_artifacts(self, verbose: bool) -> None:
-        traces_path = save_traces_json(self.traces, self.output_dir / "traces.json")
+        traces_path = save_traces_parquet(
+            self.traces, self.output_dir / "traces.parquet"
+        )
         runs_path = save_runs_csv(self.traces, self.output_dir / "runs.csv")
         summary_path = save_summary_csv(
             self.summary_table(), self.output_dir / "summary.csv"

@@ -17,7 +17,7 @@ The four runners span every rung of the extension hierarchy:
    two-phase ``HandoffAlgorithm``), proving the harness is open at the bottom.
 
 ``Benchmark`` runs all 2 problems x 4 runners x N seeds, persists lean
-``RunTrace``s to ``traces.json`` (so a re-plot never re-runs an optimizer),
+``RunTrace``s to ``traces.parquet`` (so a re-plot never re-runs an optimizer),
 and the headline figure is the **multi-seed convergence** — a median
 best-fitness line with a 25/75 IQR band per runner, one panel per problem.
 Every runner's curve is read off ``bench.traces`` with no per-runner code:
@@ -45,7 +45,7 @@ from declivity.benchmarking import (
     Problem,
     RunTrace,
     SingleAlgorithm,
-    load_traces_json,
+    load_traces_parquet,
 )
 from declivity.core.algorithm_factory import AlgorithmFactory
 from declivity.plotting import plot_benchmark_convergence
@@ -217,7 +217,7 @@ def main() -> None:
         seeds=list(range(NUM_SEEDS)),
         output_dir=OUTPUT_DIR,
         num_workers=4,
-        save_artifacts=True,  # dumps traces.json / runs.csv / summary.csv
+        save_artifacts=True,  # dumps traces.parquet / runs.csv / summary.csv
     )
     print(
         f"Running {len(problems)}x{len(algorithms)}x{NUM_SEEDS} = "
@@ -238,16 +238,16 @@ def main() -> None:
         save_path=OUTPUT_DIR / "01_heterogeneous_convergence.png",
     )
 
-    # Persistence round-trip: the run dumped traces.json above; reloading it
+    # Persistence round-trip: the run dumped traces.parquet above; reloading it
     # reconstructs every RunTrace, so a re-plot or post-hoc analysis never
     # re-runs an optimizer.
-    reloaded = load_traces_json(OUTPUT_DIR / "traces.json")
+    reloaded = load_traces_parquet(OUTPUT_DIR / "traces.parquet")
     n_in_memory = sum(len(v) for v in bench.traces.values())
     n_on_disk = sum(len(v) for v in reloaded.values())
     assert n_in_memory == n_on_disk == len(problems) * len(algorithms) * NUM_SEEDS
     print(
         f"\nPersistence round-trip OK: {n_on_disk} traces reloaded from "
-        f"{OUTPUT_DIR / 'traces.json'} (no optimizer re-run)."
+        f"{OUTPUT_DIR / 'traces.parquet'} (no optimizer re-run)."
     )
 
     print(f"\nOutput written to: {OUTPUT_DIR.absolute()}")
