@@ -11,6 +11,8 @@ CLAUDE.md
 # Generated outputs — reproducible from the example scripts
 plots/
 results/
+# Hydra run/sweep output (incl. submitit logs) from exp1_hydra
+logs/
 
 
 # Byte-compiled / optimized / DLL files
