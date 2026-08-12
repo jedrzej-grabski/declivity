@@ -1,11 +1,23 @@
 {
   "version": 1,
   "skills": {
+    "anywidget-generator": {
+      "source": "marimo-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/anywidget/SKILL.md",
+      "computedHash": "93a512dc9870809902459881640b041afe5fe460774e9b49a212d8d799922ab5"
+    },
     "async-python-patterns": {
       "source": "wshobson/agents",
       "sourceType": "github",
       "skillPath": "plugins/python-development/skills/async-python-patterns/SKILL.md",
       "computedHash": "e0f03523d989848310c93a599541948474f24ccaa04c8d52ed1b45cc5adaebde"
+    },
+    "auto-paper-demo": {
+      "source": "marimo-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/auto-paper-demo/SKILL.md",
+      "computedHash": "edba11eee233e8e7433a8d0b38798b1da0785eb8363028c1ab28f2c95f026ec8"
     },
     "code-review-excellence": {
       "source": "wshobson/agents",
@@ -36,6 +48,18 @@
       "sourceType": "github",
       "skillPath": "plugins/developer-essentials/skills/git-advanced-workflows/SKILL.md",
       "computedHash": "f4d0569096237c09b1c07896770fe487d7224c549f7aab0c6551a4f330fcf160"
+    },
+    "marimo-batch": {
+      "source": "marimo-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/marimo-batch/SKILL.md",
+      "computedHash": "8af0436514aac6a0317733cb0897adc08026a22e82c5beb1ed92eb4bba7e5f4f"
+    },
+    "marimo-notebook": {
+      "source": "marimo-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/marimo-notebook/SKILL.md",
+      "computedHash": "d843af038a49245369d9a91b8dda531a0d58882bc06623604b673cb144588edd"
     },
     "pdf": {
       "source": "anthropics/skills",
