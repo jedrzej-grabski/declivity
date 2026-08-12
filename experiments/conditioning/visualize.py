@@ -61,6 +61,10 @@ with app.setup:
     DATA_ROOT = Path("results/conditioning/exp1")
     FLOOR = 1e-9
 
+    # View 1's grid of per-optimizer panels vs. View 2's single sweep panels.
+    FIGSIZE_GRID = (7.0, 4.5)
+    FIGSIZE_SINGLE = (11.0, 6.5)
+
 
 @app.class_definition
 @dataclass
@@ -115,7 +119,8 @@ def spec_from_study_yaml(study_dir: Path) -> Exp1Spec:
     )
 
 
-def _variants_and_dims_on_disk(
+@app.function
+def variants_and_dims_on_disk(
     study_dir: Path, scalings: tuple[str, ...]
 ) -> tuple[tuple[str, ...], tuple[int, ...]]:
     """Actual ``(variant, dim)`` cells with a ``benchmarks/`` tree, read
@@ -147,14 +152,11 @@ def discover_studies(data_root: Path) -> list[StudyInfo]:
     """Glob ``<data_root>/*/rot*/study.yaml`` and ``<data_root>/*/f*/rot*/study.yaml``
     and build one ``StudyInfo`` per match.
 
-    The two depths correspond to ellipsoid studies (no function segment) and
-    CEC studies (``f{NN}`` segment) respectively -- see ``study_root`` in
-    ``exp1_conditioners.py``. ``scalings``/``variants``/``dimensions`` are
-    taken from what is actually present on disk rather than from
-    ``study.yaml``: a study.yaml can list a scaling whose local/plot stage
-    hasn't run yet, and it omits the variants/dimensions sweep axes entirely
-    (see ``_variants_and_dims_on_disk``). Studies with no realized
-    ``(dim, variant)`` cells are skipped.
+    ``scalings``/``variants``/``dimensions`` are taken from what is actually
+    present on disk rather than from ``study.yaml``: a study.yaml can list a
+    scaling whose local/plot stage hasn't run yet, and it omits the
+    variants/dimensions sweep axes entirely (see ``_variants_and_dims_on_disk``).
+    Studies with no realized ``(dim, variant)`` cells are skipped.
     """
     infos = []
     study_yamls = {
@@ -165,7 +167,7 @@ def discover_studies(data_root: Path) -> list[StudyInfo]:
         study_dir = study_yaml.parent
         spec = spec_from_study_yaml(study_dir)
         scalings = tuple(s for s in spec.scalings if (study_dir / s).is_dir())
-        variants, dims = _variants_and_dims_on_disk(study_dir, scalings)
+        variants, dims = variants_and_dims_on_disk(study_dir, scalings)
         if not variants or not dims:
             # A study.yaml exists but no local/benchmarks cells are realized
             # yet (e.g. only CMA-ES has run); nothing to plot, so skip it.
@@ -253,6 +255,7 @@ def render_optimizer_figure(
     title: str,
     seed0: bool = False,
     floor: float = FLOOR,
+    figsize: tuple[float, float] = FIGSIZE_SINGLE,
 ) -> Figure | None:
     """One ``plot_convergence_overlay`` panel: all conditioners for a single
     optimizer, on one problem instance. Mirrors ``run_plot_stage``'s
@@ -276,6 +279,7 @@ def render_optimizer_figure(
         show_iqr=False,
         annotate_final=False,
         xmax=xmax,
+        figsize=figsize,
     )
 
 
@@ -413,13 +417,17 @@ def _(dim_sel, mo, scaling_sel, seed0_sel, v1_study, variant_sel):
             v1_opt_key,
             title=v1_title,
             seed0=seed0_sel.value,
+            figsize=FIGSIZE_GRID,
         )
         if v1_fig is not None:
             v1_figs.append(mo.as_html(v1_fig))
             plt.close(v1_fig)
 
     mo.stop(not v1_figs, mo.callout(mo.md("No optimizer curves to show."), kind="warn"))
-    v1_rows = [mo.hstack(v1_figs[i : i + 2], gap=1) for i in range(0, len(v1_figs), 2)]
+    v1_rows = [
+        mo.hstack(v1_figs[i : i + 3], gap=1, widths="equal")
+        for i in range(0, len(v1_figs), 3)
+    ]
     mo.vstack(v1_rows, gap=1)
     return
 
@@ -442,7 +450,7 @@ def _(by_name, mo):
         v2_names, value=v2_names[0] if v2_names else None, label="Study name"
     )
     mo.vstack([name_sel])
-    return name_sel, v2_names
+    return (name_sel,)
 
 
 @app.cell(hide_code=True)
@@ -554,11 +562,11 @@ def _(
             v2_shifted, v2_template, v2_contenders, v2_opt, title=v2_title
         )
         if v2_fig is not None:
-            v2_figs.append(mo.as_html(v2_fig))
+            v2_figs.append(mo.as_html(v2_fig).style({"max-width": "900px", "width": "100%"}))
             plt.close(v2_fig)
 
     mo.stop(not v2_figs, mo.callout(mo.md("No data for this sweep."), kind="warn"))
-    mo.hstack(v2_figs, gap=1)
+    mo.vstack(v2_figs, gap=1, align="center")
     return
 
 
