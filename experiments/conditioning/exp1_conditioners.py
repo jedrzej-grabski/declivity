@@ -62,7 +62,6 @@ from experiments.conditioning.common import (
     build_family,
     cmaes_config_factory,
     cmaes_dir,
-    dump_yaml,
     ensure_cmaes_path,
     ensure_setup,
     filter_seed,
@@ -96,7 +95,10 @@ class Exp1Spec:
     include_identity: bool = True
     optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
     transform: str = "inverse"
-    scaling: str = str(HessianScaling.NONE)
+    # Scaling only reinterprets the (shared) CMA-ES/Hessian matrices in the
+    # local stage, so a study evaluates a whole list of scalings against one
+    # set of CMA-ES runs; each lands in its own `<scaling>/` subtree.
+    scalings: tuple[str, ...] = (str(HessianScaling.NONE),)
     population_factor: float = 0.0
     sigma0: float = SAMPLING_SPAN / 5.0
     local_budget_per_dim: int = 500
@@ -121,7 +123,7 @@ class Exp1Spec:
             "include_identity": self.include_identity,
             "optimizers": list(self.optimizers),
             "transform": self.transform,
-            "scaling": self.scaling,
+            "scalings": list(self.scalings),
             "population_factor": self.population_factor,
             "sigma0": self.sigma0,
             "local_budget_per_dim": self.local_budget_per_dim,
@@ -129,7 +131,10 @@ class Exp1Spec:
 
 
 def study_root(spec: Exp1Spec) -> Path:
-    return spec.data_root / spec.name
+    # rot{0,1} sits above the shared setup/cmaes/hessian artifacts because
+    # rotation changes the objective (hence the CMA-ES path and Hessian);
+    # scaling does not, so it nests *below* (see scaling_root/benchmark_dir).
+    return spec.data_root / spec.name / f"rot{int(spec.rotate)}"
 
 
 def setup_root(spec: Exp1Spec) -> Path:
@@ -140,8 +145,14 @@ def hessian_dir(spec: Exp1Spec, dim: int, seed: int) -> Path:
     return study_root(spec) / "hessian" / f"d{dim:03d}" / f"seed{seed:02d}"
 
 
-def benchmark_dir(spec: Exp1Spec, variant: str, dim: int) -> Path:
-    return study_root(spec) / "benchmarks" / variant / f"d{dim:03d}"
+def scaling_root(spec: Exp1Spec, scaling: str) -> Path:
+    """Per-scaling subtree holding only the local-optimizer outputs; the
+    CMA-ES/Hessian artifacts above it are scaling-independent and reused."""
+    return study_root(spec) / scaling
+
+
+def benchmark_dir(spec: Exp1Spec, scaling: str, variant: str, dim: int) -> Path:
+    return scaling_root(spec, scaling) / "benchmarks" / variant / f"d{dim:03d}"
 
 
 def family_for(spec: Exp1Spec, variant: str, dim: int) -> ProblemFamily:
@@ -198,9 +209,11 @@ def conditioners_for(spec: Exp1Spec, dim: int) -> list[Conditioner]:
     return entries
 
 
-def load_hessian_geometry(spec: Exp1Spec, dim: int, seed: int) -> InitialGeometry:
+def load_hessian_geometry(
+    spec: Exp1Spec, dim: int, seed: int, scaling: str
+) -> InitialGeometry:
     matrix = np.load(hessian_dir(spec, dim, seed) / "hessian.npy")
-    return InitialGeometry.from_curvature(matrix, dim, scaling=spec.scaling)
+    return InitialGeometry.from_curvature(matrix, dim, scaling=scaling)
 
 
 def load_snapshot(spec: Exp1Spec, variant: str, dim: int, seed: int, k: int):
@@ -220,21 +233,23 @@ def load_snapshot(spec: Exp1Spec, variant: str, dim: int, seed: int, k: int):
 
 
 def load_snapshot_geometry(
-    spec: Exp1Spec, variant: str, dim: int, seed: int, k: int
+    spec: Exp1Spec, variant: str, dim: int, seed: int, k: int, scaling: str
 ) -> InitialGeometry:
     return snapshot_geometry(
-        load_snapshot(spec, variant, dim, seed, k), spec.transform, spec.scaling
+        load_snapshot(spec, variant, dim, seed, k), spec.transform, scaling
     )
 
 
-def geometry_provider(spec: Exp1Spec, variant: str, conditioner: Conditioner):
+def geometry_provider(
+    spec: Exp1Spec, variant: str, conditioner: Conditioner, scaling: str
+):
     def provider(problem: Problem, seed: int) -> InitialGeometry:
         dim = problem.dimensions
         if conditioner.kind == "identity":
             return InitialGeometry.identity(dim)
         if conditioner.kind == "hessian":
-            return load_hessian_geometry(spec, dim, seed)
-        return load_snapshot_geometry(spec, variant, dim, seed, conditioner.k)
+            return load_hessian_geometry(spec, dim, seed, scaling)
+        return load_snapshot_geometry(spec, variant, dim, seed, conditioner.k, scaling)
 
     return provider
 
@@ -244,9 +259,9 @@ def contender_name(optimizer_key: str, conditioner: Conditioner) -> str:
 
 
 def build_contenders(
-    spec: Exp1Spec, variant: str, dim: int
+    spec: Exp1Spec, variant: str, dim: int, scaling: str
 ) -> dict[str, list[ConditionedLocalAlgorithm]]:
-    """Per optimizer key, one contender per conditioner."""
+    """Per optimizer key, one contender per conditioner, for one scaling."""
     budget = spec.local_budget_per_dim * dim
     contenders: dict[str, list[ConditionedLocalAlgorithm]] = {}
     for optimizer_key in spec.optimizers:
@@ -259,10 +274,14 @@ def build_contenders(
                     color=conditioner.color,
                     algorithm=choice,
                     config_factory=lambda d, c=choice: local_config(c, d, "deep"),
-                    geometry_provider=geometry_provider(spec, variant, conditioner),
+                    geometry_provider=geometry_provider(
+                        spec, variant, conditioner, scaling
+                    ),
                     stopping_condition=MaxEvaluations(budget),
                     simplex_base_size=0.1 * SAMPLING_SPAN,
-                    record=make_recorder(spec, variant, optimizer_key, conditioner),
+                    record=make_recorder(
+                        spec, variant, optimizer_key, conditioner, scaling
+                    ),
                 )
             )
         contenders[optimizer_key] = runners
@@ -270,7 +289,11 @@ def build_contenders(
 
 
 def make_recorder(
-    spec: Exp1Spec, variant: str, optimizer_key: str, conditioner: Conditioner
+    spec: Exp1Spec,
+    variant: str,
+    optimizer_key: str,
+    conditioner: Conditioner,
+    scaling: str,
 ):
     def record(
         problem: Problem,
@@ -280,7 +303,7 @@ def make_recorder(
     ) -> None:
         dim = problem.dimensions
         directory = (
-            study_root(spec)
+            scaling_root(spec, scaling)
             / "local"
             / variant
             / f"d{dim:03d}"
@@ -312,7 +335,7 @@ def make_recorder(
                     else None
                 ),
                 "transform": spec.transform,
-                "scaling": spec.scaling,
+                "scaling": scaling,
                 "budget_evaluations": spec.local_budget_per_dim * dim,
                 "x0_file": str(
                     setup_root(spec).relative_to(study_root(spec))
@@ -424,97 +447,108 @@ def run_hessian_stage(spec: Exp1Spec, force: bool) -> None:
 
 
 def run_local_stage(spec: Exp1Spec) -> None:
-    for variant in spec.variants:
-        for dim in spec.dimensions:
-            contenders = build_contenders(spec, variant, dim)
-            algorithms = [
-                runner for runners in contenders.values() for runner in runners
-            ]
-            bench = Benchmark(
-                problems=[family_for(spec, variant, dim)],
-                algorithms=algorithms,  # pyright: ignore[reportArgumentType]
-                seeds=list(range(spec.num_seeds)),
-                output_dir=benchmark_dir(spec, variant, dim),
-                num_workers=spec.num_workers,
-            )
-            print(f"\n[local] {variant} d={dim}: {len(algorithms)} contenders")
-            bench.run(verbose=True)
-            bench.print_summary()
+    # Scaling is the innermost loop: every scaling reuses the same CMA-ES
+    # paths and Hessians, differing only in how their matrices are rescaled
+    # when the preconditioner is built.
+    for scaling in spec.scalings:
+        for variant in spec.variants:
+            for dim in spec.dimensions:
+                contenders = build_contenders(spec, variant, dim, scaling)
+                algorithms = [
+                    runner for runners in contenders.values() for runner in runners
+                ]
+                bench = Benchmark(
+                    problems=[family_for(spec, variant, dim)],
+                    algorithms=algorithms,  # pyright: ignore[reportArgumentType]
+                    seeds=list(range(spec.num_seeds)),
+                    output_dir=benchmark_dir(spec, scaling, variant, dim),
+                    num_workers=spec.num_workers,
+                )
+                print(
+                    f"\n[local] scaling={scaling} {variant} d={dim}: "
+                    f"{len(algorithms)} contenders"
+                )
+                bench.run(verbose=True)
+                bench.print_summary()
 
 
 def run_plot_stage(spec: Exp1Spec, floor: float = 1e-9) -> None:
     apply_dark_style()
-    for variant in spec.variants:
-        for dim in spec.dimensions:
-            traces_path = benchmark_dir(spec, variant, dim) / "traces.json"
-            if not traces_path.exists():
-                print(f"[plot] missing {traces_path}, skipping")
-                continue
-            traces = load_traces_json(traces_path)
-            family = family_for(spec, variant, dim)
-            template = family.template
-            optimum = problem_optimum(template)
-            # Every contender shares x0 per seed, so anchoring each curve at
-            # f(x0) makes them visibly start from one point.
-            f0 = {
-                seed: max(
-                    float(
-                        family.instance(seed).function(
-                            family.instance(seed).starting_point(seed)
+    rot = f"rot{int(spec.rotate)}"
+    for scaling in spec.scalings:
+        for variant in spec.variants:
+            for dim in spec.dimensions:
+                traces_path = benchmark_dir(spec, scaling, variant, dim) / "traces.json"
+                if not traces_path.exists():
+                    print(f"[plot] missing {traces_path}, skipping")
+                    continue
+                traces = load_traces_json(traces_path)
+                family = family_for(spec, variant, dim)
+                template = family.template
+                optimum = problem_optimum(template)
+                # Every contender shares x0 per seed, so anchoring each curve
+                # at f(x0) makes them visibly start from one point.
+                f0 = {
+                    seed: max(
+                        float(
+                            family.instance(seed).function(
+                                family.instance(seed).starting_point(seed)
+                            )
                         )
+                        - optimum,
+                        floor,
                     )
-                    - optimum,
-                    floor,
-                )
-                for seed in range(spec.num_seeds)
-            }
-            shifted = anchor_traces(gap_traces(traces, optimum, floor), f0)
-            contenders = build_contenders(spec, variant, dim)
+                    for seed in range(spec.num_seeds)
+                }
+                shifted = anchor_traces(gap_traces(traces, optimum, floor), f0)
+                contenders = build_contenders(spec, variant, dim, scaling)
 
-            out = spec.plot_root / spec.name / variant / f"d{dim:03d}"
-            out.mkdir(parents=True, exist_ok=True)
-            for optimizer_key, runners in contenders.items():
-                label = LOCAL_LABELS[optimizer_key]
-                title = f"{template.name}, d={dim}, {variant}, {label}"
-                pooled = [
-                    t
-                    for runner in runners
-                    for t in shifted.get((template.name, runner.name), [])
-                ]
-                xmax = plot_xmax(pooled)
-                plot_convergence_overlay(
-                    shifted,
-                    template,
-                    runners,
-                    title=title,
-                    ylabel="$f(x_{best}) - f^*$",
-                    floor=floor,
-                    show_iqr=False,
-                    annotate_final=False,
-                    xmax=xmax,
-                    save_path=out / f"{optimizer_key}_convergence.png",
+                out = (
+                    spec.plot_root / spec.name / rot / scaling / variant / f"d{dim:03d}"
                 )
-                seed0 = filter_seed(shifted, 0)
-                plot_convergence_overlay(
-                    seed0,
-                    template,
-                    runners,
-                    title=f"{title}, seed 0",
-                    ylabel="$f(x_{best}) - f^*$",
-                    floor=floor,
-                    show_iqr=False,
-                    annotate_final=False,
-                    xmax=plot_xmax(
-                        [
-                            t
-                            for runner in runners
-                            for t in seed0.get((template.name, runner.name), [])
-                        ]
-                    ),
-                    save_path=out / f"{optimizer_key}_convergence_seed0.png",
-                )
-                plt.close("all")
-            print(f"[plot] {variant} d={dim} -> {out}")
+                out.mkdir(parents=True, exist_ok=True)
+                for optimizer_key, runners in contenders.items():
+                    label = LOCAL_LABELS[optimizer_key]
+                    title = f"{template.name}, d={dim}, {variant}, {scaling}, {label}"
+                    pooled = [
+                        t
+                        for runner in runners
+                        for t in shifted.get((template.name, runner.name), [])
+                    ]
+                    xmax = plot_xmax(pooled)
+                    plot_convergence_overlay(
+                        shifted,
+                        template,
+                        runners,
+                        title=title,
+                        ylabel="$f(x_{best}) - f^*$",
+                        floor=floor,
+                        show_iqr=False,
+                        annotate_final=False,
+                        xmax=xmax,
+                        save_path=out / f"{optimizer_key}_convergence.png",
+                    )
+                    seed0 = filter_seed(shifted, 0)
+                    plot_convergence_overlay(
+                        seed0,
+                        template,
+                        runners,
+                        title=f"{title}, seed 0",
+                        ylabel="$f(x_{best}) - f^*$",
+                        floor=floor,
+                        show_iqr=False,
+                        annotate_final=False,
+                        xmax=plot_xmax(
+                            [
+                                t
+                                for runner in runners
+                                for t in seed0.get((template.name, runner.name), [])
+                            ]
+                        ),
+                        save_path=out / f"{optimizer_key}_convergence_seed0.png",
+                    )
+                    plt.close("all")
+                print(f"[plot] scaling={scaling} {variant} d={dim} -> {out}")
 
 
 def run(
@@ -533,7 +567,8 @@ def run(
     """
     root = study_root(spec)
     root.mkdir(parents=True, exist_ok=True)
-    dump_yaml(root / "study.yaml", spec.payload())
+    # Array tasks sharing this (name, rot) root race on study.yaml; atomic.
+    atomic_dump_yaml(root / "study.yaml", spec.payload())
     print(f"Study root: {root}")
 
     if not replot:

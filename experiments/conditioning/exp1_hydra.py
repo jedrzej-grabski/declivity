@@ -7,12 +7,18 @@ Config groups live under ``experiments/conditioning/conf/``:
     experiment/         full.yaml | demo.yaml   (seed count, ks, budgets, ...)
     launcher/           local.yaml | slurm.yaml (submitit executor settings)
 
-The sweep axes are the singular top-level fields ``dim`` and ``variant``;
-:func:`spec_from_cfg` lifts a single ``(dim, variant)`` pair into the
+The sweep axes are the singular top-level fields ``dim``, ``variant`` and
+``rotate`` -- the facets that force a distinct CMA-ES run. :func:`spec_from_cfg`
+lifts a single ``(dim, variant)`` pair into the
 ``Exp1Spec.dimensions``/``Exp1Spec.variants`` singleton tuples that the
-pipeline expects. One SLURM array task = one ``(dim, variant)`` cell, running
-the full setup -> cmaes -> hessian -> local -> plot pipeline for that cell,
-with joblib parallelizing seeds across ``num_workers`` cores within the node.
+pipeline expects. One SLURM array task = one ``(dim, variant, rotate)`` cell,
+running the full setup -> cmaes -> hessian -> local -> plot pipeline for that
+cell, with joblib parallelizing seeds across ``num_workers`` cores.
+
+``scalings`` is deliberately NOT a sweep axis: scaling only reinterprets the
+already-computed CMA-ES/Hessian matrices in the local stage, so one task
+evaluates the whole ``scalings`` list against a single set of CMA-ES runs,
+writing each into its own ``<name>/rot{0,1}/<scaling>/`` subtree.
 
 Preview the composed config for one cell without running anything::
 
@@ -24,19 +30,19 @@ Run a single cell locally (cheap smoke test)::
     PYTHONPATH=. uv run python -m experiments.conditioning.exp1_hydra \\
         experiment=demo objective=ellipsoid dim=10 variant=unbounded
 
-Run the full 8-cell grid on this machine, one process per cell
+Run the full 16-cell grid on this machine, one process per cell
 (``hydra/launcher=submitit_local`` is the raw plugin default; our
 ``launcher=local`` wraps it with this suite's settings)::
 
     PYTHONPATH=. uv run python -m experiments.conditioning.exp1_hydra -m \\
-        dim=10,30,50,100 variant=bounded,unbounded \\
+        dim=10,30,50,100 variant=bounded,unbounded rotate=true,false \\
         experiment=full objective=cec launcher=local
 
-Launch the same 8-cell grid as a SLURM array (fill in the placeholders in
+Launch the same grid as a SLURM array (fill in the placeholders in
 ``conf/launcher/slurm.yaml`` -- partition/account/qos -- first)::
 
     PYTHONPATH=. uv run python -m experiments.conditioning.exp1_hydra -m \\
-        dim=10,30,50,100 variant=bounded,unbounded \\
+        dim=10,30,50,100 variant=bounded,unbounded rotate=true,false \\
         experiment=full objective=cec launcher=slurm
 """
 
@@ -93,7 +99,10 @@ class Exp1HydraConfig:
         default_factory=lambda: ["lbfgsb", "bfgs", "powell", "neldermead"]
     )
     transform: str = "inverse"
-    scaling: str = "none"
+    # A study evaluates this whole list of scalings against one shared set of
+    # CMA-ES runs (scaling only reinterprets the matrices in the local stage),
+    # so scaling is an internal list, NOT a sweep axis.
+    scalings: list[str] = field(default_factory=lambda: ["none"])
     population_factor: float = 0.0
     sigma0: float = SAMPLING_SPAN / 5.0
     local_budget_per_dim: int = 500
@@ -144,7 +153,7 @@ def spec_from_cfg(cfg: Exp1HydraConfig) -> Exp1Spec:
         include_identity=cfg.include_identity,
         optimizers=tuple(cfg.optimizers),
         transform=cfg.transform,
-        scaling=cfg.scaling,
+        scalings=tuple(cfg.scalings),
         population_factor=cfg.population_factor,
         sigma0=cfg.sigma0,
         local_budget_per_dim=cfg.local_budget_per_dim,
