@@ -129,6 +129,21 @@ class Exp1Spec:
             "local_budget_per_dim": self.local_budget_per_dim,
         }
 
+    def study_descriptor(self) -> dict[str, Any]:
+        """Study-level config for the shared ``study.yaml``.
+
+        Omits the sweep-axis fields (``dimensions``/``variants``): under a
+        Hydra array every ``(dim, variant)`` cell carries only its own
+        singleton and races to overwrite this one shared file, so recording
+        them here just under-reports the study. The realized ``(dim, variant)``
+        coverage is instead read back from the on-disk ``benchmarks/`` tree
+        (see ``experiments/conditioning/visualize.py``).
+        """
+        descriptor = self.payload()
+        descriptor.pop("dimensions", None)
+        descriptor.pop("variants", None)
+        return descriptor
+
 
 def study_root(spec: Exp1Spec) -> Path:
     # rot{0,1} sits above the shared setup/cmaes/hessian artifacts because
@@ -567,8 +582,9 @@ def run(
     """
     root = study_root(spec)
     root.mkdir(parents=True, exist_ok=True)
-    # Array tasks sharing this (name, rot) root race on study.yaml; atomic.
-    atomic_dump_yaml(root / "study.yaml", spec.payload())
+    # Array tasks sharing this (name, rot) root race on study.yaml; atomic,
+    # and study-level only (no per-cell sweep axes -- see study_descriptor).
+    atomic_dump_yaml(root / "study.yaml", spec.study_descriptor())
     print(f"Study root: {root}")
 
     if not replot:
