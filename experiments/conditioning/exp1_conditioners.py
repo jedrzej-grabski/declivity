@@ -9,24 +9,19 @@ Per (dimension, variant) the study runs 25 seeds, each with its own starting
 point and random rotation of the objective (both persisted in the setup
 store), and produces per-optimizer convergence overlays.
 
-Full scale (CEC 2017 F1, d in {10, 30, 50, 100}, bounded + unbounded)::
-
-    PYTHONPATH=. uv run python experiments/conditioning/exp1_conditioners.py --num-workers 8
-
-Local demonstration::
-
-    PYTHONPATH=. uv run python experiments/conditioning/exp1_conditioners.py --demo
-
-Re-render figures from persisted artifacts (no optimizer runs)::
-
-    PYTHONPATH=. uv run python experiments/conditioning/exp1_conditioners.py --demo --replot
+This module exposes the ``Exp1Spec`` dataclass, the staged pipeline functions
+(``run_setup_stage``, ``run_cmaes_stage``, ``run_hessian_stage``,
+``run_local_stage``, ``run_plot_stage``), and the ``run()`` orchestrator that
+wires them together. It has no CLI of its own; see
+``experiments/conditioning/exp1_hydra.py`` for the Hydra-driven entrypoint
+(single runs, local multirun, and SLURM array launches via
+hydra-submitit-launcher).
 """
 
 from __future__ import annotations
 
-import argparse
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -58,11 +53,12 @@ from experiments.conditioning.common import (
     IDENTITY_COLOR,
     LOCAL_CHOICES,
     LOCAL_LABELS,
-    OBJECTIVES,
     SAMPLING_SPAN,
     VARIANTS,
     anchor_traces,
     apply_dark_style,
+    atomic_dump_yaml,
+    atomic_save_npy,
     build_family,
     cmaes_config_factory,
     cmaes_dir,
@@ -402,12 +398,15 @@ def run_hessian_stage(spec: Exp1Spec, force: bool) -> None:
         if target.exists() and not force:
             return f"d{dim}/seed{seed} (cached)"
         # Variant-independent: the objective is the same function either way.
+        # Both variants' array tasks for this dim reach this branch
+        # concurrently, so the write below must be atomic (see
+        # ``atomic_save_npy``) rather than a plain np.save.
         problem = family_for(spec, VARIANTS[0], dim).instance(seed)
         x0 = problem.starting_point(seed)
         matrix = spd_regularize(numerical_hessian(problem.function, x0))
         directory.mkdir(parents=True, exist_ok=True)
-        np.save(target, matrix)
-        dump_yaml(
+        atomic_save_npy(target, matrix)
+        atomic_dump_yaml(
             directory / "meta.yaml",
             {
                 "dimensions": dim,
@@ -518,170 +517,28 @@ def run_plot_stage(spec: Exp1Spec, floor: float = 1e-9) -> None:
             print(f"[plot] {variant} d={dim} -> {out}")
 
 
-def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--demo",
-        action="store_true",
-        help="Small local run: d=10, 5 seeds, k in {1,2,4}.",
-    )
-    parser.add_argument("--study-name", type=str, default=None)
-    parser.add_argument(
-        "--objective",
-        type=str,
-        default=CEC_OBJECTIVE,
-        choices=sorted(OBJECTIVES),
-        help=(
-            "'cec': CEC2017 F1 (or --edition/--function), the suite's default "
-            "rotated/shifted benchmark. 'ellipsoid': the axis-aligned "
-            "10^6-conditioned Ellipsoid (utils/benchmark_functions.Ellipsoid), "
-            "the canonical CMA-ES-covariance-converges-to-Hessian test "
-            "function, with no baked-in rotation/shift of its own -- use it "
-            "when you want the suite's --no-rotate toggle to be the *only* "
-            "source of coordinate coupling. --edition/--function are "
-            "rejected when --objective ellipsoid is selected."
-        ),
-    )
-    parser.add_argument("--edition", type=str, default=None, choices=sorted(EDITIONS))
-    parser.add_argument("--function", type=int, default=None)
-    parser.add_argument("--dims", type=int, nargs="+", default=None)
-    parser.add_argument("--num-seeds", type=int, default=None)
-    parser.add_argument(
-        "--variants", type=str, nargs="+", default=None, choices=list(VARIANTS)
-    )
-    parser.add_argument(
-        "--ks",
-        type=int,
-        nargs="+",
-        default=None,
-        help="Snapshot multipliers: conditioner C after k*d CMA-ES iterations.",
-    )
-    parser.add_argument(
-        "--cmaes-evaluations-per-dim",
-        type=int,
-        default=None,
-        help=(
-            "CMA-ES evaluation budget = value*d, independent of --ks (which "
-            "only selects snapshots to use as preconditioners). Converted to "
-            "whole generations internally. CMA-ES's own tolfun/tolx criteria "
-            "still stop it early on convergence."
-        ),
-    )
-    parser.add_argument(
-        "--optimizers", type=str, nargs="+", default=None, choices=sorted(LOCAL_CHOICES)
-    )
-    parser.add_argument("--transform", type=str, default="inverse", choices=["inverse"])
-    parser.add_argument(
-        "--hessian-scaling",
-        type=str,
-        default="none",
-        choices=["none", "sigma", "unit", "identity_norm"],
-        help=(
-            "Magnitude factor applied on top of --transform (shape). "
-            "'sigma' divides B_0 by sigma**2, reproducing the old fused "
-            "sigma_inverse transform when combined with --transform inverse."
-        ),
-    )
-    parser.add_argument(
-        "--population-factor",
-        type=float,
-        default=0.0,
-        help="CMA-ES lambda = factor*d; 0 = framework default.",
-    )
-    parser.add_argument("--local-budget-per-dim", type=int, default=None)
-    parser.add_argument("--no-rotate", action="store_true")
-    parser.add_argument("--no-hessian", action="store_true")
-    parser.add_argument("--num-workers", type=int, default=1)
-    parser.add_argument(
-        "--skip-cmaes",
-        action="store_true",
-        help="Reuse persisted CMA-ES paths only; fail if missing.",
-    )
-    parser.add_argument(
-        "--force-cmaes", action="store_true", help="Re-run CMA-ES even when cached."
-    )
-    parser.add_argument(
-        "--replot",
-        action="store_true",
-        help="Figures only, from persisted benchmark traces.",
-    )
-    parser.add_argument(
-        "--data-root", type=Path, default=Path("results/conditioning/exp1")
-    )
-    parser.add_argument(
-        "--plot-root", type=Path, default=Path("plots/conditioning/exp1")
-    )
-    args = parser.parse_args()
+def run(
+    spec: Exp1Spec,
+    *,
+    replot: bool = False,
+    run_cmaes: bool = True,
+    force_cmaes: bool = False,
+) -> None:
+    """Run the full staged pipeline (setup -> cmaes -> hessian -> local ->
+    plot) for ``spec``, or just re-render figures when ``replot`` is set.
 
-    if args.objective == ELLIPSOID_OBJECTIVE:
-        if args.edition is not None or args.function is not None:
-            parser.error(
-                "--edition/--function are not applicable with --objective ellipsoid."
-            )
-        edition = "cec2017"  # unused placeholder; ignored by family_for()
-        function_number = 1
-        default_name = "ellipsoid"
-    else:
-        edition = args.edition or "cec2017"
-        function_number = args.function if args.function is not None else 1
-        default_name = "cec17_f1"
-
-    spec = Exp1Spec(
-        name=default_name,
-        objective=args.objective,
-        edition=edition,
-        function_number=function_number,
-        data_root=args.data_root,
-        plot_root=args.plot_root,
-        num_workers=args.num_workers,
-        transform=args.transform,
-        scaling=args.hessian_scaling,
-        population_factor=args.population_factor,
-        rotate=not args.no_rotate,
-        include_hessian=not args.no_hessian,
-    )
-    if args.demo:
-        spec = replace(
-            spec,
-            name="demo",
-            dimensions=(10,),
-            num_seeds=5,
-            snapshot_ks=(2, 4, 8, 16, 32),
-            local_budget_per_dim=300,
-        )
-    if args.study_name is not None:
-        spec = replace(spec, name=args.study_name)
-    if args.dims is not None:
-        spec = replace(spec, dimensions=tuple(args.dims))
-    if args.num_seeds is not None:
-        spec = replace(spec, num_seeds=args.num_seeds)
-    if args.variants is not None:
-        spec = replace(spec, variants=tuple(args.variants))
-    if args.ks is not None:
-        spec = replace(spec, snapshot_ks=tuple(args.ks))
-    if args.cmaes_evaluations_per_dim is not None:
-        spec = replace(spec, cmaes_evaluations_per_dim=args.cmaes_evaluations_per_dim)
-    if args.optimizers is not None:
-        spec = replace(spec, optimizers=tuple(args.optimizers))
-    if args.local_budget_per_dim is not None:
-        spec = replace(spec, local_budget_per_dim=args.local_budget_per_dim)
-    return spec, args
-
-
-def main() -> None:
-    spec, args = parse_args()
+    ``run_cmaes=False`` reuses persisted CMA-ES paths only, failing if any
+    are missing (mirrors the old ``--skip-cmaes``); ``force_cmaes=True``
+    re-runs CMA-ES even when a cached path exists.
+    """
     root = study_root(spec)
     root.mkdir(parents=True, exist_ok=True)
     dump_yaml(root / "study.yaml", spec.payload())
     print(f"Study root: {root}")
 
-    if not args.replot:
+    if not replot:
         run_setup_stage(spec)
-        run_cmaes_stage(spec, run_allowed=not args.skip_cmaes, force=args.force_cmaes)
+        run_cmaes_stage(spec, run_allowed=run_cmaes, force=force_cmaes)
         run_hessian_stage(spec, force=False)
         run_local_stage(spec)
     run_plot_stage(spec)
-
-
-if __name__ == "__main__":
-    main()

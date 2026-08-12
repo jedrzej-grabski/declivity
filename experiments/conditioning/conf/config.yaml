@@ -1,0 +1,26 @@
+defaults:
+  - exp1_schema
+  - objective: cec
+  - experiment: full
+  - launcher: local
+  - _self_
+
+# Single-cell default; override on the command line or with -m for a sweep,
+# e.g. `-m dim=10,30,50,100 variant=bounded,unbounded`.
+dim: 10
+variant: bounded
+
+# num_workers is set by the launcher group (each launcher matches it to its
+# own cpus_per_task), so it is intentionally not pinned here -- pinning it
+# under _self_ would override the launcher's value.
+
+hydra:
+  job:
+    # The pipeline writes to repo-relative results/ and plots/ paths; it must
+    # not be relocated into hydra's per-job working directory.
+    chdir: false
+  run:
+    dir: logs/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: logs/hydra/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}_d${dim}_${variant}

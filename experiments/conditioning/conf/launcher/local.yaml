@@ -1,0 +1,18 @@
+# @package _global_
+# Runs each (dim, variant) cell as a local subprocess via submitit's local
+# executor -- same job-array semantics as SLURM, useful for smoke-testing the
+# array decomposition and the shared-artifact atomic writes without a
+# cluster. Select with `launcher=local` (or `hydra/launcher=submitit_local`
+# for the bare plugin default, with no overrides below applied).
+defaults:
+  - override /hydra/launcher: submitit_local
+
+# Keep joblib's worker count equal to cpus_per_task below.
+num_workers: 4
+
+hydra:
+  launcher:
+    timeout_min: 120
+    cpus_per_task: 4
+    tasks_per_node: 1
+    nodes: 1

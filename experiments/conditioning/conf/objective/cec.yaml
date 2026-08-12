@@ -1,0 +1,5 @@
+# @package _global_
+# CEC2017 F1: the suite's default rotated/shifted benchmark.
+objective: cec
+edition: cec2017
+function_number: 1
