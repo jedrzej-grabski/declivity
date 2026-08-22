@@ -46,7 +46,10 @@ from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.plotting import plot_convergence_overlay
 from declivity.utils.hessian import numerical_hessian, spd_regularize
 from declivity.utils.initial_geometry import InitialGeometry
-from declivity.utils.stopping_conditions import MaxEvaluations
+from declivity.utils.stopping_conditions import (
+    DEFAULT_EVALUATIONS_PER_DIMENSION,
+    MaxEvaluations,
+)
 from experiments.conditioning.common import (
     CEC_OBJECTIVE,
     EDITIONS,
@@ -92,6 +95,7 @@ class Exp1Spec:
     variants: tuple[str, ...] = VARIANTS
     rotate: bool = True
     snapshot_ks: tuple[int, ...] = (2, 4, 8, 12, 16, 24, 32)
+    cmaes_evaluations_per_dim: int = DEFAULT_EVALUATIONS_PER_DIMENSION
     include_hessian: bool = True
     include_identity: bool = True
     optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
@@ -115,6 +119,7 @@ class Exp1Spec:
             "variants": list(self.variants),
             "rotate": self.rotate,
             "snapshot_ks": list(self.snapshot_ks),
+            "cmaes_evaluations_per_dim": self.cmaes_evaluations_per_dim,
             "include_hessian": self.include_hessian,
             "include_identity": self.include_identity,
             "optimizers": list(self.optimizers),
@@ -351,13 +356,18 @@ def run_cmaes_stage(spec: Exp1Spec, run_allowed: bool, force: bool) -> None:
     def one(variant: str, dim: int, seed: int) -> str:
         population_size = resolve_population_size(dim, spec.population_factor)
         directory = cmaes_dir(study_root(spec), variant, dim, seed)
+        # record_cmaes_path is iteration-granular (see TODO.md); convert the
+        # evaluation budget to whole generations here, at the call site.
+        max_iterations = max(
+            1, (spec.cmaes_evaluations_per_dim * dim) // population_size
+        )
         ensure_cmaes_path(
             directory,
             family_for(spec, variant, dim),
             seed,
             cmaes_config_factory(population_size, spec.sigma0),
             interval=math.gcd(*spec.snapshot_ks) * dim,
-            max_iterations=max(spec.snapshot_ks) * dim,
+            max_iterations=max_iterations,
             run_allowed=run_allowed,
             force=force,
             config_payload={
@@ -542,6 +552,17 @@ def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
         help="Snapshot multipliers: conditioner C after k*d CMA-ES iterations.",
     )
     parser.add_argument(
+        "--cmaes-evaluations-per-dim",
+        type=int,
+        default=None,
+        help=(
+            "CMA-ES evaluation budget = value*d, independent of --ks (which "
+            "only selects snapshots to use as preconditioners). Converted to "
+            "whole generations internally. CMA-ES's own tolfun/tolx criteria "
+            "still stop it early on convergence."
+        ),
+    )
+    parser.add_argument(
         "--optimizers", type=str, nargs="+", default=None, choices=sorted(LOCAL_CHOICES)
     )
     parser.add_argument(
@@ -623,6 +644,8 @@ def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
         spec = replace(spec, variants=tuple(args.variants))
     if args.ks is not None:
         spec = replace(spec, snapshot_ks=tuple(args.ks))
+    if args.cmaes_evaluations_per_dim is not None:
+        spec = replace(spec, cmaes_evaluations_per_dim=args.cmaes_evaluations_per_dim)
     if args.optimizers is not None:
         spec = replace(spec, optimizers=tuple(args.optimizers))
     if args.local_budget_per_dim is not None:
