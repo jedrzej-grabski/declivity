@@ -126,19 +126,32 @@ def save_if_path(fig: Figure, save_path: Path | str | None, dpi: int = 300) -> N
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
 
 
-def thin_log_grid(ax, axis: str = "y", max_ticks: int = 8) -> None:
+def thin_log_grid(
+    ax, axis: str = "y", max_ticks: int = 8, minor_ticks: bool = False
+) -> None:
     """Draw gridlines only where the log axis is actually labelled.
 
     A log axis spanning many decades keeps a major tick per decade but thins
     the *labels*, so a ``which="both"`` grid stripes the panel with unlabelled
     lines.  This subsamples the major locator to ``max_ticks`` and drops the
     minor locator, leaving one gridline per label.
+
+    ``minor_ticks=True`` instead adds unlabelled tick marks at 2-9 within
+    each decade (no gridlines for these — just the tick marks themselves).
     """
     import matplotlib.ticker as mticker
 
     target = ax.yaxis if axis == "y" else ax.xaxis
     target.set_major_locator(mticker.LogLocator(base=10.0, numticks=max_ticks))
-    target.set_minor_locator(mticker.NullLocator())
+    if minor_ticks:
+        target.set_minor_locator(
+            mticker.LogLocator(base=10.0, subs=range(2, 10), numticks=max_ticks)
+        )
+        target.set_minor_formatter(mticker.NullFormatter())
+        side = {"bottom": True} if axis == "x" else {"left": True}
+        ax.tick_params(axis=axis, which="minor", length=3, **side)
+    else:
+        target.set_minor_locator(mticker.NullLocator())
 
 
 def thin_linear_grid(ax, axis: str = "x", max_ticks: int = 6) -> None:

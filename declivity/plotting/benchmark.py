@@ -41,7 +41,6 @@ from declivity.plotting.unified import (
     draw_groups,
     grid_dims,
     save_if_path,
-    thin_linear_grid,
     thin_log_grid,
 )
 
@@ -371,11 +370,13 @@ def plot_convergence_overlay(
     if title:
         ax.set_title(title, fontsize=12)
     ax.set_yscale("log")
+    ax.set_xscale("log")
     if xmax is not None:
-        ax.set_xlim(left=0.0, right=xmax)
-    thin_log_grid(ax, "y", max_ticks=7)
-    thin_linear_grid(ax, "x", max_ticks=6)
+        ax.set_xlim(right=xmax)
+    thin_log_grid(ax, "y", max_ticks=7, minor_ticks=True)
+    thin_log_grid(ax, "x", max_ticks=6, minor_ticks=True)
     ax.grid(True, alpha=0.18, linewidth=0.7, which="major")
+    ax.grid(True, alpha=0.07, linewidth=0.5, which="minor")
     # legend_loc stays a plain str in this signature; matplotlib 3.11 narrowed
     # loc to a Literal union, which a str cannot satisfy statically.
     ax.legend(fontsize=legend_fontsize, loc=legend_loc, framealpha=0.9)  # pyright: ignore[reportArgumentType]
