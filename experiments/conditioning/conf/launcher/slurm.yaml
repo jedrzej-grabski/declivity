@@ -12,7 +12,7 @@ num_workers: 25
 
 hydra:
   launcher:
-    account: plgcmaes
+    account: plggzszi
     partition: plgrid
     qos: plgrid1
     submitit_folder: ${hydra.sweep.dir}/.submitit/%j

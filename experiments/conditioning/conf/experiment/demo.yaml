@@ -10,6 +10,6 @@ include_hessian: true
 include_identity: true
 optimizers: [lbfgsb, bfgs, powell, neldermead]
 transform: inverse
-scaling: none
+scalings: [none, unit]
 population_factor: 0.0
 local_budget_per_dim: 300
