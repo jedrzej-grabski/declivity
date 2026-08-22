@@ -42,9 +42,9 @@ from declivity.benchmarking import (
     ProblemFamily,
     RunTrace,
     compose_switch_trace,
-    load_traces_json,
+    load_traces_parquet,
     run_conditioned_local,
-    save_traces_json,
+    save_traces_parquet,
     snapshot_geometry,
 )
 from declivity.plotting import plot_convergence_overlay, plot_suite_ecdf
@@ -428,8 +428,8 @@ def run_compose_stage(spec: Exp2Spec) -> None:
 
             out = benchmark_dir(spec, dim, function_number)
             out.mkdir(parents=True, exist_ok=True)
-            save_traces_json(traces, out / "traces.json")
-            print(f"[compose] d{dim}/f{function_number} -> {out / 'traces.json'}")
+            save_traces_parquet(traces, out / "traces.parquet")
+            print(f"[compose] d{dim}/f{function_number} -> {out / 'traces.parquet'}")
 
 
 def run_plot_stage(spec: Exp2Spec, floor: float = 1e-9) -> None:
@@ -439,11 +439,11 @@ def run_plot_stage(spec: Exp2Spec, floor: float = 1e-9) -> None:
         suite_traces: dict[tuple[str, str], list[RunTrace]] = {}
         templates = []
         for function_number in spec.functions:
-            traces_path = benchmark_dir(spec, dim, function_number) / "traces.json"
+            traces_path = benchmark_dir(spec, dim, function_number) / "traces.parquet"
             if not traces_path.exists():
                 print(f"[plot] missing {traces_path}, skipping")
                 continue
-            traces = load_traces_json(traces_path)
+            traces = load_traces_parquet(traces_path)
             suite_traces.update(traces)
             family = family_for(spec, dim, function_number)
             template = family.template

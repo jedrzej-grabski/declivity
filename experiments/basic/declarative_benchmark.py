@@ -87,7 +87,7 @@ def main() -> None:
         seeds=list(range(5)),
         output_dir=OUTPUT_DIR / "_bench",
         num_workers=1,
-        save_artifacts=False,  # demo only; skip the traces.json/csv dump
+        save_artifacts=False,  # demo only; skip the traces.parquet/csv dump
     )
     print("Running 2 problems x 3 algorithms x 5 seeds...")
     bench.run(verbose=True)

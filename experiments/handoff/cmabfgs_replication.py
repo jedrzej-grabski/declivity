@@ -27,7 +27,7 @@ It is a thin, framework-conforming orchestration (see
 - the problem is a ``Problem`` built from a ``BenchmarkFunction``;
 - every contender is an ``AlgorithmRun`` (``SingleAlgorithm`` /
   ``InterleavedCMAESLBFGSB``) carrying its own ``name`` + ``color``;
-- a single-seed ``Benchmark`` runs them and auto-persists ``traces.json``;
+- a single-seed ``Benchmark`` runs them and auto-persists ``traces.parquet``;
 - the figure is the reusable ``plot_convergence_overlay`` (single-panel
   overlay with the reference's secondary "CMA-ES iterations" axis), which
   reads colours straight off the algorithm specs.
@@ -46,7 +46,7 @@ Run::
     PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py --popsize 0   --tag popdefault
     # re-render a figure from saved traces (no re-running):
     PYTHONPATH=. uv run python experiments/handoff/cmabfgs_replication.py \
-        --popsize 400 --tag pop4d --replot-from plots/handoff/cmabfgs_replication/pop4d/traces.json
+        --popsize 400 --tag pop4d --replot-from plots/handoff/cmabfgs_replication/pop4d/traces.parquet
 """
 
 import argparse
@@ -63,7 +63,7 @@ from declivity.benchmarking import (
     InterleavedCMAESLBFGSB,
     Problem,
     SingleAlgorithm,
-    load_traces_json,
+    load_traces_parquet,
 )
 from declivity.plotting import plot_convergence_overlay
 from declivity.utils.benchmark_functions import Ellipsoid, ShiftedFunction
@@ -249,7 +249,7 @@ def main() -> None:
         type=Path,
         default=None,
         help="Skip the runs and re-render the figure from a saved Benchmark "
-        "traces.json (algorithm specs are rebuilt for colours/names).",
+        "traces.parquet (algorithm specs are rebuilt for colours/names).",
     )
     parser.add_argument(
         "--output-dir",
@@ -286,11 +286,11 @@ def main() -> None:
     )
 
     if args.replot_from is not None:
-        traces = load_traces_json(args.replot_from)
+        traces = load_traces_parquet(args.replot_from)
         print(f"  re-plotting from {args.replot_from}")
     else:
         # Single-seed Benchmark: still gives same-seed x0 and auto-persists
-        # traces.json / runs.csv / summary.csv into a per-tag subdirectory.
+        # traces.parquet / runs.csv / summary.csv into a per-tag subdirectory.
         bench = Benchmark(
             problems=[problem],
             algorithms=algorithms,

@@ -1,8 +1,8 @@
 """Regenerate the 5 report plots from saved traces.
 
-Reads `traces.json` from each `plots/report/<panel>/` directory and re-renders
-the convergence + boxplot at a single, consistent visual style suitable for
-the supervisor report. No re-running of optimizers needed.
+Reads `traces.parquet` from each `plots/report/<panel>/` directory and
+re-renders the convergence + boxplot at a single, consistent visual style
+suitable for the supervisor report. No re-running of optimizers needed.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from declivity.benchmarking.persistence import load_traces_json
+from declivity.benchmarking.persistence import load_traces_parquet
 from declivity.benchmarking.problem import Problem
 from declivity.plotting import plot_benchmark_boxplot, plot_benchmark_convergence
 
@@ -65,9 +65,9 @@ def regen_panel(
 ) -> None:
     """Re-render convergence and final-fitness boxplot for a single panel."""
     save_dir.mkdir(parents=True, exist_ok=True)
-    traces_file = traces_dir / "traces.json"
+    traces_file = traces_dir / "traces.parquet"
 
-    traces = load_traces_json(traces_file)
+    traces = load_traces_parquet(traces_file)
     # Order matters for the legend. Use the order we encounter the algorithm
     # names. Sort so reference algorithms come first.
     seen_names: list[str] = []
@@ -195,11 +195,11 @@ def regen_combined_baseline(base: Path) -> None:
     seen_names: list[str] = []
 
     for problem_name in ("rastrigin", "griewank"):
-        path = base / "00_baseline_unrotated" / problem_name / "traces.json"
+        path = base / "00_baseline_unrotated" / problem_name / "traces.parquet"
         if not path.exists():
             print(f"  [skip] missing {path}")
             return
-        per_problem = load_traces_json(path)
+        per_problem = load_traces_parquet(path)
         for (p, a), runs in per_problem.items():
             combined.setdefault((p, a), []).extend(runs)
             if a not in seen_names:
@@ -258,11 +258,11 @@ def regen_combined_low_amp(base: Path) -> None:
         ("Rippled-c1000000-a0.1-rot-d50-m5", 50),
     ]
     for subdir_name, d in panels:
-        path = base / "01_rippled_low_amp" / subdir_name / "traces.json"
+        path = base / "01_rippled_low_amp" / subdir_name / "traces.parquet"
         if not path.exists():
             print(f"  [skip] missing {path}")
             return
-        per = load_traces_json(path)
+        per = load_traces_parquet(path)
         for (p, a), runs in per.items():
             combined.setdefault((p, a), []).extend(runs)
             if a not in seen_names:
