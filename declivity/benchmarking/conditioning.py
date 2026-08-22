@@ -28,7 +28,11 @@ from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.core.config_base import BaseConfig
 from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.gradient_strategies import GradientStrategy
-from declivity.utils.initial_geometry import HandoffTransform, InitialGeometry
+from declivity.utils.initial_geometry import (
+    HandoffTransform,
+    HessianScaling,
+    InitialGeometry,
+)
 from declivity.utils.line_search import LineSearchStrategy
 from declivity.utils.stopping_conditions import StoppingCondition
 
@@ -47,13 +51,19 @@ covariance axis from producing a numerically rank-deficient direction set."""
 def snapshot_geometry(
     snapshot: CMAESSnapshot,
     transform: HandoffTransform | str = HandoffTransform.INVERSE,
+    scaling: HessianScaling | str = HessianScaling.NONE,
 ) -> InitialGeometry:
-    """The :class:`InitialGeometry` a snapshot's covariance defines."""
+    """The :class:`InitialGeometry` a snapshot's covariance defines.
+
+    ``transform`` selects the curvature *shape*, ``scaling`` a separate
+    magnitude factor applied on top (see :class:`HessianScaling`).
+    """
     return InitialGeometry.from_covariance(
         snapshot.eigenvectors,
         snapshot.eigenvalues_sqrt,
         snapshot.sigma,
         transform,
+        scaling=scaling,
     )
 
 

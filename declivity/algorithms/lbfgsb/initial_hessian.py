@@ -12,6 +12,7 @@ and ``InitialHessianMode`` remain valid aliases for backwards compatibility
 from declivity.utils.initial_geometry import (
     GeometryMode,
     HandoffTransform,
+    HessianScaling,
     InitialGeometry,
     InitialHessian,
     InitialHessianMode,
@@ -21,6 +22,7 @@ from declivity.utils.initial_geometry import (
 __all__ = [
     "GeometryMode",
     "HandoffTransform",
+    "HessianScaling",
     "InitialGeometry",
     "InitialHessian",
     "InitialHessianMode",

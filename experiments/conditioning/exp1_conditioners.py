@@ -45,7 +45,7 @@ from declivity.benchmarking import (
 from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.plotting import plot_convergence_overlay
 from declivity.utils.hessian import numerical_hessian, spd_regularize
-from declivity.utils.initial_geometry import InitialGeometry
+from declivity.utils.initial_geometry import HessianScaling, InitialGeometry
 from declivity.utils.stopping_conditions import (
     DEFAULT_EVALUATIONS_PER_DIMENSION,
     MaxEvaluations,
@@ -100,6 +100,7 @@ class Exp1Spec:
     include_identity: bool = True
     optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
     transform: str = "inverse"
+    scaling: str = str(HessianScaling.NONE)
     population_factor: float = 0.0
     sigma0: float = SAMPLING_SPAN / 5.0
     local_budget_per_dim: int = 500
@@ -124,6 +125,7 @@ class Exp1Spec:
             "include_identity": self.include_identity,
             "optimizers": list(self.optimizers),
             "transform": self.transform,
+            "scaling": self.scaling,
             "population_factor": self.population_factor,
             "sigma0": self.sigma0,
             "local_budget_per_dim": self.local_budget_per_dim,
@@ -202,7 +204,7 @@ def conditioners_for(spec: Exp1Spec, dim: int) -> list[Conditioner]:
 
 def load_hessian_geometry(spec: Exp1Spec, dim: int, seed: int) -> InitialGeometry:
     matrix = np.load(hessian_dir(spec, dim, seed) / "hessian.npy")
-    return InitialGeometry.from_curvature(matrix, dim)
+    return InitialGeometry.from_curvature(matrix, dim, scaling=spec.scaling)
 
 
 def load_snapshot(spec: Exp1Spec, variant: str, dim: int, seed: int, k: int):
@@ -224,7 +226,9 @@ def load_snapshot(spec: Exp1Spec, variant: str, dim: int, seed: int, k: int):
 def load_snapshot_geometry(
     spec: Exp1Spec, variant: str, dim: int, seed: int, k: int
 ) -> InitialGeometry:
-    return snapshot_geometry(load_snapshot(spec, variant, dim, seed, k), spec.transform)
+    return snapshot_geometry(
+        load_snapshot(spec, variant, dim, seed, k), spec.transform, spec.scaling
+    )
 
 
 def geometry_provider(spec: Exp1Spec, variant: str, conditioner: Conditioner):
@@ -312,6 +316,7 @@ def make_recorder(
                     else None
                 ),
                 "transform": spec.transform,
+                "scaling": spec.scaling,
                 "budget_evaluations": spec.local_budget_per_dim * dim,
                 "x0_file": str(
                     setup_root(spec).relative_to(study_root(spec))
@@ -565,8 +570,17 @@ def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
     parser.add_argument(
         "--optimizers", type=str, nargs="+", default=None, choices=sorted(LOCAL_CHOICES)
     )
+    parser.add_argument("--transform", type=str, default="inverse", choices=["inverse"])
     parser.add_argument(
-        "--transform", type=str, default="inverse", choices=["inverse", "sigma_inverse"]
+        "--hessian-scaling",
+        type=str,
+        default="none",
+        choices=["none", "sigma", "unit", "identity_norm"],
+        help=(
+            "Magnitude factor applied on top of --transform (shape). "
+            "'sigma' divides B_0 by sigma**2, reproducing the old fused "
+            "sigma_inverse transform when combined with --transform inverse."
+        ),
     )
     parser.add_argument(
         "--population-factor",
@@ -621,6 +635,7 @@ def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
         plot_root=args.plot_root,
         num_workers=args.num_workers,
         transform=args.transform,
+        scaling=args.hessian_scaling,
         population_factor=args.population_factor,
         rotate=not args.no_rotate,
         include_hessian=not args.no_hessian,

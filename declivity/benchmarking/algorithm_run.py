@@ -50,8 +50,10 @@ from declivity.utils.constraint_handlers import ConstraintHandler
 from declivity.utils.gradient_strategies import GradientStrategy
 from declivity.utils.initial_geometry import (
     HandoffTransform,
+    HessianScaling,
     InitialGeometry,
     covariance_to_hessian_matrix,
+    scaling_factor,
 )
 from declivity.utils.line_search import LineSearchStrategy
 from declivity.utils.population_initializers import PopulationInitializer
@@ -67,21 +69,31 @@ def initial_hessian_from_cmaes(
     transform: HandoffTransform | str,
     eigenvectors: NDArray[np.float64],
     eigenvalues_sqrt: NDArray[np.float64],
-    sigma: float,
+    scaling: HessianScaling | str = HessianScaling.NONE,
+    sigma: float = 1.0,
 ) -> NDArray[np.float64] | None:
     """Turn a CMA-ES eigendecomposition ``(B, D)`` into an L-BFGS-B ``B_0``.
 
     ``C = B @ diag(D**2) @ B.T``.  The L-BFGS-B model needs the Hessian ``B``
     and the CMA-ES covariance ``C`` is proportional to ``B^{-1}``, so the
-    useful transforms invert it.  See :class:`HandoffTransform`;
+    useful transform inverts it.  See :class:`HandoffTransform`;
     ``IDENTITY`` returns ``None`` (the L-BFGS-B default ``B_0 = I``).
+
+    ``scaling`` applies the :class:`HessianScaling` magnitude factor to the
+    returned dense matrix (``sigma`` is only read by ``HessianScaling.SIGMA``).
+    This seam feeds ``LBFGSBConfig.initial_hessian`` as a raw matrix rather
+    than an :class:`InitialGeometry`, so the factor is baked in here; the
+    numbers match :meth:`InitialGeometry.from_covariance` with the same
+    ``transform`` / ``scaling`` (see :class:`CMAESLocalHandoff`).
 
     Delegates to
     :func:`~declivity.utils.initial_geometry.covariance_to_hessian_matrix`.
     """
-    return covariance_to_hessian_matrix(
-        transform, eigenvectors, eigenvalues_sqrt, sigma
-    )
+    matrix = covariance_to_hessian_matrix(transform, eigenvectors, eigenvalues_sqrt)
+    if matrix is None:
+        return None
+    factor = scaling_factor(scaling, matrix, matrix.shape[0], sigma)
+    return matrix * factor
 
 
 @runtime_checkable
@@ -419,6 +431,9 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
     cmaes_config_factory: Callable[[int], CMAESConfig]
     lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
     transform: HandoffTransform | str = HandoffTransform.INVERSE
+    scaling: HessianScaling | str = HessianScaling.NONE
+    """Magnitude factor applied on top of ``transform`` (see
+    :class:`HessianScaling`).  ``NONE`` keeps the raw ``C^{-1}``."""
 
     cmaes_stopping_condition: StoppingCondition | None = None
     """Warm-up (CMA-ES) stopping condition. ``None`` keeps the optimizer
@@ -452,7 +467,11 @@ class CMAESLBFGSBHandoff(HandoffAlgorithm):
         sigma: float,
     ) -> NDArray[np.float64] | None:
         return initial_hessian_from_cmaes(
-            self.transform, eigenvectors, eigenvalues_sqrt, sigma
+            self.transform,
+            eigenvectors,
+            eigenvalues_sqrt,
+            scaling=self.scaling,
+            sigma=sigma,
         )
 
     def run_phases(
@@ -560,6 +579,9 @@ class CMAESLocalHandoff(HandoffAlgorithm):
     cmaes_config_factory: Callable[[int], CMAESConfig]
     local_config_factory: Callable[[int], BaseConfig]
     transform: HandoffTransform | str = HandoffTransform.INVERSE
+    scaling: HessianScaling | str = HessianScaling.NONE
+    """Magnitude factor applied on top of ``transform`` (see
+    :class:`HessianScaling`); orthogonal to the shape choice."""
 
     cmaes_stopping_condition: StoppingCondition | None = None
     """Warm-up (CMA-ES) stopping condition. ``None`` keeps the optimizer default
@@ -638,7 +660,11 @@ class CMAESLocalHandoff(HandoffAlgorithm):
         # eigenvectors / anisotropy, L-BFGS-B the matrix itself.
         eigenvectors, eigenvalues_sqrt = cmaes_optimizer.get_eigendecomposition()
         geometry = InitialGeometry.from_covariance(
-            eigenvectors, eigenvalues_sqrt, cmaes_optimizer.sigma, self.transform
+            eigenvectors,
+            eigenvalues_sqrt,
+            cmaes_optimizer.sigma,
+            self.transform,
+            scaling=self.scaling,
         )
 
         # Phase 2: local optimizer from the CMA-ES mean, seeded by the geometry.
@@ -744,6 +770,10 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
     """How each probe turns the CMA-ES covariance into its ``B_0``.
     Default ``INVERSE`` (``C^{-1}``) passes covariance information only,
     matching :class:`CMAESLBFGSBHandoff`."""
+
+    scaling: HessianScaling | str = HessianScaling.NONE
+    """Magnitude factor applied on top of ``transform`` for each probe's
+    ``B_0`` (see :class:`HessianScaling`).  ``NONE`` keeps the raw ``C^{-1}``."""
 
     probe_factr: float = 1e7
     """L-BFGS-B relative-decrease stop for each probe: the burst hands back
@@ -879,7 +909,11 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
 
             eigenvectors, eigenvalues_sqrt = cmaes.get_eigendecomposition()
             initial_hessian = initial_hessian_from_cmaes(
-                self.transform, eigenvectors, eigenvalues_sqrt, cmaes.sigma
+                self.transform,
+                eigenvectors,
+                eigenvalues_sqrt,
+                scaling=self.scaling,
+                sigma=cmaes.sigma,
             )
 
             lbfgsb_config = self.lbfgsb_config_factory(dimensions)
