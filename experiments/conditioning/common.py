@@ -106,12 +106,18 @@ def apply_dark_style() -> None:
 
 
 def ramp_colors(count: int) -> list[str]:
-    """Sequential (ordered) series colors from a perceptually uniform ramp,
-    ranged so the darkest step stays legible on the dark surface."""
-    cmap = get_cmap("viridis")
-    if count == 1:
-        return [to_hex(cmap(0.6))]
-    return [to_hex(cmap(v)) for v in np.linspace(0.28, 0.82, count)]
+    """Distinct qualitative series colors for the conditioner sweep.
+
+    A perceptually uniform ramp (e.g. viridis) orders the ``k`` steps but
+    leaves adjacent curves nearly the same hue, so overlaid conditioners blur
+    together. This mirrors the reference manuscript's ``tab20`` line-colour
+    cycle instead: saturated members first, pale variants after, so a small
+    sweep draws from maximally distinct hues before any tone repeats -- and
+    every hue stays legible on the dark surface."""
+    cmap = get_cmap("tab20")
+    palette = [to_hex(cmap(i)) for i in range(cmap.N)]
+    ordered = palette[0::2] + palette[1::2]
+    return [ordered[i % len(ordered)] for i in range(count)]
 
 
 def dump_yaml(path: Path, payload: dict[str, Any]) -> None:

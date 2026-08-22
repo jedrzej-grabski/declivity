@@ -56,8 +56,8 @@ def plot_benchmark_convergence(
     iqr_alpha: float = 0.15,
     floor: float = 1e-12,
     annotate_handoff: bool = True,
-    figsize_per_panel: tuple[float, float] = (8.5, 6.0),
-    linewidth: float = 2.5,
+    figsize_per_panel: tuple[float, float] = (10.0, 5.625),
+    linewidth: float = 3.0,
     legend_fontsize: int = 10,
     title: str | None = None,
     save_path: Path | str | None = None,
@@ -309,10 +309,10 @@ def plot_convergence_overlay(
     secondary_iter_lambda: int | None = None,
     secondary_label: str = "CMA-ES iterations",
     secondary_location: float = -0.16,
-    linewidth: float = 2.2,
+    linewidth: float = 3.0,
     legend_loc: str = "best",
     legend_fontsize: int = 9,
-    figsize: tuple[float, float] = (9.0, 6.2),
+    figsize: tuple[float, float] = (16.0, 9.0),
     save_path: Path | str | None = None,
 ) -> Figure:
     """Single-panel overlay: one convergence curve per algorithm, on one problem.
@@ -442,10 +442,10 @@ def plot_suite_ecdf(
     show_subtitle: bool = True,
     xlabel: str = "Function Evaluations",
     ylabel: str = "Fraction of targets reached",
-    linewidth: float = 2.2,
+    linewidth: float = 3.0,
     legend_loc: str = "best",
     legend_fontsize: int = 9,
-    figsize: tuple[float, float] = (9.0, 6.2),
+    figsize: tuple[float, float] = (16.0, 9.0),
     save_path: Path | str | None = None,
 ) -> Figure:
     """Aggregated ECDF over a whole problem suite: one curve per algorithm.
@@ -556,10 +556,10 @@ def plot_benchmark_ecdf(
     title: str | None = None,
     xlabel: str = "Function Evaluations",
     ylabel: str = "Fraction of targets reached",
-    linewidth: float = 2.2,
+    linewidth: float = 3.0,
     legend_loc: str = "best",
     legend_fontsize: int = 9,
-    figsize: tuple[float, float] = (9.0, 6.2),
+    figsize: tuple[float, float] = (16.0, 9.0),
     save_path: Path | str | None = None,
 ) -> Figure:
     """Single-problem ECDF overlay: one curve per algorithm.
