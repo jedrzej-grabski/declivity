@@ -1,0 +1,15 @@
+# @package _global_
+# Small local smoke test: a handful of seeds, few snapshot ks, short local
+# budget. Pair with `dim=10` (the schema default) for a fast single-cell run.
+study_name: demo
+num_seeds: 5
+rotate: true
+snapshot_ks: [2, 4, 8, 16, 32]
+cmaes_evaluations_per_dim: 10000
+include_hessian: true
+include_identity: true
+optimizers: [lbfgsb, bfgs, powell, neldermead]
+transform: inverse
+scaling: none
+population_factor: 0.0
+local_budget_per_dim: 300

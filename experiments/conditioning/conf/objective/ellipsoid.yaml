@@ -1,0 +1,6 @@
+# @package _global_
+# The axis-aligned 10^6-conditioned Ellipsoid: the canonical
+# CMA-ES-covariance-converges-to-Hessian test function, with no baked-in
+# rotation/shift of its own. edition/function_number are not applicable here
+# (spec_from_cfg rejects overriding them away from the schema defaults).
+objective: ellipsoid

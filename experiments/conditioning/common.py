@@ -15,6 +15,7 @@ Every stage checks for existing artifacts and skips them unless forced.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -129,6 +130,31 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text())
 
 
+def atomic_save_npy(path: Path, array: NDArray[np.float64]) -> None:
+    """``np.save`` guarded against concurrent-writer torn files.
+
+    Writes to a sibling temp file and ``os.replace``s it into place, which is
+    atomic on POSIX: a concurrent reader sees either the old (absent) state
+    or the complete new file, never a partial one. Needed because
+    variant-independent artifacts (setup, hessian) are written by every
+    variant's SLURM array task for the same dimension.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_stem = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    # np.save appends ".npy" since tmp_stem's name doesn't already end in it.
+    np.save(tmp_stem, array)
+    os.replace(tmp_stem.with_name(tmp_stem.name + ".npy"), path)
+
+
+def atomic_dump_yaml(path: Path, payload: dict[str, Any]) -> None:
+    """``dump_yaml`` guarded against concurrent-writer torn files (see
+    :func:`atomic_save_npy`)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    tmp_path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    os.replace(tmp_path, path)
+
+
 # Setup store: per (dim, seed) starting point + rotation matrix.
 
 
@@ -170,10 +196,14 @@ def ensure_setup(
 
     if write and not (directory / "meta.yaml").exists():
         directory.mkdir(parents=True, exist_ok=True)
-        np.save(x0_path, x0)
+        # Multiple (dim, variant) array tasks share this dim/seed cell and may
+        # race to populate it concurrently; write-then-rename is atomic on
+        # POSIX so a concurrent reader never observes a torn file, and the
+        # "meta.yaml exists" guard above keeps re-entrant callers cheap.
+        atomic_save_npy(x0_path, x0)
         if rotation is not None:
-            np.save(rotation_path, rotation)
-        dump_yaml(
+            atomic_save_npy(rotation_path, rotation)
+        atomic_dump_yaml(
             directory / "meta.yaml",
             {
                 "dimensions": dim,

@@ -1,0 +1,36 @@
+# @package _global_
+# One SLURM array task per (dim, variant) cell; joblib parallelizes seeds
+# across cpus_per_task within the task. Select with `launcher=slurm`.
+# Values below target the PLGrid cluster (plgcmaes allocation); adjust the
+# account/partition/qos for a different site.
+defaults:
+  - override /hydra/launcher: submitit_slurm
+
+# Keep joblib's worker count equal to the SLURM allocation so it uses the
+# whole task (this is a _global_ config field, not a launcher param).
+num_workers: 25
+
+hydra:
+  launcher:
+    account: plgcmaes
+    partition: plgrid
+    qos: plgrid1
+    submitit_folder: ${hydra.sweep.dir}/.submitit/%j
+    name: ${hydra.job.name}
+
+    # Per-task resources. num_workers above should equal cpus_per_task.
+    cpus_per_task: 25
+    gpus_per_node: null
+    # Light CPU workload (small dim x dim matrices per worker), but give the
+    # 25 workers headroom rather than the 1 GB the reference GPU job used.
+    mem_gb: 8
+    tasks_per_node: 1
+    nodes: 1
+
+    # submitit maps timeout_min -> --time; the explicit HH:MM:SS wins here.
+    additional_parameters:
+      time: "72:00:00"
+
+    # How many array tasks SLURM runs concurrently; the full grid is 8 cells
+    # (4 dims x 2 variants), so this headroom only matters once the grid grows.
+    array_parallelism: 20

@@ -1,0 +1,15 @@
+# @package _global_
+# Real grid: d in {10, 30, 50, 100}, bounded + unbounded (set dim/variant per
+# array task; sweep over both with -m dim=10,30,50,100 variant=bounded,unbounded).
+study_name: null
+num_seeds: 25
+rotate: true
+snapshot_ks: [2, 4, 8, 12, 16, 24, 32]
+cmaes_evaluations_per_dim: 10000
+include_hessian: true
+include_identity: true
+optimizers: [lbfgsb, bfgs, powell, neldermead]
+transform: inverse
+scaling: none
+population_factor: 0.0
+local_budget_per_dim: 500
