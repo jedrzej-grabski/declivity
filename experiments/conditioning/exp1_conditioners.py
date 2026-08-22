@@ -48,11 +48,14 @@ from declivity.utils.hessian import numerical_hessian, spd_regularize
 from declivity.utils.initial_geometry import InitialGeometry
 from declivity.utils.stopping_conditions import MaxEvaluations
 from experiments.conditioning.common import (
+    CEC_OBJECTIVE,
     EDITIONS,
+    ELLIPSOID_OBJECTIVE,
     HESSIAN_COLOR,
     IDENTITY_COLOR,
     LOCAL_CHOICES,
     LOCAL_LABELS,
+    OBJECTIVES,
     SAMPLING_SPAN,
     VARIANTS,
     anchor_traces,
@@ -81,6 +84,7 @@ plt.switch_backend("Agg")
 @dataclass
 class Exp1Spec:
     name: str = "cec17_f1"
+    objective: str = CEC_OBJECTIVE
     edition: str = "cec2017"
     function_number: int = 1
     dimensions: tuple[int, ...] = (10, 30, 50, 100)
@@ -103,6 +107,7 @@ class Exp1Spec:
         return {
             "experiment": "exp1_conditioners",
             "name": self.name,
+            "objective": self.objective,
             "edition": self.edition,
             "function_number": self.function_number,
             "dimensions": list(self.dimensions),
@@ -137,6 +142,16 @@ def benchmark_dir(spec: Exp1Spec, variant: str, dim: int) -> Path:
 
 
 def family_for(spec: Exp1Spec, variant: str, dim: int) -> ProblemFamily:
+    if spec.objective == ELLIPSOID_OBJECTIVE:
+        return build_family(
+            None,
+            None,
+            dim,
+            variant,
+            spec.rotate,
+            setup_root(spec),
+            objective=ELLIPSOID_OBJECTIVE,
+        )
     return build_family(
         EDITIONS[spec.edition],
         spec.function_number,
@@ -144,6 +159,7 @@ def family_for(spec: Exp1Spec, variant: str, dim: int) -> ProblemFamily:
         variant,
         spec.rotate,
         setup_root(spec),
+        objective=CEC_OBJECTIVE,
     )
 
 
@@ -496,9 +512,23 @@ def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
     )
     parser.add_argument("--study-name", type=str, default=None)
     parser.add_argument(
-        "--edition", type=str, default="cec2017", choices=sorted(EDITIONS)
+        "--objective",
+        type=str,
+        default=CEC_OBJECTIVE,
+        choices=sorted(OBJECTIVES),
+        help=(
+            "'cec': CEC2017 F1 (or --edition/--function), the suite's default "
+            "rotated/shifted benchmark. 'ellipsoid': the axis-aligned "
+            "10^6-conditioned Ellipsoid (utils/benchmark_functions.Ellipsoid), "
+            "the canonical CMA-ES-covariance-converges-to-Hessian test "
+            "function, with no baked-in rotation/shift of its own -- use it "
+            "when you want the suite's --no-rotate toggle to be the *only* "
+            "source of coordinate coupling. --edition/--function are "
+            "rejected when --objective ellipsoid is selected."
+        ),
     )
-    parser.add_argument("--function", type=int, default=1)
+    parser.add_argument("--edition", type=str, default=None, choices=sorted(EDITIONS))
+    parser.add_argument("--function", type=int, default=None)
     parser.add_argument("--dims", type=int, nargs="+", default=None)
     parser.add_argument("--num-seeds", type=int, default=None)
     parser.add_argument(
@@ -548,9 +578,24 @@ def parse_args() -> tuple[Exp1Spec, argparse.Namespace]:
     )
     args = parser.parse_args()
 
+    if args.objective == ELLIPSOID_OBJECTIVE:
+        if args.edition is not None or args.function is not None:
+            parser.error(
+                "--edition/--function are not applicable with --objective ellipsoid."
+            )
+        edition = "cec2017"  # unused placeholder; ignored by family_for()
+        function_number = 1
+        default_name = "ellipsoid"
+    else:
+        edition = args.edition or "cec2017"
+        function_number = args.function if args.function is not None else 1
+        default_name = "cec17_f1"
+
     spec = Exp1Spec(
-        edition=args.edition,
-        function_number=args.function,
+        name=default_name,
+        objective=args.objective,
+        edition=edition,
+        function_number=function_number,
         data_root=args.data_root,
         plot_root=args.plot_root,
         num_workers=args.num_workers,

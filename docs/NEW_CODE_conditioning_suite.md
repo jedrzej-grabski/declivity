@@ -52,6 +52,35 @@ variant's reachable optimum sits on the boundary and the gap plateaus above
 feasible-step capping through the `ConstraintHandler`, never orthogonal
 clipping of trial points along the search path).
 
+### `--objective {cec,ellipsoid}`
+
+`build_family()` in `common.py` selects the objective:
+
+- `cec` (default): CEC2017 F1 ("Bent Cigar") via `--edition`/`--function`, as
+  above. CEC problems carry their own internal fixed rotation/shift baked
+  into the compiled evaluator, *on top of* whatever `--no-rotate` applies
+  here — so "unrotated CEC F1" is never actually axis-aligned.
+- `ellipsoid`: `declivity.utils.benchmark_functions.Ellipsoid`, the
+  axis-aligned, `10^6`-conditioned quadratic
+  `f(x) = sum_i 10^(6 i/(d-1)) x_i^2`. It carries **no** internal
+  rotation/shift of its own, so `--no-rotate` makes it genuinely axis-aligned
+  (diagonal Hessian) and the default random rotation is the *only* source of
+  coordinate coupling — the canonical CMA-ES-covariance-converges-to-Hessian
+  test function. Bounds default to `[-100, 100]`, matching the suite's CEC
+  sampling box, so both bounded and unbounded variants work unchanged.
+  `--edition`/`--function` are not applicable and are rejected (not silently
+  ignored) when combined with `--objective ellipsoid`.
+
+Use `ellipsoid` when you want a controlled, analytically-understood
+conditioning study (known diagonal Hessian, exact gradient, no confound from
+CEC's own baked-in transform); use `cec` for the suite's original CEC2017 F1
+study or to compare against other CEC problems.
+
+```bash
+PYTHONPATH=. uv run python experiments/conditioning/exp1_conditioners.py --demo --objective ellipsoid
+PYTHONPATH=. uv run python experiments/conditioning/exp1_conditioners.py --demo --objective ellipsoid --no-rotate
+```
+
 Demo findings (d=10, unbounded, k ∈ {2,4,8,16,32}): BFGS with `H⁻¹` reaches
 the `1e-9` gap in ~170 evaluations, the `C_kd` conditioners cluster ~480–630
 (non-monotone in k: the mid-range `C_80` is fastest, and by `C_320` CMA-ES has
