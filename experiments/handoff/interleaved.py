@@ -47,7 +47,7 @@ from declivity.algorithms.lbfgsb.line_search import LineSearchStrategy
 from declivity.benchmarking import (
     Benchmark,
     CMAESLBFGSBHandoff,
-    InterleavedCMAESLBFGSB,
+    InterleavedCMAESLocal,
     Problem,
     SingleAlgorithm,
 )
@@ -161,17 +161,18 @@ def build_algorithms(
         lbfgsb_stopping_condition=MaxEvaluations(total_budget - cmaes_warmup_budget),
     )
 
-    interleaved = InterleavedCMAESLBFGSB(
+    interleaved = InterleavedCMAESLocal(
         name="Interleaved CMA-ES + L-BFGS-B",
         color=COLORS["Interleaved CMA-ES + L-BFGS-B"],
         cmaes_config_factory=cmaes_config,
-        lbfgsb_config_factory=lbfgsb_config,
+        local_config_factory=lbfgsb_config,
+        local_algorithm=AlgorithmChoice.LBFGSB,
         cmaes_interval=cmaes_interval,
         total_budget=total_budget,
         transform="inverse",
         probe_factr=probe_factr,
         probe_max_evals=probe_max_evals,
-        lbfgsb_line_search=line_search,
+        local_line_search=line_search,
     )
 
     return [cmaes_only, lbfgsb_only, one_shot, interleaved]

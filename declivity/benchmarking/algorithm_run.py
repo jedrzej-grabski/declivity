@@ -36,6 +36,7 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 from numpy.typing import NDArray
 
+from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
@@ -71,6 +72,7 @@ def initial_hessian_from_cmaes(
     eigenvalues_sqrt: NDArray[np.float64],
     scaling: HessianScaling | str = HessianScaling.NONE,
     sigma: float = 1.0,
+    prev_norm: float | None = None,
 ) -> NDArray[np.float64] | None:
     """Turn a CMA-ES eigendecomposition ``(B, D)`` into an L-BFGS-B ``B_0``.
 
@@ -80,7 +82,8 @@ def initial_hessian_from_cmaes(
     ``IDENTITY`` returns ``None`` (the L-BFGS-B default ``B_0 = I``).
 
     ``scaling`` applies the :class:`HessianScaling` magnitude factor to the
-    returned dense matrix (``sigma`` is only read by ``HessianScaling.SIGMA``).
+    returned dense matrix (``sigma`` is only read by ``HessianScaling.SIGMA``,
+    ``prev_norm`` only by ``HessianScaling.ADAPTIVE``).
     This seam feeds ``LBFGSBConfig.initial_hessian`` as a raw matrix rather
     than an :class:`InitialGeometry`, so the factor is baked in here; the
     numbers match :meth:`InitialGeometry.from_covariance` with the same
@@ -92,7 +95,7 @@ def initial_hessian_from_cmaes(
     matrix = covariance_to_hessian_matrix(transform, eigenvectors, eigenvalues_sqrt)
     if matrix is None:
         return None
-    factor = scaling_factor(scaling, matrix, matrix.shape[0], sigma)
+    factor = scaling_factor(scaling, matrix, matrix.shape[0], sigma, prev_norm=prev_norm)
     return matrix * factor
 
 
@@ -702,7 +705,7 @@ class CMAESLocalHandoff(HandoffAlgorithm):
 
 @dataclass
 class InterleaveResult:
-    """Detailed record of one :class:`InterleavedCMAESLBFGSB` run.
+    """Detailed record of one :class:`InterleavedCMAESLocal` run.
 
     :attr:`trace` is the standard :class:`RunTrace` that
     :class:`~declivity.benchmarking.Benchmark` consumes.  The remaining
@@ -710,8 +713,8 @@ class InterleaveResult:
     :func:`declivity.plotting.plot_interleaved_convergence`:
 
     - the CMA-ES backbone: best-so-far over CMA-ES generations only,
-      ignoring the L-BFGS-B drops;
-    - each L-BFGS-B burst as its own ``(evaluations, best)`` segment;
+      ignoring the local-optimizer drops;
+    - each local-optimizer burst as its own ``(evaluations, best)`` segment;
     - the cumulative evaluation counts at which bursts began.
     """
 
@@ -727,23 +730,34 @@ class InterleaveResult:
 
 
 @dataclass
-class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
-    """Alternating CMA-ES <-> L-BFGS-B with a covariance-derived ``B_0``.
+class InterleavedCMAESLocal(BenchmarkAlgorithm):
+    """Alternating CMA-ES <-> local optimizer with a covariance-derived seed.
 
-    Where :class:`CMAESLBFGSBHandoff` cuts over once, this cycles between
-    the two algorithms for the whole budget:
+    Where :class:`CMAESLocalHandoff` cuts over once, this cycles between
+    CMA-ES and a chosen single-point local optimizer (``local_algorithm``,
+    L-BFGS-B or BFGS) for the whole budget:
 
     1. Advance CMA-ES for ``cmaes_interval`` generations, resumed from its
        own :class:`CMAESState` each cycle.  With a shared RNG this
        reproduces a standalone CMA-ES run bit-for-bit.
-    2. Fire an L-BFGS-B side-probe from the current CMA-ES mean, with
-       ``B_0`` derived from the CMA-ES covariance (``transform``, default
-       ``C^{-1}``).  The probe runs until the L-BFGS-B ``factr``
-       relative-decrease test (``probe_factr``) fires, capped by
-       ``probe_max_evals``.
+    2. Fire a local-optimizer side-probe from the current CMA-ES mean, with
+       its curvature ``B_0`` derived from the CMA-ES covariance
+       (``transform``, default ``C^{-1}``) and magnitude set by ``scaling``
+       (see :class:`HessianScaling`). The probe runs until its own
+       convergence test fires (L-BFGS-B: ``probe_factr`` relative-decrease;
+       BFGS: ``probe_pgtol`` as its gradient tolerance, since BFGS has no
+       relative-decrease test), capped by ``probe_max_evals``.
     3. Fold the probe's improvements into the tracked overall best and
        return to step 1 with CMA-ES untouched.  The probe never feeds back
        into the CMA-ES distribution.
+
+    ``scaling=HessianScaling.ADAPTIVE`` carries the *previous* probe's
+    effective magnitude into the next one instead of a fixed formula, so a
+    single choice works across dimensions / conditioning without sweeping a
+    scale by hand: after each probe, the magnitude actually reached in
+    whichever space that optimizer natively tracks (``theta * ||B_0||`` for
+    L-BFGS-B's compact representation; ``||H_final||`` for BFGS's dense
+    inverse Hessian) becomes ``prev_norm`` for the next probe.
 
     The trace is a staircase: CMA-ES descends gently while each probe drops
     the overall best toward the local minimum of the region CMA-ES
@@ -756,11 +770,15 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
     name: str
     color: str
     cmaes_config_factory: Callable[[int], CMAESConfig]
-    lbfgsb_config_factory: Callable[[int], LBFGSBConfig]
+    local_config_factory: Callable[[int], BaseConfig]
+
+    local_algorithm: AlgorithmChoice = AlgorithmChoice.LBFGSB
+    """Which single-point local optimizer runs each probe: ``LBFGSB`` or
+    ``BFGS``."""
 
     cmaes_interval: int = 20
-    """CMA-ES generations to run between consecutive L-BFGS-B probes (the
-    handoff interval ``N``)."""
+    """CMA-ES generations to run between consecutive probes (the handoff
+    interval ``N``)."""
 
     total_budget: int = 0
     """Shared evaluation budget for the whole run. ``0`` -> use the CMA-ES
@@ -769,33 +787,35 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
     transform: HandoffTransform | str = HandoffTransform.INVERSE
     """How each probe turns the CMA-ES covariance into its ``B_0``.
     Default ``INVERSE`` (``C^{-1}``) passes covariance information only,
-    matching :class:`CMAESLBFGSBHandoff`."""
+    matching :class:`CMAESLocalHandoff`."""
 
     scaling: HessianScaling | str = HessianScaling.NONE
     """Magnitude factor applied on top of ``transform`` for each probe's
-    ``B_0`` (see :class:`HessianScaling`).  ``NONE`` keeps the raw ``C^{-1}``."""
+    ``B_0`` (see :class:`HessianScaling`).  ``NONE`` keeps the raw ``C^{-1}``;
+    ``ADAPTIVE`` carries the previous probe's effective scale forward."""
 
     probe_factr: float = 1e7
     """L-BFGS-B relative-decrease stop for each probe: the burst hands back
     once ``(f_old - f_new)/max(|f_old|,|f_new|,1) <= probe_factr * eps``.
     Larger values end the burst sooner; smaller ones grind closer to the
-    local minimum."""
+    local minimum. Ignored when ``local_algorithm=BFGS`` (no such test)."""
 
     probe_pgtol: float = 1e-8
-    """Projected-gradient stop for each probe (local-minimum safety)."""
+    """Projected-gradient stop for each L-BFGS-B probe, or the plain
+    gradient-norm stop (``BFGSConfig.gtol``) for each BFGS probe."""
 
     probe_max_evals: int = 1000
     """Hard cap on evaluations per probe, so a single burst cannot consume
     the whole remaining budget."""
 
     cmaes_extra_diagnostics: tuple[str, ...] = ()
-    lbfgsb_extra_diagnostics: tuple[str, ...] = ()
+    local_extra_diagnostics: tuple[str, ...] = ()
 
-    lbfgsb_line_search: LineSearchStrategy | None = None
-    """Line-search strategy for the probes.  ``None`` keeps the L-BFGS-B
+    local_line_search: LineSearchStrategy | None = None
+    """Line-search strategy for the probes.  ``None`` keeps the optimizer
     default (``MoreThuenteLineSearch``)."""
 
-    lbfgsb_gradient_strategy: GradientStrategy | None = None
+    local_gradient_strategy: GradientStrategy | None = None
 
     constraint_handler: ConstraintHandler | None = None
     """Feasible-region override, shared by the CMA-ES backbone and every
@@ -821,6 +841,14 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
         ``.trace``; use this when you want the backbone / burst structure
         for the staircase plot.
         """
+        valid_targets = (AlgorithmChoice.LBFGSB, AlgorithmChoice.BFGS)
+        if self.local_algorithm not in valid_targets:
+            names = ", ".join(str(a) for a in valid_targets)
+            raise ValueError(
+                f"InterleavedCMAESLocal.local_algorithm must be one of {names}; "
+                f"got {self.local_algorithm!r}."
+            )
+
         rng = np.random.default_rng(seed)
         dimensions = problem.dimensions
         handler = self.resolve_constraint_handler(problem)
@@ -852,6 +880,7 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
 
         total_generations = 0
         cmaes_converged = False
+        previous_scale: float | None = None
 
         while cumulative < total_budget:
             # CMA-ES slice, resumed from its own state.
@@ -902,47 +931,99 @@ class InterleavedCMAESLBFGSB(BenchmarkAlgorithm):
             if cumulative >= total_budget:
                 break
 
-            # L-BFGS-B side-probe from the current CMA-ES mean.
+            # Local-optimizer side-probe from the current CMA-ES mean.
             probe_budget = min(self.probe_max_evals, total_budget - cumulative)
             if probe_budget <= 0:
                 break
 
             eigenvectors, eigenvalues_sqrt = cmaes.get_eigendecomposition()
-            initial_hessian = initial_hessian_from_cmaes(
-                self.transform,
-                eigenvectors,
-                eigenvalues_sqrt,
-                scaling=self.scaling,
-                sigma=cmaes.sigma,
+
+            # L-BFGS-B consumes the curvature B_0 directly, so ``scaling`` /
+            # ``prev_norm`` act on B_0's own space. BFGS instead tracks the
+            # *inverse* Hessian H_0; scaling B_0 and inverting it afterwards
+            # would target the wrong space (norm(inv(M)) != 1/norm(M) for a
+            # non-scalar M), so for BFGS the same ``scaling_factor`` call is
+            # applied directly to the H_0 shape, then inverted once to get
+            # the B_0 :class:`InitialGeometry` stores canonically.
+            b0_shape = covariance_to_hessian_matrix(
+                self.transform, eigenvectors, eigenvalues_sqrt
             )
+            if self.local_algorithm == AlgorithmChoice.LBFGSB:
+                target_shape = (
+                    b0_shape if b0_shape is not None else np.eye(dimensions)
+                )
+                factor = scaling_factor(
+                    self.scaling,
+                    target_shape,
+                    dimensions,
+                    cmaes.sigma,
+                    prev_norm=previous_scale,
+                )
+                curvature = target_shape * factor
+            else:
+                h0_shape = (
+                    np.linalg.inv(b0_shape) if b0_shape is not None
+                    else np.eye(dimensions)
+                )
+                factor = scaling_factor(
+                    self.scaling,
+                    h0_shape,
+                    dimensions,
+                    cmaes.sigma,
+                    prev_norm=previous_scale,
+                )
+                inverse_hessian = h0_shape * factor
+                curvature = np.linalg.inv(inverse_hessian)
+                curvature = 0.5 * (curvature + curvature.T)
+            geometry = InitialGeometry.from_curvature(curvature, dimensions)
 
-            lbfgsb_config = self.lbfgsb_config_factory(dimensions)
-            lbfgsb_config.initial_hessian = initial_hessian
-            lbfgsb_config.factr = self.probe_factr
-            lbfgsb_config.pgtol = self.probe_pgtol
-            for flag in self.lbfgsb_extra_diagnostics:
-                if hasattr(lbfgsb_config, flag):
-                    setattr(lbfgsb_config, flag, True)
+            local_config = self.local_config_factory(dimensions)
+            if self.local_algorithm == AlgorithmChoice.LBFGSB:
+                local_config.factr = self.probe_factr
+                local_config.pgtol = self.probe_pgtol
+            else:
+                # BFGS has no relative-decrease ("factr") test; its gradient
+                # tolerance is the closest analog to the probe's stop.
+                local_config.gtol = self.probe_pgtol
+            for flag in self.local_extra_diagnostics:
+                if hasattr(local_config, flag):
+                    setattr(local_config, flag, True)
 
-            lbfgsb_kwargs: dict = {}
+            local_kwargs: dict = {"initial_geometry": geometry}
             if problem.gradient is not None:
-                lbfgsb_kwargs["gradient_fn"] = problem.gradient
-            if self.lbfgsb_line_search is not None:
-                lbfgsb_kwargs["line_search"] = self.lbfgsb_line_search
-            if self.lbfgsb_gradient_strategy is not None:
-                lbfgsb_kwargs["gradient_strategy"] = self.lbfgsb_gradient_strategy
+                local_kwargs["gradient_fn"] = problem.gradient
+            if self.local_line_search is not None:
+                local_kwargs["line_search"] = self.local_line_search
+            if self.local_gradient_strategy is not None:
+                local_kwargs["gradient_strategy"] = self.local_gradient_strategy
 
-            probe = LBFGSBOptimizer(
+            probe = AlgorithmFactory.create_optimizer(
+                self.local_algorithm,
                 problem.function,
                 cmaes.mean,
-                lbfgsb_config,
+                local_config,
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
                 lower_bounds=problem.lower_bound,
                 upper_bounds=problem.upper_bound,
-                **lbfgsb_kwargs,
+                **local_kwargs,
             )
             probe_result = probe.optimize()
+
+            # Effective magnitude this burst actually converged to, in
+            # whichever space this optimizer natively tracks, for ADAPTIVE
+            # scaling to carry into the next probe. L-BFGS-B's compact
+            # representation scales B_0 by theta over the run; BFGS exposes
+            # its dense H_k directly.
+            if self.local_algorithm == AlgorithmChoice.LBFGSB:
+                assert isinstance(probe, LBFGSBOptimizer)
+                _, _, theta = probe.final_corrections()
+                previous_scale = theta * float(np.linalg.norm(curvature))
+            else:
+                assert isinstance(probe, BFGSOptimizer)
+                h_final = probe.final_inverse_hessian
+                if h_final is not None:
+                    previous_scale = float(np.linalg.norm(h_final))
 
             burst_starts.append(cumulative)
             # Start the burst segment at the current overall-best level so

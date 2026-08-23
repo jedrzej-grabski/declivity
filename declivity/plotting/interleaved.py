@@ -57,7 +57,7 @@ def plot_interleaved_convergence(
 
     Args:
         result: The :class:`InterleaveResult` from
-            :py:meth:`InterleavedCMAESLBFGSB.run_with_detail`.
+            :py:meth:`InterleavedCMAESLocal.run_with_detail`.
         baseline_trace: Optional standalone-CMA-ES :class:`RunTrace` (same
             problem/seed) to overlay as a faint reference.
         floor: Values clipped to this before log-scaling.
