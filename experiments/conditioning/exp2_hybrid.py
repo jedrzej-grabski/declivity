@@ -231,18 +231,14 @@ def run_cmaes_stage(spec: Exp2Spec, run_allowed: bool, force: bool) -> None:
 
     def one(dim: int, function_number: int, seed: int) -> str:
         population_size = resolve_population_size(dim, spec.population_factor)
-        # record_cmaes_path is iteration-granular (see TODO.md); convert the
-        # evaluation budget to whole generations here, at the call site.
-        max_iterations = max(
-            1, (spec.cmaes_evaluations_per_dim * dim) // population_size
-        )
+        max_evaluations = spec.cmaes_evaluations_per_dim * dim
         ensure_cmaes_path(
             cmaes_dir(study_root(spec), spec.variant, dim, seed, function_number),
             family_for(spec, dim, function_number),
             seed,
             cmaes_config_factory(population_size, spec.sigma0),
             interval=spec.snapshot_interval(dim),
-            max_iterations=max_iterations,
+            max_evaluations=max_evaluations,
             run_allowed=run_allowed,
             force=force,
             config_payload={
@@ -422,10 +418,7 @@ def switch_snapshots(
     stride = round(k / spec.granularity)
     switches = []
     iteration = stride * interval
-    while iteration <= path_record.meta["max_iterations"]:
-        snapshot = path_record.snapshot_at(iteration)
-        if snapshot is None:
-            break
+    while (snapshot := path_record.snapshot_at(iteration)) is not None:
         switches.append(snapshot)
         iteration += stride * interval
     return switches

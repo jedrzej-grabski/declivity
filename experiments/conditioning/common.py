@@ -361,7 +361,7 @@ def cmaes_dir(
 
 
 def cached_cmaes_path(
-    directory: Path, interval: int, max_iterations: int
+    directory: Path, interval: int, max_evaluations: int
 ) -> CMAESPath | None:
     if not (directory / "meta.json").exists():
         return None
@@ -369,7 +369,7 @@ def cached_cmaes_path(
     meta = path_record.meta
     if (
         meta.get("snapshot_interval") == interval
-        and meta.get("max_iterations") == max_iterations
+        and meta.get("max_evaluations") == max_evaluations
     ):
         return path_record
     return None
@@ -381,13 +381,13 @@ def ensure_cmaes_path(
     seed: int,
     config_factory: Callable[[int], CMAESConfig],
     interval: int,
-    max_iterations: int,
+    max_evaluations: int,
     run_allowed: bool,
     force: bool,
     config_payload: dict[str, Any],
 ) -> CMAESPath:
     if not force:
-        cached = cached_cmaes_path(directory, interval, max_iterations)
+        cached = cached_cmaes_path(directory, interval, max_evaluations)
         if cached is not None:
             return cached
     if not run_allowed:
@@ -404,7 +404,7 @@ def ensure_cmaes_path(
         seed,
         config_factory,
         snapshot_interval=interval,
-        max_iterations=max_iterations,
+        max_evaluations=max_evaluations,
     )
     save_cmaes_path(directory, path_record)
     dump_yaml(directory / "config.yaml", config_payload)

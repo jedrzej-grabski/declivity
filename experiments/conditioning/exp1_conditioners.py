@@ -400,18 +400,14 @@ def run_cmaes_stage(spec: Exp1Spec, run_allowed: bool, force: bool) -> None:
     def one(variant: str, dim: int, seed: int) -> str:
         population_size = resolve_population_size(dim, spec.population_factor)
         directory = cmaes_dir(study_root(spec), variant, dim, seed)
-        # record_cmaes_path is iteration-granular (see TODO.md); convert the
-        # evaluation budget to whole generations here, at the call site.
-        max_iterations = max(
-            1, (spec.cmaes_evaluations_per_dim * dim) // population_size
-        )
+        max_evaluations = spec.cmaes_evaluations_per_dim * dim
         ensure_cmaes_path(
             directory,
             family_for(spec, variant, dim),
             seed,
             cmaes_config_factory(population_size, spec.sigma0),
             interval=math.gcd(*spec.snapshot_ks) * dim,
-            max_iterations=max_iterations,
+            max_evaluations=max_evaluations,
             run_allowed=run_allowed,
             force=force,
             config_payload={
