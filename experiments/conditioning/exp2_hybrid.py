@@ -42,6 +42,7 @@ from declivity.benchmarking import (
     ProblemFamily,
     RunTrace,
     compose_switch_trace,
+    effective_geometry_norm,
     load_traces_parquet,
     run_conditioned_local,
     save_traces_parquet,
@@ -73,6 +74,7 @@ from experiments.conditioning.common import (
     ensure_setup,
     gap_traces,
     load_cmaes_path,
+    load_yaml,
     local_config,
     plot_xmax,
     problem_optimum,
@@ -287,21 +289,37 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
             "scaling": scaling,
         }
         executed = 0
+        # ADAPTIVE carries the previous probe's effective magnitude into the
+        # next one (see HessianScaling.ADAPTIVE); snapshots are temporally
+        # ordered along this seed's CMA-ES path, so probes are processed in
+        # that order and the chain is persisted per-probe (``effective_norm``
+        # in config.yaml) so a cached probe still hands the value on to the
+        # next uncached one when a run is resumed.
+        previous_scale: float | None = None
 
         for snapshot in path_record.snapshots:
             directory = root / f"it{snapshot.iteration:06d}"
             if (directory / "run.npz").exists() and not force:
+                cached = load_yaml(directory / "config.yaml").get("effective_norm")
+                previous_scale = None if cached is None else float(cached)
                 continue
+            geometry = snapshot_geometry(
+                snapshot, spec.transform, scaling, prev_norm=previous_scale
+            )
             result, optimizer = run_conditioned_local(
                 choice,
                 problem,
                 snapshot.mean,
                 local_config(choice, dim, "probe"),
-                snapshot_geometry(snapshot, spec.transform, scaling),
+                geometry,
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
                 seed=seed,
                 simplex_base_size=probe_simplex_base_size(snapshot),
+            )
+            effective_norm = effective_geometry_norm(choice, optimizer, geometry)
+            previous_scale = (
+                previous_scale if effective_norm is None else effective_norm
             )
             record_local_run(
                 directory,
@@ -313,6 +331,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                     "snapshot_iteration": snapshot.iteration,
                     "snapshot_evaluations": snapshot.evaluations,
                     "budget_evaluations": probe_budget,
+                    "effective_norm": effective_norm,
                 },
             )
             executed += 1
@@ -601,12 +620,14 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
         type=str,
         nargs="+",
         default=None,
-        choices=["none", "sigma", "unit", "identity_norm"],
+        choices=["none", "sigma", "unit", "identity_norm", "adaptive"],
         help=(
             "Magnitude factor(s) applied on top of the inverse-covariance "
             "shape. All values share one set of CMA-ES runs and land in "
             "their own subtree. 'sigma' divides B_0 by sigma**2, "
-            "reproducing the old fused sigma_inverse transform."
+            "reproducing the old fused sigma_inverse transform. 'adaptive' "
+            "carries each seed's previous probe's effective magnitude "
+            "(lbfgsb/bfgs only) into the next snapshot's probe."
         ),
     )
     parser.add_argument("--num-workers", type=int, default=1)

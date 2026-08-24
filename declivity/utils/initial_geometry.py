@@ -382,6 +382,19 @@ class InitialGeometry:
         """The diagonal of B_0, available in both modes."""
         return self._diagonal
 
+    @property
+    def frobenius_norm(self) -> float:
+        """Frobenius norm of the (already-scaled) B_0 this geometry wraps.
+
+        Feeds ``HessianScaling.ADAPTIVE``'s ``prev_norm`` for the next
+        handoff (see :func:`scaling_factor`); coincides with the Euclidean
+        norm of :attr:`diagonal` in ``DIAGONAL`` mode.
+        """
+        if self._mode == InitialHessianMode.DENSE:
+            assert self._matrix is not None
+            return float(np.linalg.norm(self._matrix))
+        return float(np.linalg.norm(self._diagonal))
+
     def multiply(self, v: NDArray[np.float64]) -> NDArray[np.float64]:
         """Compute B_0 * v."""
         if self._mode == InitialHessianMode.DIAGONAL:
