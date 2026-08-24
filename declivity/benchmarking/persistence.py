@@ -114,9 +114,7 @@ def load_traces_parquet(path: str | Path) -> dict[tuple[str, str], list[RunTrace
     (``str`` or ``Path``, not a mix) so cache hits land.
     """
     table = pq.read_table(path)
-    series_columns = [
-        name for name in table.column_names if name.startswith("series_")
-    ]
+    series_columns = [name for name in table.column_names if name.startswith("series_")]
 
     groups: dict[tuple[str, str, int], list[int]] = {}
     columns = {name: table.column(name).to_pylist() for name in table.column_names}

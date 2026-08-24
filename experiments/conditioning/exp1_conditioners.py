@@ -99,7 +99,7 @@ class Exp1Spec:
     # local stage, so a study evaluates a whole list of scalings against one
     # set of CMA-ES runs; each lands in its own `<scaling>/` subtree.
     scalings: tuple[str, ...] = (str(HessianScaling.NONE),)
-    population_factor: float = 0.0
+    population_factor: float | None = None
     sigma0: float = SAMPLING_SPAN / 5.0
     local_budget_per_dim: int = 500
     num_workers: int = 1
@@ -493,7 +493,9 @@ def run_plot_stage(spec: Exp1Spec, floor: float = 1e-9) -> None:
     for scaling in spec.scalings:
         for variant in spec.variants:
             for dim in spec.dimensions:
-                traces_path = benchmark_dir(spec, scaling, variant, dim) / "traces.parquet"
+                traces_path = (
+                    benchmark_dir(spec, scaling, variant, dim) / "traces.parquet"
+                )
                 if not traces_path.exists():
                     print(f"[plot] missing {traces_path}, skipping")
                     continue
