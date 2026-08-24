@@ -12,5 +12,5 @@ optimizers: [lbfgsb, bfgs, powell, neldermead]
 transform: inverse
 # All scalings share one set of CMA-ES runs; each lands in its own subtree.
 scalings: [none, unit, identity_norm]
-population_factor: 0.0
+population_factor: null
 local_budget_per_dim: 500

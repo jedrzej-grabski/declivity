@@ -11,5 +11,5 @@ include_identity: true
 optimizers: [lbfgsb, bfgs, powell, neldermead]
 transform: inverse
 scalings: [none, unit]
-population_factor: 0.0
+population_factor: null
 local_budget_per_dim: 300
