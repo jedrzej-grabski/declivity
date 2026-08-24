@@ -1,0 +1,15 @@
+# @package _global_
+# Real grid: d in {10, 30, 50, 100} (set dim per array task; sweep with
+# -m dim=10,30,50,100), all 30 CEC2017 functions, 25 seeds.
+study_name: null
+num_seeds: 25
+rotate: false
+ks: [0.5, 1.0, 2.0, 4.0, 8.0]
+granularity: 0.5
+cmaes_evaluations_per_dim: 10000
+optimizers: [lbfgsb, bfgs, powell, neldermead]
+transform: inverse
+# All scalings share one set of CMA-ES runs; each lands in its own subtree.
+scalings: [none, unit, adaptive]
+population_factor: 4.0
+probe_budget_per_dim: 200

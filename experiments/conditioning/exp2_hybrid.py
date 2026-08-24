@@ -66,10 +66,10 @@ from experiments.conditioning.common import (
     CurveSpec,
     anchor_traces,
     apply_dark_style,
+    atomic_dump_yaml,
     build_family,
     cmaes_config_factory,
     cmaes_dir,
-    dump_yaml,
     ensure_cmaes_path,
     ensure_setup,
     gap_traces,
@@ -142,6 +142,20 @@ class Exp2Spec:
             "transform": self.transform,
             "scalings": list(self.scalings),
         }
+
+    def study_descriptor(self) -> dict[str, Any]:
+        """Study-level config for the shared ``study.yaml``.
+
+        Omits ``dimensions``: under a Hydra array sweeping ``dim``, every
+        cell carries only its own singleton and races to overwrite this one
+        shared file (see :func:`study_root`, which doesn't nest by
+        dimension), so recording it here just under-reports the study. The
+        realized dimension coverage is instead read back from the on-disk
+        ``local``/``benchmarks`` tree.
+        """
+        descriptor = self.payload()
+        descriptor.pop("dimensions", None)
+        return descriptor
 
 
 def study_root(spec: Exp2Spec) -> Path:
@@ -695,19 +709,46 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
     return spec, args
 
 
-def main() -> None:
-    spec, args = parse_args()
+def run(
+    spec: Exp2Spec,
+    *,
+    replot: bool = False,
+    run_cmaes: bool = True,
+    force_cmaes: bool = False,
+    force_probes: bool = False,
+) -> None:
+    """Run the full staged pipeline (setup -> cmaes -> probes -> compose ->
+    plot) for ``spec``, or just re-render figures when ``replot`` is set.
+
+    ``run_cmaes=False`` reuses persisted CMA-ES paths only, failing if any
+    are missing (mirrors the old ``--skip-cmaes``); ``force_cmaes=True``
+    re-runs CMA-ES even when a cached path exists.
+    """
     root = study_root(spec)
     root.mkdir(parents=True, exist_ok=True)
-    dump_yaml(root / "study.yaml", spec.payload())
+    # Array tasks sharing this study name race on study.yaml when `dim` is
+    # the Hydra sweep axis (study_root doesn't nest by dimension); atomic,
+    # and study-level only (see study_descriptor).
+    atomic_dump_yaml(root / "study.yaml", spec.study_descriptor())
     print(f"Study root: {root}")
 
-    if not args.replot:
+    if not replot:
         run_setup_stage(spec)
-        run_cmaes_stage(spec, run_allowed=not args.skip_cmaes, force=args.force_cmaes)
-        run_probe_stage(spec, force=args.force_probes)
+        run_cmaes_stage(spec, run_allowed=run_cmaes, force=force_cmaes)
+        run_probe_stage(spec, force=force_probes)
         run_compose_stage(spec)
     run_plot_stage(spec)
+
+
+def main() -> None:
+    spec, args = parse_args()
+    run(
+        spec,
+        replot=args.replot,
+        run_cmaes=not args.skip_cmaes,
+        force_cmaes=args.force_cmaes,
+        force_probes=args.force_probes,
+    )
 
 
 if __name__ == "__main__":
