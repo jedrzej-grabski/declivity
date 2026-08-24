@@ -75,7 +75,7 @@ from experiments.conditioning.common import (
     gap_traces,
     load_cmaes_path,
     load_yaml,
-    local_config,
+    local_config_for,
     plot_xmax,
     problem_optimum,
     ramp_colors,
@@ -102,7 +102,15 @@ class Exp2Spec:
     population_factor: float = 4.0
     sigma0: float = SAMPLING_SPAN / 5.0
     probe_budget_per_dim: int = 200
-    optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
+    optimizers: tuple[str, ...] = (
+        "lbfgsb",
+        "bfgs",
+        "powell",
+        "neldermead_control",
+        "neldermead",
+        "neldermead_hc",
+        "neldermead_hc_shaped",
+    )
     transform: str = "inverse"
     # Scaling only reinterprets the CMA-ES-derived geometry in the probe
     # stage, so a study evaluates a whole list of scalings against one
@@ -320,7 +328,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 choice,
                 problem,
                 snapshot.mean,
-                local_config(choice, dim, "probe"),
+                local_config_for(optimizer_key, dim, "probe"),
                 geometry,
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
@@ -354,7 +362,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 choice,
                 problem,
                 x0,
-                local_config(choice, dim, "deep"),
+                local_config_for(optimizer_key, dim, "deep"),
                 None,
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(alone_budget),

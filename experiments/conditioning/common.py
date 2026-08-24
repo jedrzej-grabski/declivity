@@ -37,6 +37,10 @@ from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.algorithms.neldermead.config import NelderMeadConfig
 from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
+from declivity.algorithms.neldermead_hc.config import NelderMeadHCConfig
+from declivity.algorithms.neldermead_hc.neldermead_hc_optimizer import (
+    NelderMeadHCOptimizer,
+)
 from declivity.algorithms.powell.config import PowellConfig
 from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 from declivity.benchmarking import (
@@ -66,17 +70,44 @@ SAMPLING_LOWER = CEC_LOWER_BOUND
 SAMPLING_UPPER = CEC_UPPER_BOUND
 SAMPLING_SPAN = SAMPLING_UPPER - SAMPLING_LOWER
 
+# The Nelder-Mead arms form a 2x2 over *how* the conditioner reaches the run,
+# which is the only way to attribute a difference to one mechanism:
+#
+#                       no model step          model step
+#   isotropic simplex   neldermead_control     neldermead_hc
+#   shaped simplex      neldermead             neldermead_hc_shaped
+#
+# ``neldermead_control`` receives the conditioner and ignores it, so its curves
+# must coincide across every conditioner -- that redundancy is a built-in check
+# that the arms really are otherwise identical.
 LOCAL_CHOICES: dict[str, AlgorithmChoice] = {
     "lbfgsb": AlgorithmChoice.LBFGSB,
     "bfgs": AlgorithmChoice.BFGS,
     "powell": AlgorithmChoice.POWELL,
     "neldermead": AlgorithmChoice.NELDERMEAD,
+    "neldermead_hc": AlgorithmChoice.NELDERMEAD_HC,
+    "neldermead_control": AlgorithmChoice.NELDERMEAD_HC,
+    "neldermead_hc_shaped": AlgorithmChoice.NELDERMEAD_HC,
 }
+
+LOCAL_VARIANTS: dict[str, dict[str, Any]] = {
+    "neldermead_control": {"model_step": False, "shape_initial_simplex": False},
+    "neldermead_hc": {"model_step": True, "shape_initial_simplex": False},
+    "neldermead_hc_shaped": {"model_step": True, "shape_initial_simplex": True},
+}
+"""Config overrides that distinguish arms sharing one ``AlgorithmChoice``.
+
+``neldermead_control`` with ``model_step=False`` is bit-identical to the
+``neldermead`` arm run with an identity conditioner, which is what makes it a
+legitimate baseline rather than a second implementation of one."""
 LOCAL_LABELS: dict[str, str] = {
     "lbfgsb": "L-BFGS-B",
     "bfgs": "BFGS",
     "powell": "Powell",
     "neldermead": "Nelder-Mead",
+    "neldermead_hc": "Nelder-Mead HC",
+    "neldermead_control": "Nelder-Mead (control)",
+    "neldermead_hc_shaped": "Nelder-Mead HC + simplex",
 }
 
 CMAES_COLOR = "#e5484d"
@@ -314,6 +345,20 @@ def resolve_population_size(dim: int, factor: float | None) -> int:
     return max(4, round(factor * dim))
 
 
+def local_config_for(optimizer_key: str, dim: int, profile: str = "deep") -> BaseConfig:
+    """The config for one *arm*, applying any :data:`LOCAL_VARIANTS` overrides.
+
+    Several arms can share an ``AlgorithmChoice`` and differ only by config -- the
+    Nelder-Mead 2x2 above -- so a study must resolve its config from the arm key,
+    not from the choice, or every arm in a group collapses onto one setting.
+    """
+    config = local_config(LOCAL_CHOICES[optimizer_key], dim, profile)
+    for field_name, value in LOCAL_VARIANTS.get(optimizer_key, {}).items():
+        setattr(config, field_name, value)
+    config.validate()
+    return config
+
+
 def local_config(
     choice: AlgorithmChoice, dim: int, profile: str = "deep"
 ) -> BaseConfig:
@@ -340,6 +385,19 @@ def local_config(
             xatol=1e-10 if deep else 1e-8,
             fatol=1e-12 if deep else 1e-8,
             adaptive=True,
+        )
+    if choice is AlgorithmChoice.NELDERMEAD_HC:
+        # Same tolerances and coefficients as the Nelder-Mead arm above, so the
+        # only difference between the two contenders is the model step.  The
+        # initial simplex stays isotropic (``shape_initial_simplex=False``):
+        # shaping it is precisely the mechanism the NELDERMEAD arm already
+        # tests, and mixing both would confound which one is responsible.
+        return NelderMeadHCConfig(
+            dimensions=dim,
+            xatol=1e-10 if deep else 1e-8,
+            fatol=1e-12 if deep else 1e-8,
+            adaptive=True,
+            diag_volume=True,
         )
     raise ValueError(f"Not a local optimizer: {choice!r}")
 
@@ -421,7 +479,7 @@ def final_state_arrays(optimizer: BaseOptimizer) -> dict[str, NDArray[np.float64
     if isinstance(optimizer, PowellOptimizer):
         directions = optimizer.final_directions
         return {} if directions is None else {"direction_set": directions}
-    if isinstance(optimizer, NelderMeadOptimizer):
+    if isinstance(optimizer, (NelderMeadOptimizer, NelderMeadHCOptimizer)):
         simplex = optimizer.final_simplex
         return {} if simplex is None else {"simplex": simplex}
     if isinstance(optimizer, LBFGSBOptimizer):

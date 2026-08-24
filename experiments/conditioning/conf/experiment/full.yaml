@@ -8,7 +8,8 @@ snapshot_ks: [2, 4, 8, 12, 16, 24, 32]
 cmaes_evaluations_per_dim: 10000
 include_hessian: true
 include_identity: true
-optimizers: [lbfgsb, bfgs, powell, neldermead]
+optimizers: [lbfgsb, bfgs, powell, neldermead_control, neldermead,
+             neldermead_hc, neldermead_hc_shaped]
 transform: inverse
 # All scalings share one set of CMA-ES runs; each lands in its own subtree.
 scalings: [none, unit, identity_norm]
