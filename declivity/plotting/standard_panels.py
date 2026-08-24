@@ -674,3 +674,119 @@ PanelRegistry.register(
         default=False,
     ),
 )
+
+
+# Hessian-completed Nelder-Mead
+#
+# Every classic Nelder-Mead panel still applies -- the simplex is still the
+# population and the same convergence tests still fire -- so those are
+# re-registered under the same semantic keys, which is what lets
+# ``PanelRegistry.common([NELDERMEAD, NELDERMEAD_HC])`` overlay the two
+# optimizers panel for panel.  The model-step panels are the addition.
+
+PanelRegistry.register(
+    AlgorithmChoice.NELDERMEAD_HC,
+    Panel(
+        key=PanelKey.CONVERGENCE,
+        title="Convergence",
+        ylabel="Fitness (log)",
+        series=(
+            Series("best_fitness", "Best", color="tab:blue"),
+            Series(
+                "mean_fitness", "Mean", linestyle=LineStyle.DASHED, color="tab:green"
+            ),
+            Series(
+                "worst_fitness", "Worst", linestyle=LineStyle.DOTTED, color="tab:red"
+            ),
+        ),
+        yscale=YScale.LOG,
+        floor=_FITNESS_FLOOR,
+    ),
+    Panel(
+        key=PanelKey.STEP_SIZE,
+        title="Simplex Extent",
+        ylabel="max |sim - sim_0|",
+        field="simplex_diameter",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.FITNESS_SPREAD,
+        title="Fitness Spread",
+        ylabel="max |f_0 - f_i|",
+        field="fitness_spread",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.MODEL_STEPS,
+        title="Model Steps",
+        ylabel="cumulative count",
+        series=(
+            Series("model_attempts", "Attempted", color="tab:gray"),
+            Series("model_accepted", "Accepted", color="tab:blue"),
+            Series(
+                "model_improvements",
+                "Improved best",
+                linestyle=LineStyle.DASHED,
+                color="tab:green",
+            ),
+        ),
+        yscale=YScale.LINEAR,
+    ),
+    # The Hadamard ratio, not the raw volume: it is scale-invariant, so it
+    # separates a degenerate simplex from one that has simply converged.
+    Panel(
+        key=PanelKey.SIMPLEX_SHAPE_QUALITY,
+        title="Simplex Shape Quality",
+        ylabel="|det D| / prod |d_i|",
+        field="simplex_shape_quality",
+        yscale=YScale.LOG,
+    ),
+    Panel(
+        key=PanelKey.TRUST_FACTOR,
+        title="Trust-Region Factor",
+        ylabel="radius / simplex extent",
+        field="trust_factor",
+        yscale=YScale.LOG,
+    ),
+    # Non-default: dissection tools for a single run.
+    Panel(
+        key=PanelKey.MODEL_RATIO,
+        title="Trust-Region Ratio",
+        ylabel="actual / predicted",
+        field="model_ratio",
+        yscale=YScale.LINEAR,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.CURVATURE_SCALE,
+        title="Fitted Curvature Magnitude",
+        ylabel="alpha",
+        field="curvature_scale",
+        yscale=YScale.LOG,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.CONDITION_NUMBER,
+        title="Simplex Condition Number",
+        ylabel="kappa(cov)",
+        field="condition_number",
+        yscale=YScale.LOG,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.SIMPLEX_VOLUME,
+        title="Simplex Volume",
+        ylabel="vol (log)",
+        field="simplex_volume",
+        yscale=YScale.LOG,
+        default=False,
+    ),
+    Panel(
+        key=PanelKey.SIMPLEX_OPERATION,
+        title="Simplex Operation",
+        ylabel="op code",
+        field="operation",
+        yscale=YScale.LINEAR,
+        default=False,
+    ),
+)
