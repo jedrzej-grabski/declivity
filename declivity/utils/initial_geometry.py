@@ -382,6 +382,21 @@ class InitialGeometry:
         """The diagonal of B_0, available in both modes."""
         return self._diagonal
 
+    def dense(self) -> NDArray[np.float64]:
+        """B_0 as a full ``(n, n)`` matrix (defensive copy).
+
+        The matrix-op methods (:meth:`multiply` / :meth:`solve` /
+        :meth:`quadratic_form`) cover every hot path, so this exists for the one
+        consumer that needs the matrix *itself* rather than its action: the
+        Hessian-completed Nelder-Mead model step, which eigendecomposes B_0 once
+        to split it into a unit-scale shape and a magnitude it can re-fit at run
+        time.  ``DIAGONAL`` mode materialises ``diag(h)``.
+        """
+        if self._mode == InitialHessianMode.DIAGONAL:
+            return np.diag(self._diagonal)
+        assert self._matrix is not None
+        return self._matrix.copy()
+
     def multiply(self, v: NDArray[np.float64]) -> NDArray[np.float64]:
         """Compute B_0 * v."""
         if self._mode == InitialHessianMode.DIAGONAL:
