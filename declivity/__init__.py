@@ -11,12 +11,14 @@ import declivity.algorithms.des.des_optimizer
 import declivity.algorithms.lbfgsb.lbfgsb_optimizer
 import declivity.algorithms.mfcmaes.mfcmaes_optimizer
 import declivity.algorithms.neldermead.neldermead_optimizer
+import declivity.algorithms.neldermead_hc.neldermead_hc_optimizer
 import declivity.algorithms.powell.powell_optimizer
 import declivity.logging.bfgs_logger
 import declivity.logging.cmaes_logger
 import declivity.logging.des_logger
 import declivity.logging.lbfgsb_logger
 import declivity.logging.mfcmaes_logger
+import declivity.logging.neldermead_hc_logger
 import declivity.logging.neldermead_logger
 import declivity.logging.powell_logger  # noqa: F401
 from declivity.algorithms.choices import AlgorithmChoice
