@@ -8,7 +8,8 @@ rotate: false
 ks: [0.5, 1.0, 2.0, 4.0]
 granularity: 0.5
 cmaes_evaluations_per_dim: 1500
-optimizers: [lbfgsb, bfgs, powell, neldermead]
+optimizers: [lbfgsb, bfgs, powell, neldermead_control, neldermead,
+             neldermead_hc, neldermead_hc_shaped]
 transform: inverse
 scalings: [none, unit]
 population_factor: 4.0

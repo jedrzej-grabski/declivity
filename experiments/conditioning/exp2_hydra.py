@@ -96,7 +96,15 @@ class Exp2HydraConfig:
     sigma0: float = SAMPLING_SPAN / 5.0
     probe_budget_per_dim: int = 200
     optimizers: list[str] = field(
-        default_factory=lambda: ["lbfgsb", "bfgs", "powell", "neldermead"]
+        default_factory=lambda: [
+            "lbfgsb",
+            "bfgs",
+            "powell",
+            "neldermead_control",
+            "neldermead",
+            "neldermead_hc",
+            "neldermead_hc_shaped",
+        ]
     )
     transform: str = "inverse"
     # A study evaluates this whole list of scalings against one shared set of
