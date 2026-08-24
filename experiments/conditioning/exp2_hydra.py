@@ -10,42 +10,57 @@ Config groups live under ``experiments/conditioning/conf/``:
 CEC 2017 only (exp2_hybrid has no ellipsoid path), so there is no
 ``objective`` group.
 
-The sweep axis is the singular top-level field ``dim`` -- CMA-ES/probe cost
-scales steeply with dimension, so one SLURM array task = one dim, running
-the full setup -> cmaes -> probes -> compose -> plot pipeline for every
-function in ``functions`` and every scaling in ``scalings``, with joblib
-parallelizing (function, seed, optimizer) jobs across ``num_workers`` cores.
-:func:`spec_from_cfg` lifts the singular ``dim`` into ``Exp2Spec.dimensions``'
-singleton tuple that the pipeline expects.
+The sweep axes are the singular top-level fields ``dim`` and
+``function_number`` -- CMA-ES/probe cost scales steeply with dimension, and a
+single function's cmaes+probes+compose work is already
+``num_seeds x len(optimizers) x len(scalings)`` jobs, so one SLURM array task
+= one ``(dim, function_number)`` cell, with joblib parallelizing (seed,
+optimizer) jobs within it across ``num_workers`` cores. :func:`spec_from_cfg`
+lifts a compute cell into ``Exp2Spec.dimensions``/``Exp2Spec.functions``
+singleton tuples.
+
+This experiment also computes a suite-wide ECDF aggregated over every
+function in ``functions``, which cannot be produced by a single-function
+compute cell. So the plot stage is split out: pass ``replot=true`` (no
+``function_number``) to re-render figures from every function's already-
+persisted Parquet, once all of that dim's compute cells have finished --
+``functions`` (the full CEC2017 suite by default, see
+``conf/experiment2/full.yaml``) is only consulted in this replot pass; the
+compute cells always use the single ``function_number``, ignoring
+``functions``. See ``exp2_submit_grid.sh`` for the two-round submission this
+implies.
 
 ``scalings`` is deliberately NOT split per array task: scaling only
 reinterprets the already-computed CMA-ES snapshots in the probe stage, so one
-task evaluates the whole ``scalings`` list against a single set of CMA-ES
-runs, writing each into its own ``<name>/<scaling>/`` subtree (see
+compute cell evaluates the whole ``scalings`` list against a single set of
+CMA-ES runs, writing each into its own ``<name>/<scaling>/`` subtree (see
 ``Exp2Spec.scalings`` / ``scaling_root`` in ``exp2_hybrid.py``).
 
 Preview the composed config for one cell without running anything::
 
     PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra \\
-        --cfg job experiment2=demo dim=10
+        --cfg job experiment2=demo dim=10 function_number=1
 
 Run a single cell locally (cheap smoke test)::
 
     PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra \\
-        experiment2=demo dim=10
+        experiment2=demo dim=10 function_number=1
 
-Run the full grid on this machine, one process per cell
+Run the full compute grid on this machine, one process per cell
 (``hydra/launcher=submitit_local`` is the raw plugin default; our
-``launcher=local`` wraps it with this suite's settings)::
+``launcher=local`` wraps it with this suite's settings), then re-render the
+suite-wide plots once every function has finished::
 
     PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra -m \\
-        dim=10,30,50,100 experiment2=full launcher=local
+        dim=10,30,50,100 function_number=1,2,...,30 experiment2=full launcher=local
+    PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra -m \\
+        dim=10,30,50,100 experiment2=full launcher=local replot=true
 
-Launch the same grid as a SLURM array (fill in the placeholders in
+Launch the same compute grid as a SLURM array (fill in the placeholders in
 ``conf/launcher/slurm.yaml`` -- partition/account/qos -- first)::
 
     PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra -m \\
-        dim=10,30,50,100 experiment2=full launcher=slurm
+        dim=10,30,50,100 function_number=1,2,...,30 experiment2=full launcher=slurm
 """
 
 from __future__ import annotations
@@ -75,10 +90,14 @@ class Exp2HydraConfig:
     """
 
     edition: str = "cec2017"
+    # Consulted only by the replot pass (``replot=true``), which aggregates
+    # the suite-wide ECDF over every function -- see module docstring.
     functions: list[int] = field(default_factory=lambda: list(range(1, 31)))
 
-    # Sweep axis: one SLURM array task = one dim.
+    # Sweep axes: one SLURM array task = one (dim, function_number) compute
+    # cell. Ignored by the replot pass, which uses ``functions`` instead.
     dim: int = 10
+    function_number: int = 1
 
     # Study identity/output roots.
     study_name: str | None = None
@@ -126,11 +145,13 @@ cs.store(name="exp2_schema", node=Exp2HydraConfig)
 
 def spec_from_cfg(cfg: Exp2HydraConfig) -> Exp2Spec:
     """Translate the composed Hydra config into an ``Exp2Spec`` for one
-    ``dim`` cell."""
+    ``(dim, function_number)`` compute cell, or -- when ``cfg.replot`` -- for
+    the ``dim``-wide replot pass over every function in ``cfg.functions``."""
+    functions = tuple(cfg.functions) if cfg.replot else (cfg.function_number,)
     return Exp2Spec(
         name=cfg.study_name if cfg.study_name is not None else cfg.edition,
         edition=cfg.edition,
-        functions=tuple(cfg.functions),
+        functions=functions,
         dimensions=(cfg.dim,),
         num_seeds=cfg.num_seeds,
         variant=cfg.variant,

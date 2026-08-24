@@ -10,10 +10,10 @@
 # conf/launcher/slurm.yaml -- edit there, not here.
 #
 # Usage:
-#   experiments/conditioning/submit_grid.sh                 # ellipsoid, full grid
-#   OBJECTIVE=cec experiments/conditioning/submit_grid.sh   # CEC F1 instead
-#   DIMS=10,30 experiments/conditioning/submit_grid.sh      # narrower sweep
-#   experiments/conditioning/submit_grid.sh num_seeds=10 snapshot_ks='[2,4,8,16,32,64]'
+#   experiments/conditioning/exp1_submit_grid.sh                 # ellipsoid, full grid
+#   OBJECTIVE=cec experiments/conditioning/exp1_submit_grid.sh   # CEC F1 instead
+#   DIMS=10,30 experiments/conditioning/exp1_submit_grid.sh      # narrower sweep
+#   experiments/conditioning/exp1_submit_grid.sh num_seeds=10 snapshot_ks='[2,4,8,16,32,64]'
 #     (any trailing args are passed straight through as Hydra overrides)
 set -euo pipefail
 cd "$(dirname "$0")/../.."  # repo root
