@@ -102,7 +102,10 @@ class Exp2Spec:
     probe_budget_per_dim: int = 200
     optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
     transform: str = "inverse"
-    scaling: str = str(HessianScaling.NONE)
+    # Scaling only reinterprets the CMA-ES-derived geometry in the probe
+    # stage, so a study evaluates a whole list of scalings against one
+    # shared set of CMA-ES runs (see scaling_root/probe_root/benchmark_dir).
+    scalings: tuple[str, ...] = (str(HessianScaling.NONE),)
     num_workers: int = 1
     data_root: Path = field(default=Path("results/conditioning/exp2"))
     plot_root: Path = field(default=Path("plots/conditioning/exp2"))
@@ -135,7 +138,7 @@ class Exp2Spec:
             "probe_budget_per_dim": self.probe_budget_per_dim,
             "optimizers": list(self.optimizers),
             "transform": self.transform,
-            "scaling": self.scaling,
+            "scalings": list(self.scalings),
         }
 
 
@@ -158,11 +161,22 @@ def family_for(spec: Exp2Spec, dim: int, function_number: int) -> ProblemFamily:
     )
 
 
+def scaling_root(spec: Exp2Spec, scaling: str) -> Path:
+    """Per-scaling subtree holding only the probe outputs; the CMA-ES
+    artifacts above it are scaling-independent and reused."""
+    return study_root(spec) / scaling
+
+
 def probe_root(
-    spec: Exp2Spec, dim: int, function_number: int, seed: int, optimizer_key: str
+    spec: Exp2Spec,
+    scaling: str,
+    dim: int,
+    function_number: int,
+    seed: int,
+    optimizer_key: str,
 ) -> Path:
     return (
-        study_root(spec)
+        scaling_root(spec, scaling)
         / "local"
         / spec.variant
         / f"d{dim:03d}"
@@ -172,9 +186,9 @@ def probe_root(
     )
 
 
-def benchmark_dir(spec: Exp2Spec, dim: int, function_number: int) -> Path:
+def benchmark_dir(spec: Exp2Spec, scaling: str, dim: int, function_number: int) -> Path:
     return (
-        study_root(spec)
+        scaling_root(spec, scaling)
         / "benchmarks"
         / spec.variant
         / f"d{dim:03d}"
@@ -240,14 +254,17 @@ def probe_simplex_base_size(snapshot: CMAESSnapshot) -> float:
 
 def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
     jobs = [
-        (dim, function_number, seed, optimizer_key)
+        (scaling, dim, function_number, seed, optimizer_key)
+        for scaling in spec.scalings
         for dim in spec.dimensions
         for function_number in spec.functions
         for seed in range(spec.num_seeds)
         for optimizer_key in spec.optimizers
     ]
 
-    def one(dim: int, function_number: int, seed: int, optimizer_key: str) -> str:
+    def one(
+        scaling: str, dim: int, function_number: int, seed: int, optimizer_key: str
+    ) -> str:
         choice = LOCAL_CHOICES[optimizer_key]
         family = family_for(spec, dim, function_number)
         problem = family.instance(seed)
@@ -255,7 +272,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
         path_record = load_cmaes_path(
             cmaes_dir(study_root(spec), spec.variant, dim, seed, function_number)
         )
-        root = probe_root(spec, dim, function_number, seed, optimizer_key)
+        root = probe_root(spec, scaling, dim, function_number, seed, optimizer_key)
         probe_budget = spec.probe_budget_per_dim * dim
         base_payload = {
             "experiment": "exp2_hybrid",
@@ -267,7 +284,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
             "seed": seed,
             "optimizer": optimizer_key,
             "transform": spec.transform,
-            "scaling": spec.scaling,
+            "scaling": scaling,
         }
         executed = 0
 
@@ -280,7 +297,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 problem,
                 snapshot.mean,
                 local_config(choice, dim, "probe"),
-                snapshot_geometry(snapshot, spec.transform, spec.scaling),
+                snapshot_geometry(snapshot, spec.transform, scaling),
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
                 seed=seed,
@@ -322,7 +339,10 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 {**base_payload, "kind": "alone", "budget_evaluations": alone_budget},
             )
             executed += 1
-        return f"d{dim}/f{function_number}/seed{seed}/{optimizer_key}: {executed} runs"
+        return (
+            f"{scaling}/d{dim}/f{function_number}/seed{seed}/{optimizer_key}: "
+            f"{executed} runs"
+        )
 
     results = Parallel(n_jobs=spec.num_workers, backend="loky")(
         delayed(one)(*job) for job in jobs
@@ -379,140 +399,154 @@ def switch_snapshots(
 
 
 def run_compose_stage(spec: Exp2Spec) -> None:
-    for dim in spec.dimensions:
-        for function_number in spec.functions:
-            family = family_for(spec, dim, function_number)
-            problem_name = family.name
-            traces: dict[tuple[str, str], list[RunTrace]] = {}
+    for scaling in spec.scalings:
+        for dim in spec.dimensions:
+            for function_number in spec.functions:
+                family = family_for(spec, dim, function_number)
+                problem_name = family.name
+                traces: dict[tuple[str, str], list[RunTrace]] = {}
 
-            def add(name: str, trace: RunTrace) -> None:
-                traces.setdefault((problem_name, name), []).append(trace)
+                def add(name: str, trace: RunTrace) -> None:
+                    traces.setdefault((problem_name, name), []).append(trace)
 
-            for seed in range(spec.num_seeds):
-                path_record = load_cmaes_path(
-                    cmaes_dir(
-                        study_root(spec), spec.variant, dim, seed, function_number
+                for seed in range(spec.num_seeds):
+                    path_record = load_cmaes_path(
+                        cmaes_dir(
+                            study_root(spec), spec.variant, dim, seed, function_number
+                        )
                     )
-                )
-                add("CMA-ES", path_record.trace)
-                for optimizer_key in spec.optimizers:
-                    root = probe_root(spec, dim, function_number, seed, optimizer_key)
-                    add(
-                        LOCAL_LABELS[optimizer_key],
-                        load_run_trace(
-                            root / "alone",
-                            LOCAL_LABELS[optimizer_key],
-                            problem_name,
-                            seed,
-                        ),
-                    )
-                    for k in spec.ks:
-                        name = hybrid_name(optimizer_key, k)
-                        probes = [
-                            (
-                                snapshot.evaluations,
-                                load_run_trace(
-                                    root / f"it{snapshot.iteration:06d}",
-                                    name,
-                                    problem_name,
-                                    seed,
-                                ),
-                            )
-                            for snapshot in switch_snapshots(spec, path_record, dim, k)
-                        ]
+                    add("CMA-ES", path_record.trace)
+                    for optimizer_key in spec.optimizers:
+                        root = probe_root(
+                            spec, scaling, dim, function_number, seed, optimizer_key
+                        )
                         add(
-                            name,
-                            compose_switch_trace(
-                                path_record.trace,
-                                probes,
-                                name,
-                                first_switch_iteration=round(k / spec.granularity)
-                                * spec.snapshot_interval(dim),
+                            LOCAL_LABELS[optimizer_key],
+                            load_run_trace(
+                                root / "alone",
+                                LOCAL_LABELS[optimizer_key],
+                                problem_name,
+                                seed,
                             ),
                         )
+                        for k in spec.ks:
+                            name = hybrid_name(optimizer_key, k)
+                            probes = [
+                                (
+                                    snapshot.evaluations,
+                                    load_run_trace(
+                                        root / f"it{snapshot.iteration:06d}",
+                                        name,
+                                        problem_name,
+                                        seed,
+                                    ),
+                                )
+                                for snapshot in switch_snapshots(
+                                    spec, path_record, dim, k
+                                )
+                            ]
+                            add(
+                                name,
+                                compose_switch_trace(
+                                    path_record.trace,
+                                    probes,
+                                    name,
+                                    first_switch_iteration=round(k / spec.granularity)
+                                    * spec.snapshot_interval(dim),
+                                ),
+                            )
 
-            out = benchmark_dir(spec, dim, function_number)
-            out.mkdir(parents=True, exist_ok=True)
-            save_traces_parquet(traces, out / "traces.parquet")
-            print(f"[compose] d{dim}/f{function_number} -> {out / 'traces.parquet'}")
+                out = benchmark_dir(spec, scaling, dim, function_number)
+                out.mkdir(parents=True, exist_ok=True)
+                save_traces_parquet(traces, out / "traces.parquet")
+                print(
+                    f"[compose] {scaling}/d{dim}/f{function_number} -> "
+                    f"{out / 'traces.parquet'}"
+                )
 
 
 def run_plot_stage(spec: Exp2Spec, floor: float = 1e-9) -> None:
     apply_dark_style()
-    for dim in spec.dimensions:
-        population_size = resolve_population_size(dim, spec.population_factor)
-        suite_traces: dict[tuple[str, str], list[RunTrace]] = {}
-        templates = []
-        for function_number in spec.functions:
-            traces_path = benchmark_dir(spec, dim, function_number) / "traces.parquet"
-            if not traces_path.exists():
-                print(f"[plot] missing {traces_path}, skipping")
-                continue
-            traces = load_traces_parquet(traces_path)
-            suite_traces.update(traces)
-            family = family_for(spec, dim, function_number)
-            template = family.template
-            templates.append(template)
-            optimum = problem_optimum(template)
-            f0 = {
-                seed: max(
-                    float(
-                        family.instance(seed).function(
-                            family.instance(seed).starting_point(seed)
-                        )
-                    )
-                    - optimum,
-                    floor,
+    for scaling in spec.scalings:
+        for dim in spec.dimensions:
+            population_size = resolve_population_size(dim, spec.population_factor)
+            suite_traces: dict[tuple[str, str], list[RunTrace]] = {}
+            templates = []
+            for function_number in spec.functions:
+                traces_path = (
+                    benchmark_dir(spec, scaling, dim, function_number)
+                    / "traces.parquet"
                 )
-                for seed in range(spec.num_seeds)
-            }
-            shifted = anchor_traces(gap_traces(traces, optimum, floor), f0)
+                if not traces_path.exists():
+                    print(f"[plot] missing {traces_path}, skipping")
+                    continue
+                traces = load_traces_parquet(traces_path)
+                suite_traces.update(traces)
+                family = family_for(spec, dim, function_number)
+                template = family.template
+                templates.append(template)
+                optimum = problem_optimum(template)
+                f0 = {
+                    seed: max(
+                        float(
+                            family.instance(seed).function(
+                                family.instance(seed).starting_point(seed)
+                            )
+                        )
+                        - optimum,
+                        floor,
+                    )
+                    for seed in range(spec.num_seeds)
+                }
+                shifted = anchor_traces(gap_traces(traces, optimum, floor), f0)
 
-            out = spec.plot_root / spec.name / spec.variant / f"d{dim:03d}"
-            out.mkdir(parents=True, exist_ok=True)
+                out = (
+                    spec.plot_root / spec.name / scaling / spec.variant / f"d{dim:03d}"
+                )
+                out.mkdir(parents=True, exist_ok=True)
+                for optimizer_key in spec.optimizers:
+                    runners = contenders_for(spec, optimizer_key)
+                    pooled = [
+                        trace
+                        for runner in runners
+                        for trace in shifted.get((template.name, runner.name), [])
+                    ]
+                    plot_convergence_overlay(
+                        shifted,
+                        template,
+                        runners,
+                        title=(
+                            f"{template.name}, d={dim}, "
+                            f"CMA-ES + {LOCAL_LABELS[optimizer_key]}"
+                        ),
+                        ylabel="$f(x_{best}) - f^*$",
+                        floor=floor,
+                        show_iqr=False,
+                        annotate_final=False,
+                        xmax=plot_xmax(pooled),
+                        secondary_iter_lambda=population_size,
+                        secondary_label="CMA-ES iterations",
+                        save_path=out / f"f{function_number:02d}_{optimizer_key}.png",
+                    )
+                    plt.close("all")
+
+            if not templates:
+                continue
+            out = spec.plot_root / spec.name / scaling / spec.variant / f"d{dim:03d}"
             for optimizer_key in spec.optimizers:
-                runners = contenders_for(spec, optimizer_key)
-                pooled = [
-                    trace
-                    for runner in runners
-                    for trace in shifted.get((template.name, runner.name), [])
-                ]
-                plot_convergence_overlay(
-                    shifted,
-                    template,
-                    runners,
+                plot_suite_ecdf(
+                    suite_traces,
+                    templates,
+                    contenders_for(spec, optimizer_key),
                     title=(
-                        f"{template.name}, d={dim}, "
+                        f"ECDF, {spec.edition.upper()}, d={dim}, "
                         f"CMA-ES + {LOCAL_LABELS[optimizer_key]}"
                     ),
-                    ylabel="$f(x_{best}) - f^*$",
-                    floor=floor,
-                    show_iqr=False,
-                    annotate_final=False,
-                    xmax=plot_xmax(pooled),
-                    secondary_iter_lambda=population_size,
-                    secondary_label="CMA-ES iterations",
-                    save_path=out / f"f{function_number:02d}_{optimizer_key}.png",
+                    show_subtitle=False,
+                    save_path=out / f"ecdf_{optimizer_key}.png",
                 )
                 plt.close("all")
-
-        if not templates:
-            continue
-        out = spec.plot_root / spec.name / spec.variant / f"d{dim:03d}"
-        for optimizer_key in spec.optimizers:
-            plot_suite_ecdf(
-                suite_traces,
-                templates,
-                contenders_for(spec, optimizer_key),
-                title=(
-                    f"ECDF, {spec.edition.upper()}, d={dim}, "
-                    f"CMA-ES + {LOCAL_LABELS[optimizer_key]}"
-                ),
-                show_subtitle=False,
-                save_path=out / f"ecdf_{optimizer_key}.png",
-            )
-            plt.close("all")
-        print(f"[plot] d={dim} -> {out}")
+            print(f"[plot] {scaling}/d={dim} -> {out}")
 
 
 def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
@@ -565,12 +599,14 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
     parser.add_argument(
         "--hessian-scaling",
         type=str,
-        default="none",
+        nargs="+",
+        default=None,
         choices=["none", "sigma", "unit", "identity_norm"],
         help=(
-            "Magnitude factor applied on top of the inverse-covariance shape. "
-            "'sigma' divides B_0 by sigma**2, reproducing the old fused "
-            "sigma_inverse transform."
+            "Magnitude factor(s) applied on top of the inverse-covariance "
+            "shape. All values share one set of CMA-ES runs and land in "
+            "their own subtree. 'sigma' divides B_0 by sigma**2, "
+            "reproducing the old fused sigma_inverse transform."
         ),
     )
     parser.add_argument("--num-workers", type=int, default=1)
@@ -598,11 +634,12 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
         edition=args.edition,
         variant=args.variant,
         rotate=args.rotate,
-        scaling=args.hessian_scaling,
         num_workers=args.num_workers,
         data_root=args.data_root,
         plot_root=args.plot_root,
     )
+    if args.hessian_scaling is not None:
+        spec = replace(spec, scalings=tuple(args.hessian_scaling))
     if args.demo:
         spec = replace(
             spec,
