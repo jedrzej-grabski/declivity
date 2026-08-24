@@ -7,12 +7,20 @@
 #   1. Heavy compute: one SLURM array task per (dim, function_number) cell,
 #      running setup -> cmaes -> probes -> compose (plus a throwaway
 #      single-function plot) for that cell. With the defaults below that is
-#      4 dims x 30 functions = 120 tasks.
+#      4 dims x 30 functions = 120 cells.
 #   2. Aggregate: one lightweight, LOCAL (not submitted) task per dim that
 #      reruns just the plot stage with the full function list, producing the
 #      real suite-wide ECDF from every function's persisted Parquet.
-#      hydra-submitit-launcher blocks until round 1's array finishes, so
-#      round 2 only starts once every function's data exists on disk.
+#
+# Round 1 is submitted ONE DIM AT A TIME (30 array elements per submission),
+# not as one 120-element array: QOS plgrid1 caps this account at
+# MaxSubmitJobsPU=40 (running + pending combined, array elements counted
+# individually the instant they're submitted -- see conf/launcher/slurm.yaml),
+# so a single 120-element array would be rejected outright.
+# hydra-submitit-launcher blocks until each dim's array finishes before the
+# loop submits the next one, which also keeps you under that cap with
+# headroom to spare. Round 2 only starts once every dim's compute has
+# finished, since it reads round 1's output from disk.
 #
 # Cluster settings (partition/account/qos/resources) live in
 # conf/launcher/slurm.yaml -- edit there, not here.
@@ -30,9 +38,12 @@ DIMS=${DIMS:-10,30,50,100}
 FUNCTIONS=${FUNCTIONS:-$(seq -s, 1 30)}
 
 set -x
-PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra -m \
-    dim="$DIMS" function_number="$FUNCTIONS" \
-    experiment2=full launcher=slurm "$@"
+IFS=',' read -ra dim_list <<< "$DIMS"
+for dim in "${dim_list[@]}"; do
+    PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra -m \
+        dim="$dim" function_number="$FUNCTIONS" \
+        experiment2=full launcher=slurm "$@"
+done
 
 PYTHONPATH=. uv run python -m experiments.conditioning.exp2_hydra -m \
     dim="$DIMS" \

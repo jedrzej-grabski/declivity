@@ -1,8 +1,18 @@
 # @package _global_
 # One SLURM array task per (dim, variant) cell; joblib parallelizes seeds
 # across cpus_per_task within the task. Select with `launcher=slurm`.
-# Values below target the PLGrid cluster (plgcmaes allocation); adjust the
+# Values below target the PLGrid cluster (plgcmaes26 allocation); adjust the
 # account/partition/qos for a different site.
+#
+# QOS plgrid1 caps this account at MaxJobsPU=10 (concurrently running) and
+# MaxSubmitJobsPU=40 (running + pending combined) -- array elements count
+# individually the instant they're submitted, and an over-limit array is
+# rejected whole, not partially. Any -m sweep submitted as one array must
+# stay well under 40 elements, with headroom for anything else running
+# concurrently (exp1's grid, an interactive session, ...). exp2's grid
+# exceeds this and batches across multiple sequential array submissions
+# instead -- see exp2_submit_grid.sh. Re-check these limits periodically
+# (e.g. via `scontrol show assoc_mgr qos=plgrid1`) since they can change.
 defaults:
   - override /hydra/launcher: submitit_slurm
 
@@ -12,7 +22,7 @@ num_workers: 25
 
 hydra:
   launcher:
-    account: plggzszi
+    account: plgcmaes26
     partition: plgrid
     qos: plgrid1
     submitit_folder: ${hydra.sweep.dir}/.submitit/%j
@@ -31,6 +41,7 @@ hydra:
     additional_parameters:
       time: "72:00:00"
 
-    # How many array tasks SLURM runs concurrently; the full grid is 8 cells
-    # (4 dims x 2 variants), so this headroom only matters once the grid grows.
-    array_parallelism: 20
+    # How many array tasks SLURM runs concurrently. Capped below MaxJobsPU=10
+    # (see the QOS note above) with 2 slots of headroom for anything else
+    # you're running concurrently (an interactive session, a second sweep).
+    array_parallelism: 8

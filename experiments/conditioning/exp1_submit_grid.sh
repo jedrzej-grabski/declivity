@@ -4,7 +4,11 @@
 # One SLURM array task per (dim, variant, rotate) cell; each task runs the full
 # setup -> cmaes -> hessian -> local -> plot pipeline and evaluates ALL scalings
 # (from conf/experiment/full.yaml) against its single shared set of CMA-ES runs.
-# With the defaults below that is 4 dims x 2 variants x 2 rotations = 16 tasks.
+# With the defaults below that is 4 dims x 2 variants x 2 rotations = 16 tasks,
+# submitted as one array -- comfortably under this account's MaxSubmitJobsPU=40
+# (see conf/launcher/slurm.yaml). If you widen the grid past ~35-40 cells,
+# batch the submission the way exp2_submit_grid.sh does, or it'll be rejected
+# outright.
 #
 # Cluster settings (partition/account/qos/resources) live in
 # conf/launcher/slurm.yaml -- edit there, not here.
