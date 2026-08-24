@@ -67,7 +67,7 @@ from experiments.conditioning.common import (
     filter_seed,
     gap_traces,
     load_cmaes_path,
-    local_config,
+    local_config_for,
     plot_xmax,
     problem_optimum,
     ramp_colors,
@@ -93,7 +93,15 @@ class Exp1Spec:
     cmaes_evaluations_per_dim: int = DEFAULT_EVALUATIONS_PER_DIMENSION
     include_hessian: bool = True
     include_identity: bool = True
-    optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
+    optimizers: tuple[str, ...] = (
+        "lbfgsb",
+        "bfgs",
+        "powell",
+        "neldermead_control",
+        "neldermead",
+        "neldermead_hc",
+        "neldermead_hc_shaped",
+    )
     transform: str = "inverse"
     # Scaling only reinterprets the (shared) CMA-ES/Hessian matrices in the
     # local stage, so a study evaluates a whole list of scalings against one
@@ -293,7 +301,9 @@ def build_contenders(
                     name=contender_name(optimizer_key, conditioner),
                     color=conditioner.color,
                     algorithm=choice,
-                    config_factory=lambda d, c=choice: local_config(c, d, "deep"),
+                    config_factory=lambda d, k=optimizer_key: local_config_for(
+                        k, d, "deep"
+                    ),
                     geometry_provider=geometry_provider(
                         spec, variant, conditioner, scaling
                     ),

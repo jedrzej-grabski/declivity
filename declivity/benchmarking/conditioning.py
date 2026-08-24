@@ -41,7 +41,12 @@ LOCAL_ALGORITHMS = (
     AlgorithmChoice.BFGS,
     AlgorithmChoice.POWELL,
     AlgorithmChoice.NELDERMEAD,
+    AlgorithmChoice.NELDERMEAD_HC,
 )
+
+_SIMPLEX_ALGORITHMS = (AlgorithmChoice.NELDERMEAD, AlgorithmChoice.NELDERMEAD_HC)
+"""The optimizers whose initial population is a simplex, so they accept a
+``simplex_base_size``."""
 
 _POWELL_RATIO_FLOOR = 1e-6
 """Relative floor on scaled Powell direction lengths: keeps a collapsed
@@ -93,7 +98,7 @@ def local_seeding_kwargs(
         return {"initial_directions": directions.T}
 
     kwargs: dict[str, Any] = {"initial_geometry": geometry}
-    if algorithm is AlgorithmChoice.NELDERMEAD and simplex_base_size is not None:
+    if algorithm in _SIMPLEX_ALGORITHMS and simplex_base_size is not None:
         kwargs["simplex_base_size"] = simplex_base_size
     return kwargs
 

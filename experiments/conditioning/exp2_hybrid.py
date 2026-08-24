@@ -73,7 +73,7 @@ from experiments.conditioning.common import (
     ensure_setup,
     gap_traces,
     load_cmaes_path,
-    local_config,
+    local_config_for,
     plot_xmax,
     problem_optimum,
     ramp_colors,
@@ -100,7 +100,15 @@ class Exp2Spec:
     population_factor: float = 4.0
     sigma0: float = SAMPLING_SPAN / 5.0
     probe_budget_per_dim: int = 200
-    optimizers: tuple[str, ...] = ("lbfgsb", "bfgs", "powell", "neldermead")
+    optimizers: tuple[str, ...] = (
+        "lbfgsb",
+        "bfgs",
+        "powell",
+        "neldermead_control",
+        "neldermead",
+        "neldermead_hc",
+        "neldermead_hc_shaped",
+    )
     transform: str = "inverse"
     scaling: str = str(HessianScaling.NONE)
     num_workers: int = 1
@@ -279,7 +287,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 choice,
                 problem,
                 snapshot.mean,
-                local_config(choice, dim, "probe"),
+                local_config_for(optimizer_key, dim, "probe"),
                 snapshot_geometry(snapshot, spec.transform, spec.scaling),
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(probe_budget),
@@ -308,7 +316,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
                 choice,
                 problem,
                 x0,
-                local_config(choice, dim, "deep"),
+                local_config_for(optimizer_key, dim, "deep"),
                 None,
                 constraint_handler=handler,
                 stopping_condition=MaxEvaluations(alone_budget),
