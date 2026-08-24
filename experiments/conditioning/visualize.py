@@ -40,6 +40,8 @@ with app.setup:
     from declivity.benchmarking import ConditionedLocalAlgorithm, load_traces_parquet
     from declivity.plotting import plot_convergence_overlay
     from experiments.conditioning.common import (
+        CEC_OBJECTIVE,
+        ELLIPSOID_OBJECTIVE,
         LOCAL_LABELS,
         anchor_traces,
         apply_dark_style,
@@ -63,10 +65,11 @@ with app.setup:
 @app.class_definition
 @dataclass
 class StudyInfo:
-    """One discovered ``<name>/rot{0,1}`` study directory."""
+    """One discovered ``<name>[/f{NN}]/rot{0,1}`` study directory."""
 
     name: str
     objective: str
+    function_number: int
     rotate: int
     study_dir: Path
     spec: Exp1Spec
@@ -77,12 +80,16 @@ class StudyInfo:
 def spec_from_study_yaml(study_dir: Path) -> Exp1Spec:
     """Reconstruct an ``Exp1Spec`` from a persisted ``study.yaml``.
 
-    ``study_dir`` is ``<data_root>/<name>/rot{0,1}``; ``data_root`` is
-    recovered as its grandparent. Lists become tuples to match the spec's
-    field types.
+    ``study_dir`` is ``<data_root>/<name>[/f{NN}]/rot{0,1}`` (the function
+    segment only exists for CEC studies, see ``study_root`` in
+    ``exp1_conditioners.py``); ``data_root`` is recovered by walking up that
+    many levels. Lists become tuples to match the spec's field types.
     """
     payload = load_yaml(study_dir / "study.yaml")
-    data_root = study_dir.parent.parent
+    depth = 3 if payload["objective"] == CEC_OBJECTIVE else 2
+    data_root = study_dir
+    for _ in range(depth):
+        data_root = data_root.parent
     return Exp1Spec(
         name=payload["name"],
         objective=payload["objective"],
@@ -137,17 +144,24 @@ def _variants_and_dims_on_disk(
 
 @app.function
 def discover_studies(data_root: Path) -> list[StudyInfo]:
-    """Glob ``<data_root>/*/rot*/study.yaml`` and build one ``StudyInfo`` per
-    match.
+    """Glob ``<data_root>/*/rot*/study.yaml`` and ``<data_root>/*/f*/rot*/study.yaml``
+    and build one ``StudyInfo`` per match.
 
-    ``scalings``/``variants``/``dimensions`` are taken from what is actually
-    present on disk rather than from ``study.yaml``: a study.yaml can list a
-    scaling whose local/plot stage hasn't run yet, and it omits the
-    variants/dimensions sweep axes entirely (see ``_variants_and_dims_on_disk``).
-    Studies with no realized ``(dim, variant)`` cells are skipped.
+    The two depths correspond to ellipsoid studies (no function segment) and
+    CEC studies (``f{NN}`` segment) respectively -- see ``study_root`` in
+    ``exp1_conditioners.py``. ``scalings``/``variants``/``dimensions`` are
+    taken from what is actually present on disk rather than from
+    ``study.yaml``: a study.yaml can list a scaling whose local/plot stage
+    hasn't run yet, and it omits the variants/dimensions sweep axes entirely
+    (see ``_variants_and_dims_on_disk``). Studies with no realized
+    ``(dim, variant)`` cells are skipped.
     """
     infos = []
-    for study_yaml in sorted(data_root.glob("*/rot*/study.yaml")):
+    study_yamls = {
+        *data_root.glob("*/rot*/study.yaml"),
+        *data_root.glob("*/f*/rot*/study.yaml"),
+    }
+    for study_yaml in sorted(study_yamls):
         study_dir = study_yaml.parent
         spec = spec_from_study_yaml(study_dir)
         scalings = tuple(s for s in spec.scalings if (study_dir / s).is_dir())
@@ -161,6 +175,7 @@ def discover_studies(data_root: Path) -> list[StudyInfo]:
             StudyInfo(
                 name=spec.name,
                 objective=spec.objective,
+                function_number=spec.function_number,
                 rotate=int(spec.rotate),
                 study_dir=study_dir,
                 spec=spec,
@@ -172,11 +187,22 @@ def discover_studies(data_root: Path) -> list[StudyInfo]:
 
 @app.function
 def group_by_name(studies: list[StudyInfo]) -> dict[str, dict[int, StudyInfo]]:
-    """``name -> {rotate: StudyInfo}``, for View 2's rotate/scaling/variant
-    sweeps that need to look across both rotations of the same study."""
+    """``key -> {rotate: StudyInfo}``, for View 2's rotate/scaling/variant
+    sweeps that need to look across both rotations of the same study.
+
+    ``key`` is ``name`` for ellipsoid studies (a single fixed function) and
+    ``name f{NN}`` for CEC studies, so different functions sharing the same
+    study name (e.g. a Hydra sweep over ``function_number`` with no
+    ``--study-name``) don't collide into one entry.
+    """
     by_name: dict[str, dict[int, StudyInfo]] = {}
     for info in studies:
-        by_name.setdefault(info.name, {})[info.rotate] = info
+        key = (
+            info.name
+            if info.objective == ELLIPSOID_OBJECTIVE
+            else f"{info.name} f{info.function_number:02d}"
+        )
+        by_name.setdefault(key, {})[info.rotate] = info
     return by_name
 
 
@@ -311,7 +337,14 @@ def _(mo):
 def _(mo, studies):
     mo.stop(not studies)
 
-    study_options = {f"{s.name} ({s.objective}) · rot={s.rotate}": s for s in studies}
+    study_options = {
+        (
+            f"{s.name} ({s.objective}) · rot={s.rotate}"
+            if s.objective == ELLIPSOID_OBJECTIVE
+            else f"{s.name} f{s.function_number:02d} ({s.objective}) · rot={s.rotate}"
+        ): s
+        for s in studies
+    }
     study_sel = mo.ui.dropdown(
         list(study_options.keys()),
         value=next(iter(study_options), None),

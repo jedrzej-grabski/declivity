@@ -7,18 +7,21 @@ Config groups live under ``experiments/conditioning/conf/``:
     experiment/         full.yaml | demo.yaml   (seed count, ks, budgets, ...)
     launcher/           local.yaml | slurm.yaml (submitit executor settings)
 
-The sweep axes are the singular top-level fields ``dim``, ``variant`` and
-``rotate`` -- the facets that force a distinct CMA-ES run. :func:`spec_from_cfg`
-lifts a single ``(dim, variant)`` pair into the
+The sweep axes are the singular top-level fields ``dim``, ``variant``,
+``rotate`` and ``function_number`` -- the facets that force a distinct CMA-ES
+run (each lands in its own ``<name>/f{NN}/rot{0,1}/`` subtree; ``f{NN}`` is
+omitted for ``objective=ellipsoid``, which has no per-function concept).
+:func:`spec_from_cfg` lifts a single ``(dim, variant)`` pair into the
 ``Exp1Spec.dimensions``/``Exp1Spec.variants`` singleton tuples that the
-pipeline expects. One SLURM array task = one ``(dim, variant, rotate)`` cell,
-running the full setup -> cmaes -> hessian -> local -> plot pipeline for that
-cell, with joblib parallelizing seeds across ``num_workers`` cores.
+pipeline expects. One SLURM array task = one ``(dim, variant, rotate,
+function_number)`` cell, running the full setup -> cmaes -> hessian -> local
+-> plot pipeline for that cell, with joblib parallelizing seeds across
+``num_workers`` cores.
 
 ``scalings`` is deliberately NOT a sweep axis: scaling only reinterprets the
 already-computed CMA-ES/Hessian matrices in the local stage, so one task
 evaluates the whole ``scalings`` list against a single set of CMA-ES runs,
-writing each into its own ``<name>/rot{0,1}/<scaling>/`` subtree.
+writing each into its own ``<name>/f{NN}/rot{0,1}/<scaling>/`` subtree.
 
 Preview the composed config for one cell without running anything::
 
@@ -136,7 +139,11 @@ def spec_from_cfg(cfg: Exp1HydraConfig) -> Exp1Spec:
     else:
         edition = cfg.edition
         function_number = cfg.function_number
-        default_name = "cec17_f1"
+        # function_number is its own path segment (study_root nests
+        # f{NN}/rot{0,1} below the study name), so the default name doesn't
+        # need to (and shouldn't, since it's the same across every function
+        # in a sweep) encode it.
+        default_name = edition
 
     return Exp1Spec(
         name=cfg.study_name if cfg.study_name is not None else default_name,
