@@ -50,6 +50,7 @@ from declivity.benchmarking import (
     RunTrace,
     load_cmaes_path,
     record_cmaes_path,
+    save_arrays_parquet,
     save_cmaes_path,
 )
 from declivity.cec.problem import CEC_LOWER_BOUND, CEC_UPPER_BOUND, CECProblem
@@ -507,7 +508,9 @@ def record_local_run(
     if solutions:
         arrays["x_best_path"] = np.asarray(solutions, dtype=float)
     arrays.update(final_state_arrays(optimizer))
-    np.savez_compressed(str(directory / "run.npz"), allow_pickle=False, **arrays)
+    save_arrays_parquet(
+        directory / "run.parquet", {name: [value] for name, value in arrays.items()}
+    )
     dump_yaml(
         directory / "config.yaml",
         {

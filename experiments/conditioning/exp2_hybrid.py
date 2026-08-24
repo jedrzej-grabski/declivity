@@ -43,6 +43,7 @@ from declivity.benchmarking import (
     RunTrace,
     compose_switch_trace,
     effective_geometry_norm,
+    load_arrays_parquet,
     load_traces_parquet,
     run_conditioned_local,
     save_traces_parquet,
@@ -317,7 +318,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
 
         for snapshot in path_record.snapshots:
             directory = root / f"it{snapshot.iteration:06d}"
-            if (directory / "run.npz").exists() and not force:
+            if (directory / "run.parquet").exists() and not force:
                 cached = load_yaml(directory / "config.yaml").get("effective_norm")
                 previous_scale = None if cached is None else float(cached)
                 continue
@@ -355,7 +356,7 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
             executed += 1
 
         alone_dir = root / "alone"
-        if not (alone_dir / "run.npz").exists() or force:
+        if not (alone_dir / "run.parquet").exists() or force:
             x0 = problem.starting_point(seed)
             alone_budget = path_record.trace.final_evaluations
             result, optimizer = run_conditioned_local(
@@ -390,9 +391,9 @@ def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
 def load_run_trace(
     directory: Path, algorithm_name: str, problem_name: str, seed: int
 ) -> RunTrace:
-    with np.load(directory / "run.npz") as arrays:
-        evaluations = [int(e) for e in arrays["evaluations"]]
-        best_fitness = [float(f) for f in arrays["best_fitness"]]
+    arrays = load_arrays_parquet(directory / "run.parquet")
+    evaluations = [int(e) for e in arrays["evaluations"][0]]
+    best_fitness = [float(f) for f in arrays["best_fitness"][0]]
     return RunTrace(
         algorithm=algorithm_name,
         problem=problem_name,

@@ -55,7 +55,9 @@ from declivity.benchmarking.ecdf import (
     threshold_grid,
 )
 from declivity.benchmarking.persistence import (
+    load_arrays_parquet,
     load_traces_parquet,
+    save_arrays_parquet,
     save_runs_csv,
     save_summary_csv,
     save_traces_parquet,
@@ -88,6 +90,7 @@ __all__ = [
     "ecdf_auc",
     "effective_geometry_norm",
     "initial_hessian_from_cmaes",
+    "load_arrays_parquet",
     "load_cmaes_path",
     "load_traces_parquet",
     "local_seeding_kwargs",
@@ -96,6 +99,7 @@ __all__ = [
     "retag_trace",
     "run_conditioned_local",
     "run_ecdf",
+    "save_arrays_parquet",
     "save_cmaes_path",
     "save_runs_csv",
     "save_summary_csv",

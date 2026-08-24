@@ -10,7 +10,7 @@ both.
 
 | Piece | Where | What it does |
 |---|---|---|
-| `CMAESSnapshot` / `CMAESPath` / `record_cmaes_path` / `save_cmaes_path` / `load_cmaes_path` | `benchmarking/cmaes_path.py` | Run CMA-ES once, snapshot the **full resumable state** (mean, σ, C, both paths, cached `(B, D)`, funhist, incumbent) every `interval` generations, persist to `trace.json` + `snapshots.npz` + `meta.json`. Advances through the `CMAESState` resume machinery with a shared RNG: verified byte-identical to a continuous run (mean/σ/C/pc/ps all `==` after 40 generations). `CMAESSnapshot.to_state()` restores a resumable `CMAESState`. |
+| `CMAESSnapshot` / `CMAESPath` / `record_cmaes_path` / `save_cmaes_path` / `load_cmaes_path` | `benchmarking/cmaes_path.py` | Run CMA-ES once, snapshot the **full resumable state** (mean, σ, C, both paths, cached `(B, D)`, funhist, incumbent) every `interval` generations, persist to `trace.parquet` + `snapshots.parquet` + `meta.json`. Advances through the `CMAESState` resume machinery with a shared RNG: verified byte-identical to a continuous run (mean/σ/C/pc/ps all `==` after 40 generations). `CMAESSnapshot.to_state()` restores a resumable `CMAESState`. |
 | `snapshot_geometry` / `local_seeding_kwargs` / `run_conditioned_local` / `ConditionedLocalAlgorithm` | `benchmarking/conditioning.py` | Turn a snapshot (or any curvature source) into per-optimizer ctor kwargs and run a conditioned local. Powell receives the covariance eigenvectors **scaled by `sqrt` of the eigenvalues** (normalised to the longest, rank-floored at `1e-6`): direction magnitudes set the line search's first bracket, so unit vectors would discard the learned scale. Nelder-Mead gets the geometry plus an explicit `simplex_base_size` (mandatory for unbounded problems, where the bounds-derived default is infinite). |
 | `compose_switch_trace` | `benchmarking/conditioning.py` | Offline interleaved-hybrid composition: CMA-ES timeline + probes spliced in at their switch evaluations, running-min, CMA-ES tail shifted right by each probe's cost. The offline equivalent of `InterleavedCMAESLBFGSB` without feedback: so **every k shares one CMA-ES run and one probe set**. |
 | `ProblemFamily` | `benchmarking/problem.py` (+ a resolve hook in `Benchmark._build_jobs`) | Per-seed problem *instances* (same statistical problem, a fresh rotation/shift per seed) flowing through the standard `Benchmark` loop under one problem name. |
@@ -28,9 +28,9 @@ Each study writes under `results/conditioning/<exp>/<study-name>/` (data) and
 ```
 study.yaml                          full spec dump
 setup/dDDD/seedSS/                  x0.npy, rotation.npy, meta.yaml
-cmaes/<variant>/dDDD[/fFF]/seedSS/  trace.json, snapshots.npz, meta.json, config.yaml
+cmaes/<variant>/dDDD[/fFF]/seedSS/  trace.parquet, snapshots.parquet, meta.json, config.yaml
 hessian/dDDD/seedSS/                hessian.npy, meta.yaml           (exp1)
-local/.../seedSS[/itIIIIII|alone]/  run.npz (trace + x_best path + final state), config.yaml
+local/.../seedSS[/itIIIIII|alone]/  run.parquet (trace + x_best path + final state), config.yaml
 benchmarks/...                      Benchmark / composed traces.json  (what --replot reads)
 ```
 

@@ -21,7 +21,9 @@ from numpy.typing import NDArray
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.benchmarking.persistence import (
+    load_arrays_parquet,
     load_traces_parquet,
+    save_arrays_parquet,
     save_traces_parquet,
 )
 from declivity.benchmarking.problem import Problem
@@ -227,8 +229,8 @@ def record_cmaes_path(
 
 
 def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
-    """Persist a :class:`CMAESPath` as ``trace.parquet`` + ``snapshots.npz`` +
-    ``meta.json`` under ``directory``."""
+    """Persist a :class:`CMAESPath` as ``trace.parquet`` + ``snapshots.parquet``
+    + ``meta.json`` under ``directory``."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -238,13 +240,13 @@ def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
     )
 
     snapshots = path_record.snapshots
-    arrays: dict[str, NDArray] = {
-        "iteration": np.array([s.iteration for s in snapshots], dtype=np.int64),
-        "evaluations": np.array([s.evaluations for s in snapshots], dtype=np.int64),
+    columns: dict[str, list] = {
+        "iteration": [s.iteration for s in snapshots],
+        "evaluations": [s.evaluations for s in snapshots],
     }
     for name in _SNAPSHOT_ARRAY_FIELDS:
-        arrays[name] = np.array([getattr(s, name) for s in snapshots], dtype=float)
-    np.savez_compressed(str(directory / "snapshots.npz"), allow_pickle=False, **arrays)
+        columns[name] = [getattr(s, name) for s in snapshots]
+    save_arrays_parquet(directory / "snapshots.parquet", columns)
 
     (directory / "meta.json").write_text(json.dumps(path_record.meta, indent=2))
     return directory
@@ -257,26 +259,25 @@ def load_cmaes_path(directory: str | Path) -> CMAESPath:
     (trace_list,) = traces.values()
     (trace,) = trace_list
 
-    snapshots: list[CMAESSnapshot] = []
-    with np.load(directory / "snapshots.npz") as arrays:
-        count = arrays["iteration"].shape[0]
-        for i in range(count):
-            snapshots.append(
-                CMAESSnapshot(
-                    iteration=int(arrays["iteration"][i]),
-                    evaluations=int(arrays["evaluations"][i]),
-                    sigma=float(arrays["sigma"][i]),
-                    mean=arrays["mean"][i],
-                    covariance=arrays["covariance"][i],
-                    evolution_path_c=arrays["evolution_path_c"][i],
-                    evolution_path_sigma=arrays["evolution_path_sigma"][i],
-                    eigenvectors=arrays["eigenvectors"][i],
-                    eigenvalues_sqrt=arrays["eigenvalues_sqrt"][i],
-                    funhist_values=arrays["funhist_values"][i],
-                    x_best=arrays["x_best"][i],
-                    f_best=float(arrays["f_best"][i]),
-                )
-            )
+    arrays = load_arrays_parquet(directory / "snapshots.parquet")
+    count = len(arrays["iteration"])
+    snapshots: list[CMAESSnapshot] = [
+        CMAESSnapshot(
+            iteration=int(arrays["iteration"][i]),
+            evaluations=int(arrays["evaluations"][i]),
+            sigma=float(arrays["sigma"][i]),
+            mean=arrays["mean"][i],
+            covariance=arrays["covariance"][i],
+            evolution_path_c=arrays["evolution_path_c"][i],
+            evolution_path_sigma=arrays["evolution_path_sigma"][i],
+            eigenvectors=arrays["eigenvectors"][i],
+            eigenvalues_sqrt=arrays["eigenvalues_sqrt"][i],
+            funhist_values=arrays["funhist_values"][i],
+            x_best=arrays["x_best"][i],
+            f_best=float(arrays["f_best"][i]),
+        )
+        for i in range(count)
+    ]
 
     meta = json.loads((directory / "meta.json").read_text())
     return CMAESPath(trace=trace, snapshots=snapshots, meta=meta)

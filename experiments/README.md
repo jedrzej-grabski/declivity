@@ -91,7 +91,7 @@ Staged, cache-aware pipelines over one artifact store
 matrices, CMA-ES runs recorded **once** with full state snapshots
 (`record_cmaes_path` / `save_cmaes_path`), then reused by every downstream
 stage. Each run persists its configuration as a `config.yaml` and its final
-learned state (`H⁻¹` / direction set / simplex / corrections) as a `run.npz`.
+learned state (`H⁻¹` / direction set / simplex / corrections) as a `run.parquet`.
 Fully parameterizable from the CLI (dims, seeds, functions, k values,
 optimizers, budgets); `--demo` runs a small local configuration, `--replot`
 re-renders figures from persisted artifacts, `--skip-cmaes` /
