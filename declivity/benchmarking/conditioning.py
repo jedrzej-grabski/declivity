@@ -18,7 +18,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
 from declivity.algorithms.choices import AlgorithmChoice
+from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.benchmarking.algorithm_run import BenchmarkAlgorithm
 from declivity.benchmarking.cmaes_path import CMAESSnapshot
 from declivity.benchmarking.problem import Problem
@@ -41,7 +43,12 @@ LOCAL_ALGORITHMS = (
     AlgorithmChoice.BFGS,
     AlgorithmChoice.POWELL,
     AlgorithmChoice.NELDERMEAD,
+    AlgorithmChoice.NELDERMEAD_HC,
 )
+
+_SIMPLEX_ALGORITHMS = (AlgorithmChoice.NELDERMEAD, AlgorithmChoice.NELDERMEAD_HC)
+"""The optimizers whose initial population is a simplex, so they accept a
+``simplex_base_size``."""
 
 _POWELL_RATIO_FLOOR = 1e-6
 """Relative floor on scaled Powell direction lengths: keeps a collapsed
@@ -52,11 +59,15 @@ def snapshot_geometry(
     snapshot: CMAESSnapshot,
     transform: HandoffTransform | str = HandoffTransform.INVERSE,
     scaling: HessianScaling | str = HessianScaling.NONE,
+    prev_norm: float | None = None,
 ) -> InitialGeometry:
     """The :class:`InitialGeometry` a snapshot's covariance defines.
 
     ``transform`` selects the curvature *shape*, ``scaling`` a separate
     magnitude factor applied on top (see :class:`HessianScaling`).
+    ``prev_norm`` is only read by ``HessianScaling.ADAPTIVE``: the effective
+    magnitude the previous handoff in the sequence converged to (see
+    :func:`effective_geometry_norm`); ``None`` for the first handoff.
     """
     return InitialGeometry.from_covariance(
         snapshot.eigenvectors,
@@ -64,7 +75,39 @@ def snapshot_geometry(
         snapshot.sigma,
         transform,
         scaling=scaling,
+        prev_norm=prev_norm,
     )
+
+
+def effective_geometry_norm(
+    algorithm: AlgorithmChoice,
+    optimizer: BaseOptimizer,
+    geometry: InitialGeometry | None,
+) -> float | None:
+    """Frobenius norm of the curvature this run actually converged to, in
+    whichever space ``algorithm`` natively tracks.
+
+    Feeds the next handoff's ``HessianScaling.ADAPTIVE`` ``prev_norm`` in a
+    repeated-handoff scheme (see
+    :class:`~declivity.benchmarking.algorithm_run.InterleavedCMAESLocal`,
+    which threads it across CMA-ES/local bursts; the same quantity applies
+    across a sequence of independent probes conditioned on the same seed's
+    CMA-ES path).  L-BFGS-B's compact representation scales its ``B_0`` by
+    ``theta`` over the run; BFGS exposes its dense inverse Hessian directly.
+    ``None`` for Powell/Nelder-Mead (no tracked magnitude) or a run seeded
+    without a geometry.
+    """
+    if algorithm == AlgorithmChoice.LBFGSB:
+        if geometry is None or not isinstance(optimizer, LBFGSBOptimizer):
+            return None
+        _, _, theta = optimizer.final_corrections()
+        return theta * geometry.frobenius_norm
+    if algorithm == AlgorithmChoice.BFGS:
+        if not isinstance(optimizer, BFGSOptimizer):
+            return None
+        h_final = optimizer.final_inverse_hessian
+        return None if h_final is None else float(np.linalg.norm(h_final))
+    return None
 
 
 def local_seeding_kwargs(
@@ -93,7 +136,7 @@ def local_seeding_kwargs(
         return {"initial_directions": directions.T}
 
     kwargs: dict[str, Any] = {"initial_geometry": geometry}
-    if algorithm is AlgorithmChoice.NELDERMEAD and simplex_base_size is not None:
+    if algorithm in _SIMPLEX_ALGORITHMS and simplex_base_size is not None:
         kwargs["simplex_base_size"] = simplex_base_size
     return kwargs
 

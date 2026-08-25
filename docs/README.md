@@ -18,6 +18,11 @@ roughly chronologically and by topic.
 
 ## Study writeups
 
+- [`neldermead_hessian_completion.md`](neldermead_hessian_completion.md) —
+  Why classic Nelder-Mead structurally cannot consume a Hessian, the
+  model step that lets it, the four safeguards each failure mode forced,
+  and an honest account of where it does and does not pay off. Start
+  here before touching `neldermead_hc`.
 - [`covariance_handoff_when_it_matters.md`](covariance_handoff_when_it_matters.md) —
   When does passing the CMA-ES covariance as `B₀` to L-BFGS-B actually
   help? Walks through the `RippledEllipsoid` study that isolates the

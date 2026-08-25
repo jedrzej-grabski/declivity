@@ -74,6 +74,13 @@ class PanelKey(StrEnum):
     FITNESS_SPREAD = "fitness_spread"
     SIMPLEX_VOLUME = "simplex_volume"
     SIMPLEX_OPERATION = "simplex_operation"
+    SIMPLEX_SHAPE_QUALITY = "simplex_shape_quality"
+
+    # Hessian-completed Nelder-Mead specific
+    MODEL_STEPS = "model_steps"
+    MODEL_RATIO = "model_ratio"
+    TRUST_FACTOR = "trust_factor"
+    CURVATURE_SCALE = "curvature_scale"
 
 
 class YScale(StrEnum):

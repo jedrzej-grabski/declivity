@@ -37,6 +37,10 @@ from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.algorithms.neldermead.config import NelderMeadConfig
 from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
+from declivity.algorithms.neldermead_hc.config import NelderMeadHCConfig
+from declivity.algorithms.neldermead_hc.neldermead_hc_optimizer import (
+    NelderMeadHCOptimizer,
+)
 from declivity.algorithms.powell.config import PowellConfig
 from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 from declivity.benchmarking import (
@@ -46,6 +50,7 @@ from declivity.benchmarking import (
     RunTrace,
     load_cmaes_path,
     record_cmaes_path,
+    save_arrays_parquet,
     save_cmaes_path,
 )
 from declivity.cec.problem import CEC_LOWER_BOUND, CEC_UPPER_BOUND, CECProblem
@@ -66,17 +71,44 @@ SAMPLING_LOWER = CEC_LOWER_BOUND
 SAMPLING_UPPER = CEC_UPPER_BOUND
 SAMPLING_SPAN = SAMPLING_UPPER - SAMPLING_LOWER
 
+# The Nelder-Mead arms form a 2x2 over *how* the conditioner reaches the run,
+# which is the only way to attribute a difference to one mechanism:
+#
+#                       no model step          model step
+#   isotropic simplex   neldermead_control     neldermead_hc
+#   shaped simplex      neldermead             neldermead_hc_shaped
+#
+# ``neldermead_control`` receives the conditioner and ignores it, so its curves
+# must coincide across every conditioner -- that redundancy is a built-in check
+# that the arms really are otherwise identical.
 LOCAL_CHOICES: dict[str, AlgorithmChoice] = {
     "lbfgsb": AlgorithmChoice.LBFGSB,
     "bfgs": AlgorithmChoice.BFGS,
     "powell": AlgorithmChoice.POWELL,
     "neldermead": AlgorithmChoice.NELDERMEAD,
+    "neldermead_hc": AlgorithmChoice.NELDERMEAD_HC,
+    "neldermead_control": AlgorithmChoice.NELDERMEAD_HC,
+    "neldermead_hc_shaped": AlgorithmChoice.NELDERMEAD_HC,
 }
+
+LOCAL_VARIANTS: dict[str, dict[str, Any]] = {
+    "neldermead_control": {"model_step": False, "shape_initial_simplex": False},
+    "neldermead_hc": {"model_step": True, "shape_initial_simplex": False},
+    "neldermead_hc_shaped": {"model_step": True, "shape_initial_simplex": True},
+}
+"""Config overrides that distinguish arms sharing one ``AlgorithmChoice``.
+
+``neldermead_control`` with ``model_step=False`` is bit-identical to the
+``neldermead`` arm run with an identity conditioner, which is what makes it a
+legitimate baseline rather than a second implementation of one."""
 LOCAL_LABELS: dict[str, str] = {
     "lbfgsb": "L-BFGS-B",
     "bfgs": "BFGS",
     "powell": "Powell",
     "neldermead": "Nelder-Mead",
+    "neldermead_hc": "Nelder-Mead HC",
+    "neldermead_control": "Nelder-Mead (control)",
+    "neldermead_hc_shaped": "Nelder-Mead HC + simplex",
 }
 
 CMAES_COLOR = "#e5484d"
@@ -314,6 +346,20 @@ def resolve_population_size(dim: int, factor: float | None) -> int:
     return max(4, round(factor * dim))
 
 
+def local_config_for(optimizer_key: str, dim: int, profile: str = "deep") -> BaseConfig:
+    """The config for one *arm*, applying any :data:`LOCAL_VARIANTS` overrides.
+
+    Several arms can share an ``AlgorithmChoice`` and differ only by config -- the
+    Nelder-Mead 2x2 above -- so a study must resolve its config from the arm key,
+    not from the choice, or every arm in a group collapses onto one setting.
+    """
+    config = local_config(LOCAL_CHOICES[optimizer_key], dim, profile)
+    for field_name, value in LOCAL_VARIANTS.get(optimizer_key, {}).items():
+        setattr(config, field_name, value)
+    config.validate()
+    return config
+
+
 def local_config(
     choice: AlgorithmChoice, dim: int, profile: str = "deep"
 ) -> BaseConfig:
@@ -341,6 +387,19 @@ def local_config(
             fatol=1e-12 if deep else 1e-8,
             adaptive=True,
         )
+    if choice is AlgorithmChoice.NELDERMEAD_HC:
+        # Same tolerances and coefficients as the Nelder-Mead arm above, so the
+        # only difference between the two contenders is the model step.  The
+        # initial simplex stays isotropic (``shape_initial_simplex=False``):
+        # shaping it is precisely the mechanism the NELDERMEAD arm already
+        # tests, and mixing both would confound which one is responsible.
+        return NelderMeadHCConfig(
+            dimensions=dim,
+            xatol=1e-10 if deep else 1e-8,
+            fatol=1e-12 if deep else 1e-8,
+            adaptive=True,
+            diag_volume=True,
+        )
     raise ValueError(f"Not a local optimizer: {choice!r}")
 
 
@@ -361,7 +420,7 @@ def cmaes_dir(
 
 
 def cached_cmaes_path(
-    directory: Path, interval: int, max_iterations: int
+    directory: Path, interval: int, max_evaluations: int
 ) -> CMAESPath | None:
     if not (directory / "meta.json").exists():
         return None
@@ -369,7 +428,7 @@ def cached_cmaes_path(
     meta = path_record.meta
     if (
         meta.get("snapshot_interval") == interval
-        and meta.get("max_iterations") == max_iterations
+        and meta.get("max_evaluations") == max_evaluations
     ):
         return path_record
     return None
@@ -381,13 +440,13 @@ def ensure_cmaes_path(
     seed: int,
     config_factory: Callable[[int], CMAESConfig],
     interval: int,
-    max_iterations: int,
+    max_evaluations: int,
     run_allowed: bool,
     force: bool,
     config_payload: dict[str, Any],
 ) -> CMAESPath:
     if not force:
-        cached = cached_cmaes_path(directory, interval, max_iterations)
+        cached = cached_cmaes_path(directory, interval, max_evaluations)
         if cached is not None:
             return cached
     if not run_allowed:
@@ -404,7 +463,7 @@ def ensure_cmaes_path(
         seed,
         config_factory,
         snapshot_interval=interval,
-        max_iterations=max_iterations,
+        max_evaluations=max_evaluations,
     )
     save_cmaes_path(directory, path_record)
     dump_yaml(directory / "config.yaml", config_payload)
@@ -421,7 +480,7 @@ def final_state_arrays(optimizer: BaseOptimizer) -> dict[str, NDArray[np.float64
     if isinstance(optimizer, PowellOptimizer):
         directions = optimizer.final_directions
         return {} if directions is None else {"direction_set": directions}
-    if isinstance(optimizer, NelderMeadOptimizer):
+    if isinstance(optimizer, (NelderMeadOptimizer, NelderMeadHCOptimizer)):
         simplex = optimizer.final_simplex
         return {} if simplex is None else {"simplex": simplex}
     if isinstance(optimizer, LBFGSBOptimizer):
@@ -441,15 +500,19 @@ def record_local_run(
     config_payload: dict[str, Any],
 ) -> None:
     directory.mkdir(parents=True, exist_ok=True)
+    # Per-evaluation best-x trajectories are dropped: nothing reads them back
+    # (only evaluations/best_fitness are consulted, in exp2_hybrid.py), and for
+    # simplex methods (Nelder-Mead family) they dwarf everything else this
+    # persists -- one dim-sized vector per evaluation, and those methods take
+    # far more evaluations to converge than gradient-based ones.
     arrays: dict[str, NDArray[np.float64]] = {
         "evaluations": np.asarray(result.diagnostic.evaluations, dtype=np.int64),
         "best_fitness": np.asarray(result.diagnostic.best_fitness, dtype=float),
     }
-    solutions = getattr(result.diagnostic, "best_solution", None)
-    if solutions:
-        arrays["x_best_path"] = np.asarray(solutions, dtype=float)
     arrays.update(final_state_arrays(optimizer))
-    np.savez_compressed(str(directory / "run.npz"), allow_pickle=False, **arrays)
+    save_arrays_parquet(
+        directory / "run.parquet", {name: [value] for name, value in arrays.items()}
+    )
     dump_yaml(
         directory / "config.yaml",
         {

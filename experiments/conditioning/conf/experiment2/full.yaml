@@ -1,0 +1,18 @@
+# @package _global_
+# Real grid: d in {10, 30, 50, 100}, all 30 CEC2017 functions, 25 seeds.
+# Compute cells sweep dim x function_number (see exp2_hydra.py docstring);
+# `functions` below is only consulted by the final `replot=true` pass that
+# aggregates the suite-wide ECDF over every function.
+study_name: null
+num_seeds: 25
+rotate: false
+ks: [0.5, 1.0, 2.0, 4.0, 8.0]
+granularity: 0.5
+cmaes_evaluations_per_dim: 10000
+optimizers: [lbfgsb, bfgs, powell, neldermead_control, neldermead,
+             neldermead_hc, neldermead_hc_shaped]
+transform: inverse
+# All scalings share one set of CMA-ES runs; each lands in its own subtree.
+scalings: [none, unit, adaptive]
+population_factor: 4.0
+probe_budget_per_dim: 200

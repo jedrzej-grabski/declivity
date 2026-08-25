@@ -17,11 +17,13 @@ the optimizers.
 import csv
 import functools
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+from numpy.typing import NDArray
 
 from declivity.benchmarking.run_trace import RunTrace
 
@@ -179,6 +181,58 @@ def save_runs_csv(
         else:
             fh.write("")
     return path
+
+
+def _nested_pa_array(values: list) -> pa.Array:
+    """Convert a Python list of per-row values (each a scalar, 1D, or 2D
+    array) into a Parquet column, nesting as ``list``/``list<list>`` as
+    needed. Every row must share the same rank."""
+    sample = np.asarray(values[0])
+    if sample.ndim == 0:
+        return pa.array([float(v) for v in values], type=pa.float64())
+    if sample.ndim == 1:
+        return pa.array(
+            [np.asarray(v, dtype=float).tolist() for v in values],
+            type=pa.list_(pa.float64()),
+        )
+    if sample.ndim == 2:
+        return pa.array(
+            [np.asarray(v, dtype=float).tolist() for v in values],
+            type=pa.list_(pa.list_(pa.float64())),
+        )
+    raise ValueError(f"unsupported array rank {sample.ndim} (expected 0, 1, or 2)")
+
+
+def save_arrays_parquet(path: str | Path, columns: Mapping[str, list]) -> Path:
+    """Write named columns -- each a list of per-row scalars/1D/2D arrays --
+    as a single Parquet file, atomically.
+
+    Used as a zstd-compressed replacement for ``np.savez_compressed`` where
+    the payload is a handful of named arrays rather than tidy per-step rows:
+    a matrix-valued field becomes a nested ``list<list<float64>>`` column.
+    """
+    path = Path(path)
+    table = pa.table(
+        {name: _nested_pa_array(values) for name, values in columns.items()}
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    pq.write_table(table, tmp_path, compression="zstd")
+    os.replace(tmp_path, path)
+    return path
+
+
+def load_arrays_parquet(path: str | Path) -> dict[str, list[NDArray[np.float64]]]:
+    """Reconstruct the column dict written by :func:`save_arrays_parquet`.
+
+    Each column comes back as a list (one entry per row) of ``float64``
+    arrays, with rank (0D/1D/2D) restored from the column's nesting depth.
+    """
+    table = pq.read_table(path)
+    return {
+        name: [np.asarray(v, dtype=np.float64) for v in table.column(name).to_pylist()]
+        for name in table.column_names
+    }
 
 
 def save_summary_csv(rows: Iterable[dict], path: str | Path) -> Path:

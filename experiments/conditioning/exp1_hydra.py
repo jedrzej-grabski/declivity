@@ -99,7 +99,15 @@ class Exp1HydraConfig:
     include_hessian: bool = True
     include_identity: bool = True
     optimizers: list[str] = field(
-        default_factory=lambda: ["lbfgsb", "bfgs", "powell", "neldermead"]
+        default_factory=lambda: [
+            "lbfgsb",
+            "bfgs",
+            "powell",
+            "neldermead_control",
+            "neldermead",
+            "neldermead_hc",
+            "neldermead_hc_shaped",
+        ]
     )
     transform: str = "inverse"
     # A study evaluates this whole list of scalings against one shared set of

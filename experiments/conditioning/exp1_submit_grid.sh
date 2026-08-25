@@ -4,17 +4,26 @@
 # One SLURM array task per (dim, variant, rotate) cell; each task runs the full
 # setup -> cmaes -> hessian -> local -> plot pipeline and evaluates ALL scalings
 # (from conf/experiment/full.yaml) against its single shared set of CMA-ES runs.
-# With the defaults below that is 4 dims x 2 variants x 2 rotations = 16 tasks.
+# With the defaults below that is 4 dims x 2 variants x 2 rotations = 16 tasks,
+# submitted as one array -- comfortably under this account's MaxSubmitJobsPU=40
+# (see conf/launcher/slurm.yaml). If you widen the grid past ~35-40 cells,
+# batch the submission the way exp2_submit_grid.sh does, or it'll be rejected
+# outright.
 #
 # Cluster settings (partition/account/qos/resources) live in
 # conf/launcher/slurm.yaml -- edit there, not here.
 #
 # Usage:
-#   experiments/conditioning/submit_grid.sh                 # ellipsoid, full grid
-#   OBJECTIVE=cec experiments/conditioning/submit_grid.sh   # CEC F1 instead
-#   DIMS=10,30 experiments/conditioning/submit_grid.sh      # narrower sweep
-#   experiments/conditioning/submit_grid.sh num_seeds=10 snapshot_ks='[2,4,8,16,32,64]'
+#   experiments/conditioning/exp1_submit_grid.sh                 # ellipsoid, full grid
+#   OBJECTIVE=cec experiments/conditioning/exp1_submit_grid.sh   # CEC F1 instead
+#   DIMS=10,30 experiments/conditioning/exp1_submit_grid.sh      # narrower sweep
+#   experiments/conditioning/exp1_submit_grid.sh num_seeds=10 snapshot_ks='[2,4,8,16,32,64]'
 #     (any trailing args are passed straight through as Hydra overrides)
+#
+# cecpy's compiled extension needs a newer libgcc than the login node's
+# default; load before `set -u` since Lmod's `module` function can trip
+# strict mode on unset internal variables.
+module load trytonp/compiler/gcc/16.1.0
 set -euo pipefail
 cd "$(dirname "$0")/../.."  # repo root
 

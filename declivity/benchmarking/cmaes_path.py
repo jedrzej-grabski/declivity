@@ -21,13 +21,15 @@ from numpy.typing import NDArray
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.benchmarking.persistence import (
+    load_arrays_parquet,
     load_traces_parquet,
+    save_arrays_parquet,
     save_traces_parquet,
 )
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace
 from declivity.utils.constraint_handlers import ConstraintHandler
-from declivity.utils.stopping_conditions import MaxIterations
+from declivity.utils.stopping_conditions import MaxEvaluations, MaxIterations
 
 _SNAPSHOT_ARRAY_FIELDS = (
     "sigma",
@@ -108,20 +110,27 @@ def record_cmaes_path(
     seed: int,
     config_factory: Callable[[int], CMAESConfig],
     snapshot_interval: int,
-    max_iterations: int,
+    max_evaluations: int,
     constraint_handler: ConstraintHandler | None = None,
     algorithm_name: str = "CMA-ES",
 ) -> CMAESPath:
     """Run CMA-ES on ``problem`` from ``x0``, snapshotting every
-    ``snapshot_interval`` generations up to ``max_iterations``.
+    ``snapshot_interval`` generations, stopping as soon as ``max_evaluations``
+    objective calls is reached or exceeded.
+
+    CMA-ES's generation is atomic (a full population is needed to rank and
+    update the distribution), so the budget check is only between
+    generations, not within one -- the final generation can overshoot by up
+    to a population's worth of evaluations, unlike single-solution
+    ``MaxEvaluations`` callers elsewhere in this codebase that trim mid-batch.
 
     Internal convergence (``tolfun`` / ``tolx`` / conditioning) ends the path
     early; the final state is still recorded (at its actual iteration) so a
     consumer can distinguish requested from reached snapshots via
     ``snapshot.iteration``.
     """
-    if snapshot_interval <= 0 or max_iterations <= 0:
-        raise ValueError("snapshot_interval and max_iterations must be positive.")
+    if snapshot_interval <= 0 or max_evaluations <= 0:
+        raise ValueError("snapshot_interval and max_evaluations must be positive.")
 
     rng = np.random.default_rng(seed)
     handler = constraint_handler or problem.resolved_constraint_handler()
@@ -138,18 +147,17 @@ def record_cmaes_path(
     snapshots: list[CMAESSnapshot] = []
     message = ""
 
-    targets = list(range(snapshot_interval, max_iterations + 1, snapshot_interval))
-    if not targets or targets[-1] != max_iterations:
-        targets.append(max_iterations)
-
-    for target in targets:
+    target = 0
+    while cumulative_evaluations < max_evaluations:
+        target += snapshot_interval
         config = config_factory(problem.dimensions)
+        remaining = max_evaluations - cumulative_evaluations
         optimizer = CMAESOptimizer(
             problem.function,
             x0,
             config,
             constraint_handler=handler,
-            stopping_condition=MaxIterations(target),
+            stopping_condition=MaxIterations(target) | MaxEvaluations(remaining),
             lower_bounds=problem.lower_bound,
             upper_bounds=problem.upper_bound,
             seed=rng,
@@ -213,7 +221,7 @@ def record_cmaes_path(
         "dimensions": problem.dimensions,
         "seed": seed,
         "snapshot_interval": snapshot_interval,
-        "max_iterations": max_iterations,
+        "max_evaluations": max_evaluations,
         "population_size": config_factory(problem.dimensions).population_size,
         "message": message,
     }
@@ -221,8 +229,8 @@ def record_cmaes_path(
 
 
 def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
-    """Persist a :class:`CMAESPath` as ``trace.parquet`` + ``snapshots.npz`` +
-    ``meta.json`` under ``directory``."""
+    """Persist a :class:`CMAESPath` as ``trace.parquet`` + ``snapshots.parquet``
+    + ``meta.json`` under ``directory``."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -232,13 +240,13 @@ def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
     )
 
     snapshots = path_record.snapshots
-    arrays: dict[str, NDArray] = {
-        "iteration": np.array([s.iteration for s in snapshots], dtype=np.int64),
-        "evaluations": np.array([s.evaluations for s in snapshots], dtype=np.int64),
+    columns: dict[str, list] = {
+        "iteration": [s.iteration for s in snapshots],
+        "evaluations": [s.evaluations for s in snapshots],
     }
     for name in _SNAPSHOT_ARRAY_FIELDS:
-        arrays[name] = np.array([getattr(s, name) for s in snapshots], dtype=float)
-    np.savez_compressed(str(directory / "snapshots.npz"), allow_pickle=False, **arrays)
+        columns[name] = [getattr(s, name) for s in snapshots]
+    save_arrays_parquet(directory / "snapshots.parquet", columns)
 
     (directory / "meta.json").write_text(json.dumps(path_record.meta, indent=2))
     return directory
@@ -251,26 +259,25 @@ def load_cmaes_path(directory: str | Path) -> CMAESPath:
     (trace_list,) = traces.values()
     (trace,) = trace_list
 
-    snapshots: list[CMAESSnapshot] = []
-    with np.load(directory / "snapshots.npz") as arrays:
-        count = arrays["iteration"].shape[0]
-        for i in range(count):
-            snapshots.append(
-                CMAESSnapshot(
-                    iteration=int(arrays["iteration"][i]),
-                    evaluations=int(arrays["evaluations"][i]),
-                    sigma=float(arrays["sigma"][i]),
-                    mean=arrays["mean"][i],
-                    covariance=arrays["covariance"][i],
-                    evolution_path_c=arrays["evolution_path_c"][i],
-                    evolution_path_sigma=arrays["evolution_path_sigma"][i],
-                    eigenvectors=arrays["eigenvectors"][i],
-                    eigenvalues_sqrt=arrays["eigenvalues_sqrt"][i],
-                    funhist_values=arrays["funhist_values"][i],
-                    x_best=arrays["x_best"][i],
-                    f_best=float(arrays["f_best"][i]),
-                )
-            )
+    arrays = load_arrays_parquet(directory / "snapshots.parquet")
+    count = len(arrays["iteration"])
+    snapshots: list[CMAESSnapshot] = [
+        CMAESSnapshot(
+            iteration=int(arrays["iteration"][i]),
+            evaluations=int(arrays["evaluations"][i]),
+            sigma=float(arrays["sigma"][i]),
+            mean=arrays["mean"][i],
+            covariance=arrays["covariance"][i],
+            evolution_path_c=arrays["evolution_path_c"][i],
+            evolution_path_sigma=arrays["evolution_path_sigma"][i],
+            eigenvectors=arrays["eigenvectors"][i],
+            eigenvalues_sqrt=arrays["eigenvalues_sqrt"][i],
+            funhist_values=arrays["funhist_values"][i],
+            x_best=arrays["x_best"][i],
+            f_best=float(arrays["f_best"][i]),
+        )
+        for i in range(count)
+    ]
 
     meta = json.loads((directory / "meta.json").read_text())
     return CMAESPath(trace=trace, snapshots=snapshots, meta=meta)
