@@ -51,6 +51,9 @@ htmlcov/
 # Jupyter Notebook
 .ipynb_checkpoints/
 
+# marimo notebook session/recovery state
+__marimo__/
+
 # mypy
 .mypy_cache/
 .dmypy.json
