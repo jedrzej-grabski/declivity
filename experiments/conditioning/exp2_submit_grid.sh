@@ -31,6 +31,11 @@
 #   experiments/conditioning/exp2_submit_grid.sh num_seeds=10 ks='[0.5,1,2,4,8]'
 #     (any trailing args are passed straight through as Hydra overrides, to
 #      BOTH rounds)
+#
+# cecpy's compiled extension needs a newer libgcc than the login node's
+# default; load before `set -u` since Lmod's `module` function can trip
+# strict mode on unset internal variables.
+module load trytonp/compiler/gcc/16.1.0
 set -euo pipefail
 cd "$(dirname "$0")/../.."  # repo root
 
