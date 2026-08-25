@@ -61,6 +61,12 @@
       "skillPath": "skills/marimo-notebook/SKILL.md",
       "computedHash": "d843af038a49245369d9a91b8dda531a0d58882bc06623604b673cb144588edd"
     },
+    "marimo-pair": {
+      "source": "marimo-team/marimo-pair",
+      "sourceType": "github",
+      "skillPath": "skills/marimo-pair/SKILL.md",
+      "computedHash": "0686fcc0854e7b3723087c0fc67831dc7122ffe696163c8e5e5a74e0222e1db2"
+    },
     "pdf": {
       "source": "anthropics/skills",
       "sourceType": "github",
@@ -84,6 +90,12 @@
       "sourceType": "github",
       "skillPath": "plugins/python-development/skills/python-testing-patterns/SKILL.md",
       "computedHash": "1306eea409e7eff2288d7658806cb508f18339a0ee9a686d324a0fd2570eae55"
+    },
+    "retro-marimo-pair": {
+      "source": "marimo-team/marimo-pair",
+      "sourceType": "github",
+      "skillPath": "skills/retro-marimo-pair/SKILL.md",
+      "computedHash": "1f89f0999518297d5a0928528c87fc082da9645cac554b0101049042ec661d7b"
     },
     "skill-creator": {
       "source": "anthropics/skills",
