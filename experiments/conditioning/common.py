@@ -500,13 +500,15 @@ def record_local_run(
     config_payload: dict[str, Any],
 ) -> None:
     directory.mkdir(parents=True, exist_ok=True)
+    # Per-evaluation best-x trajectories are dropped: nothing reads them back
+    # (only evaluations/best_fitness are consulted, in exp2_hybrid.py), and for
+    # simplex methods (Nelder-Mead family) they dwarf everything else this
+    # persists -- one dim-sized vector per evaluation, and those methods take
+    # far more evaluations to converge than gradient-based ones.
     arrays: dict[str, NDArray[np.float64]] = {
         "evaluations": np.asarray(result.diagnostic.evaluations, dtype=np.int64),
         "best_fitness": np.asarray(result.diagnostic.best_fitness, dtype=float),
     }
-    solutions = getattr(result.diagnostic, "best_solution", None)
-    if solutions:
-        arrays["x_best_path"] = np.asarray(solutions, dtype=float)
     arrays.update(final_state_arrays(optimizer))
     save_arrays_parquet(
         directory / "run.parquet", {name: [value] for name, value in arrays.items()}
