@@ -15,7 +15,7 @@ ramping-exponent Different Powers — so we use :class:`Ellipsoid`. Contenders:
   ``N = k·d`` with ``k ∈ {0.5, 1, 2, 4, 8}``.
 
 This script runs the same experiment with *our* algorithms — CMA-ES,
-L-BFGS-B, and ``InterleavedCMAESLBFGSB`` (CMA-ES ⇆ **L-BFGS-B**) — so the
+L-BFGS-B, and ``InterleavedCMAESLocal`` (CMA-ES ⇆ **L-BFGS-B**) — so the
 two figures can be compared side by side: does our CMA-ES⇆L-BFGS-B variant
 behave like Maksym's CMA-ES⇆BFGS? Our figure lands in
 ``plots/handoff/cmabfgs_replication/`` (gitignored; regenerate via the run
@@ -26,7 +26,7 @@ It is a thin, framework-conforming orchestration (see
 
 - the problem is a ``Problem`` built from a ``BenchmarkFunction``;
 - every contender is an ``AlgorithmRun`` (``SingleAlgorithm`` /
-  ``InterleavedCMAESLBFGSB``) carrying its own ``name`` + ``color``;
+  ``InterleavedCMAESLocal``) carrying its own ``name`` + ``color``;
 - a single-seed ``Benchmark`` runs them and auto-persists ``traces.parquet``;
 - the figure is the reusable ``plot_convergence_overlay`` (single-panel
   overlay with the reference's secondary "CMA-ES iterations" axis), which
@@ -60,7 +60,7 @@ from declivity.algorithms.lbfgsb.config import LBFGSBConfig
 from declivity.benchmarking import (
     AlgorithmRun,
     Benchmark,
-    InterleavedCMAESLBFGSB,
+    InterleavedCMAESLocal,
     Problem,
     SingleAlgorithm,
     load_traces_parquet,
@@ -157,11 +157,12 @@ def build_algorithms(
     for k in K_VALUES:
         interval = max(1, round(k * dimensions))
         algorithms.append(
-            InterleavedCMAESLBFGSB(
+            InterleavedCMAESLocal(
                 name=f"CMABFGS, k={k:g}",
                 color=K_COLORS[k],
                 cmaes_config_factory=cmaes_config,
-                lbfgsb_config_factory=lbfgsb_config,
+                local_config_factory=lbfgsb_config,
+                local_algorithm=AlgorithmChoice.LBFGSB,
                 cmaes_interval=interval,
                 total_budget=total_budget,
                 transform="inverse",

@@ -174,6 +174,46 @@ def test_raw_handoff_seam_matches_from_covariance():
     )
 
 
+def test_adaptive_scaling_without_prev_norm_is_a_no_op():
+    # No previous burst yet (a one-shot handoff, or the first probe of an
+    # interleaved run): ADAPTIVE must fall back to NONE rather than raise.
+    dim = 5
+    eigenvectors, eigenvalues_sqrt, covariance = _random_covariance_eigendecomposition(
+        dim, seed=6
+    )
+    geometry = InitialGeometry.from_covariance(
+        eigenvectors,
+        eigenvalues_sqrt,
+        sigma=1.0,
+        transform=HandoffTransform.INVERSE,
+        scaling=HessianScaling.ADAPTIVE,
+        prev_norm=None,
+    )
+    expected = np.linalg.inv(covariance)
+    actual = geometry._matrix
+    assert actual is not None
+    assert np.allclose(actual, expected, rtol=1e-8, atol=1e-10)
+
+
+def test_adaptive_scaling_matches_prev_norm():
+    dim = 6
+    eigenvectors, eigenvalues_sqrt, _ = _random_covariance_eigendecomposition(
+        dim, seed=7
+    )
+    prev_norm = 3.75
+    geometry = InitialGeometry.from_covariance(
+        eigenvectors,
+        eigenvalues_sqrt,
+        sigma=1.0,
+        transform=HandoffTransform.INVERSE,
+        scaling=HessianScaling.ADAPTIVE,
+        prev_norm=prev_norm,
+    )
+    actual = geometry._matrix
+    assert actual is not None
+    assert np.isclose(np.linalg.norm(actual), prev_norm, rtol=1e-8, atol=1e-10)
+
+
 if __name__ == "__main__":
     tests = [
         test_sigma_scaling_reproduces_old_fused_sigma_inverse,
@@ -183,6 +223,8 @@ if __name__ == "__main__":
         test_identity_norm_scaling_on_identity_geometry,
         test_scaling_does_not_perturb_forward_geometry,
         test_raw_handoff_seam_matches_from_covariance,
+        test_adaptive_scaling_without_prev_norm_is_a_no_op,
+        test_adaptive_scaling_matches_prev_norm,
     ]
     for test in tests:
         test()
