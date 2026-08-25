@@ -81,7 +81,7 @@ plt.switch_backend("Agg")
 
 @dataclass
 class Exp1Spec:
-    name: str = "cec17_f1"
+    name: str = "cec2017"
     objective: str = CEC_OBJECTIVE
     edition: str = "cec2017"
     function_number: int = 1
@@ -146,10 +146,15 @@ class Exp1Spec:
 
 
 def study_root(spec: Exp1Spec) -> Path:
-    # rot{0,1} sits above the shared setup/cmaes/hessian artifacts because
-    # rotation changes the objective (hence the CMA-ES path and Hessian);
-    # scaling does not, so it nests *below* (see scaling_root/benchmark_dir).
-    return spec.data_root / spec.name / f"rot{int(spec.rotate)}"
+    # f{NN}/rot{0,1} sit above the shared setup/cmaes/hessian artifacts because
+    # both the function and the rotation change the objective (hence the
+    # CMA-ES path and Hessian); scaling does not, so it nests *below* (see
+    # scaling_root/benchmark_dir). function_number is meaningless for the
+    # ellipsoid objective (a single fixed function), so it's omitted there.
+    root = spec.data_root / spec.name
+    if spec.objective == CEC_OBJECTIVE:
+        root = root / f"f{spec.function_number:02d}"
+    return root / f"rot{int(spec.rotate)}"
 
 
 def setup_root(spec: Exp1Spec) -> Path:
