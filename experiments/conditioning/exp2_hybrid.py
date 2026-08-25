@@ -49,7 +49,10 @@ from declivity.benchmarking import (
 )
 from declivity.plotting import plot_convergence_overlay, plot_suite_ecdf
 from declivity.utils.initial_geometry import HessianScaling
-from declivity.utils.stopping_conditions import MaxEvaluations
+from declivity.utils.stopping_conditions import (
+    DEFAULT_EVALUATIONS_PER_DIMENSION,
+    MaxEvaluations,
+)
 from experiments.conditioning.common import (
     BOUNDED,
     CMAES_COLOR,
@@ -93,7 +96,7 @@ class Exp2Spec:
     rotate: bool = False
     ks: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0, 8.0)
     granularity: float = 0.5
-    cmaes_iterations_per_dim: int = 25
+    cmaes_evaluations_per_dim: int = DEFAULT_EVALUATIONS_PER_DIMENSION
     population_factor: float = 4.0
     sigma0: float = SAMPLING_SPAN / 5.0
     probe_budget_per_dim: int = 200
@@ -114,9 +117,6 @@ class Exp2Spec:
     def snapshot_interval(self, dim: int) -> int:
         return max(1, round(self.granularity * dim))
 
-    def max_iterations(self, dim: int) -> int:
-        return self.cmaes_iterations_per_dim * dim
-
     def payload(self) -> dict[str, Any]:
         return {
             "experiment": "exp2_hybrid",
@@ -129,7 +129,7 @@ class Exp2Spec:
             "rotate": self.rotate,
             "ks": list(self.ks),
             "granularity": self.granularity,
-            "cmaes_iterations_per_dim": self.cmaes_iterations_per_dim,
+            "cmaes_evaluations_per_dim": self.cmaes_evaluations_per_dim,
             "population_factor": self.population_factor,
             "sigma0": self.sigma0,
             "probe_budget_per_dim": self.probe_budget_per_dim,
@@ -201,13 +201,18 @@ def run_cmaes_stage(spec: Exp2Spec, run_allowed: bool, force: bool) -> None:
 
     def one(dim: int, function_number: int, seed: int) -> str:
         population_size = resolve_population_size(dim, spec.population_factor)
+        # record_cmaes_path is iteration-granular (see TODO.md); convert the
+        # evaluation budget to whole generations here, at the call site.
+        max_iterations = max(
+            1, (spec.cmaes_evaluations_per_dim * dim) // population_size
+        )
         ensure_cmaes_path(
             cmaes_dir(study_root(spec), spec.variant, dim, seed, function_number),
             family_for(spec, dim, function_number),
             seed,
             cmaes_config_factory(population_size, spec.sigma0),
             interval=spec.snapshot_interval(dim),
-            max_iterations=spec.max_iterations(dim),
+            max_iterations=max_iterations,
             run_allowed=run_allowed,
             force=force,
             config_payload={
@@ -364,7 +369,7 @@ def switch_snapshots(
     stride = round(k / spec.granularity)
     switches = []
     iteration = stride * interval
-    while iteration <= spec.max_iterations(dim):
+    while iteration <= path_record.meta["max_iterations"]:
         snapshot = path_record.snapshot_at(iteration)
         if snapshot is None:
             break
@@ -538,31 +543,34 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
         help="Snapshot spacing in units of d iterations (the most granular k).",
     )
     parser.add_argument(
-        "--iterations-per-dim",
+        "--evaluations-per-dim",
         type=int,
         default=None,
-        help="CMA-ES run length: iterations = value * d.",
+        help=(
+            "CMA-ES evaluation budget: evaluations = value * d, converted to "
+            "whole generations. Internal tolx/tolfun convergence can still "
+            "end the run earlier."
+        ),
     )
     parser.add_argument(
         "--population-factor",
         type=float,
         default=None,
-        help="CMA-ES lambda = factor*d; 0 = framework default.",
+        help="CMA-ES lambda = factor*d; omit for the framework default.",
     )
     parser.add_argument("--probe-budget-per-dim", type=int, default=None)
     parser.add_argument(
         "--optimizers", type=str, nargs="+", default=None, choices=sorted(LOCAL_CHOICES)
     )
-    parser.add_argument("--transform", type=str, default="inverse", choices=["inverse"])
     parser.add_argument(
         "--hessian-scaling",
         type=str,
         default="none",
         choices=["none", "sigma", "unit", "identity_norm"],
         help=(
-            "Magnitude factor applied on top of --transform (shape). "
+            "Magnitude factor applied on top of the inverse-covariance shape. "
             "'sigma' divides B_0 by sigma**2, reproducing the old fused "
-            "sigma_inverse transform when combined with --transform inverse."
+            "sigma_inverse transform."
         ),
     )
     parser.add_argument("--num-workers", type=int, default=1)
@@ -590,7 +598,6 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
         edition=args.edition,
         variant=args.variant,
         rotate=args.rotate,
-        transform=args.transform,
         scaling=args.hessian_scaling,
         num_workers=args.num_workers,
         data_root=args.data_root,
@@ -604,7 +611,7 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
             dimensions=(10,),
             num_seeds=5,
             ks=(0.5, 1.0, 2.0, 4.0),
-            cmaes_iterations_per_dim=15,
+            cmaes_evaluations_per_dim=1_500,
             probe_budget_per_dim=150,
         )
     if args.study_name is not None:
@@ -619,8 +626,8 @@ def parse_args() -> tuple[Exp2Spec, argparse.Namespace]:
         spec = replace(spec, granularity=args.granularity, ks=tuple(args.ks or spec.ks))
     if args.ks is not None:
         spec = replace(spec, ks=tuple(args.ks))
-    if args.iterations_per_dim is not None:
-        spec = replace(spec, cmaes_iterations_per_dim=args.iterations_per_dim)
+    if args.evaluations_per_dim is not None:
+        spec = replace(spec, cmaes_evaluations_per_dim=args.evaluations_per_dim)
     if args.population_factor is not None:
         spec = replace(spec, population_factor=args.population_factor)
     if args.probe_budget_per_dim is not None:

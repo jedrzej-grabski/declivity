@@ -103,7 +103,7 @@ class Exp1HydraConfig:
     # CMA-ES runs (scaling only reinterprets the matrices in the local stage),
     # so scaling is an internal list, NOT a sweep axis.
     scalings: list[str] = field(default_factory=lambda: ["none"])
-    population_factor: float = 0.0
+    population_factor: float | None = None
     sigma0: float = SAMPLING_SPAN / 5.0
     local_budget_per_dim: int = 500
 

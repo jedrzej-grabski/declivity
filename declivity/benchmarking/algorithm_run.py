@@ -95,7 +95,9 @@ def initial_hessian_from_cmaes(
     matrix = covariance_to_hessian_matrix(transform, eigenvectors, eigenvalues_sqrt)
     if matrix is None:
         return None
-    factor = scaling_factor(scaling, matrix, matrix.shape[0], sigma, prev_norm=prev_norm)
+    factor = scaling_factor(
+        scaling, matrix, matrix.shape[0], sigma, prev_norm=prev_norm
+    )
     return matrix * factor
 
 
@@ -949,9 +951,7 @@ class InterleavedCMAESLocal(BenchmarkAlgorithm):
                 self.transform, eigenvectors, eigenvalues_sqrt
             )
             if self.local_algorithm == AlgorithmChoice.LBFGSB:
-                target_shape = (
-                    b0_shape if b0_shape is not None else np.eye(dimensions)
-                )
+                target_shape = b0_shape if b0_shape is not None else np.eye(dimensions)
                 factor = scaling_factor(
                     self.scaling,
                     target_shape,
@@ -962,7 +962,8 @@ class InterleavedCMAESLocal(BenchmarkAlgorithm):
                 curvature = target_shape * factor
             else:
                 h0_shape = (
-                    np.linalg.inv(b0_shape) if b0_shape is not None
+                    np.linalg.inv(b0_shape)
+                    if b0_shape is not None
                     else np.eye(dimensions)
                 )
                 factor = scaling_factor(

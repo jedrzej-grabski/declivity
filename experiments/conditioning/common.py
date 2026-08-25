@@ -307,11 +307,11 @@ def cmaes_config_factory(
     return factory
 
 
-def resolve_population_size(dim: int, factor: float) -> int:
-    """``factor > 0`` gives lambda = round(factor * d); 0 keeps the default."""
-    if factor > 0:
-        return max(4, round(factor * dim))
-    return default_population_size(dim)
+def resolve_population_size(dim: int, factor: float | None) -> int:
+    """``factor`` gives lambda = round(factor * d); ``None`` keeps the default."""
+    if factor is None:
+        return default_population_size(dim)
+    return max(4, round(factor * dim))
 
 
 def local_config(
