@@ -53,8 +53,8 @@ with app.setup:
     from declivity.plotting import plot_convergence_overlay, plot_suite_ecdf
     from experiments.conditioning.common import (
         CMAES_COLOR,
-        CurveSpec,
         LOCAL_LABELS,
+        CurveSpec,
         anchor_traces,
         apply_dark_style,
         gap_traces,
