@@ -29,20 +29,13 @@ from matplotlib.colors import to_hex
 from matplotlib.pyplot import get_cmap
 from numpy.typing import NDArray
 
-from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
 from declivity.algorithms.bfgs.config import BFGSConfig
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.config import CMAESConfig, default_population_size
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.algorithms.neldermead.config import NelderMeadConfig
-from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
 from declivity.algorithms.neldermead_hc.config import NelderMeadHCConfig
-from declivity.algorithms.neldermead_hc.neldermead_hc_optimizer import (
-    NelderMeadHCOptimizer,
-)
 from declivity.algorithms.powell.config import PowellConfig
-from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 from declivity.benchmarking import (
     CMAESPath,
     Problem,
@@ -473,26 +466,6 @@ def ensure_cmaes_path(
 # Per-run persistence for conditioned local runs.
 
 
-def final_state_arrays(optimizer: BaseOptimizer) -> dict[str, NDArray[np.float64]]:
-    if isinstance(optimizer, BFGSOptimizer):
-        matrix = optimizer.final_inverse_hessian
-        return {} if matrix is None else {"inverse_hessian": matrix}
-    if isinstance(optimizer, PowellOptimizer):
-        directions = optimizer.final_directions
-        return {} if directions is None else {"direction_set": directions}
-    if isinstance(optimizer, (NelderMeadOptimizer, NelderMeadHCOptimizer)):
-        simplex = optimizer.final_simplex
-        return {} if simplex is None else {"simplex": simplex}
-    if isinstance(optimizer, LBFGSBOptimizer):
-        steps, gradient_diffs, theta = optimizer.final_corrections()
-        return {
-            "correction_steps": steps,
-            "correction_gradient_diffs": gradient_diffs,
-            "theta": np.array([theta]),
-        }
-    return {}
-
-
 def record_local_run(
     directory: Path,
     result: OptimizationResult,
@@ -505,11 +478,15 @@ def record_local_run(
     # simplex methods (Nelder-Mead family) they dwarf everything else this
     # persists -- one dim-sized vector per evaluation, and those methods take
     # far more evaluations to converge than gradient-based ones.
+    #
+    # The optimizer's final learned state (inverse Hessian / direction set /
+    # simplex / L-BFGS corrections) was previously persisted alongside this,
+    # but nothing downstream ever read it back, and it's O(d^2) for most of
+    # these optimizers -- dropped entirely rather than kept unread.
     arrays: dict[str, NDArray[np.float64]] = {
         "evaluations": np.asarray(result.diagnostic.evaluations, dtype=np.int64),
         "best_fitness": np.asarray(result.diagnostic.best_fitness, dtype=float),
     }
-    arrays.update(final_state_arrays(optimizer))
     save_arrays_parquet(
         directory / "run.parquet", {name: [value] for name, value in arrays.items()}
     )
