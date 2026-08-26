@@ -43,12 +43,14 @@ from declivity.benchmarking import (
     RunTrace,
     compose_switch_trace,
     effective_geometry_norm,
-    load_arrays_parquet,
+    load_probe_rows,
     load_traces_parquet,
     run_conditioned_local,
+    save_probe_rows,
     save_traces_parquet,
     snapshot_geometry,
 )
+from declivity.core.base_optimizer import OptimizationResult
 from declivity.plotting import plot_convergence_overlay, plot_suite_ecdf
 from declivity.utils.initial_geometry import HessianScaling
 from declivity.utils.stopping_conditions import (
@@ -71,16 +73,15 @@ from experiments.conditioning.common import (
     build_family,
     cmaes_config_factory,
     cmaes_dir,
+    dump_yaml,
     ensure_cmaes_path,
     ensure_setup,
     gap_traces,
     load_cmaes_path,
-    load_yaml,
     local_config_for,
     plot_xmax,
     problem_optimum,
     ramp_colors,
-    record_local_run,
     resolve_population_size,
 )
 
@@ -115,7 +116,7 @@ class Exp2Spec:
     transform: str = "inverse"
     # Scaling only reinterprets the CMA-ES-derived geometry in the probe
     # stage, so a study evaluates a whole list of scalings against one
-    # shared set of CMA-ES runs (see scaling_root/probe_root/benchmark_dir).
+    # shared set of CMA-ES runs (see scaling_root/probe_cell_dir/benchmark_dir).
     scalings: tuple[str, ...] = (str(HessianScaling.NONE),)
     num_workers: int = 1
     data_root: Path = field(default=Path("results/conditioning/exp2"))
@@ -192,22 +193,18 @@ def scaling_root(spec: Exp2Spec, scaling: str) -> Path:
     return study_root(spec) / scaling
 
 
-def probe_root(
-    spec: Exp2Spec,
-    scaling: str,
-    dim: int,
-    function_number: int,
-    seed: int,
-    optimizer_key: str,
+def probe_cell_dir(
+    spec: Exp2Spec, scaling: str, dim: int, function_number: int
 ) -> Path:
+    """Directory holding one (scaling, dim, function) cell's probe outputs:
+    ``meta.yaml`` plus one ``seedNN.parquet`` per seed (see
+    :func:`run_probe_stage`)."""
     return (
         scaling_root(spec, scaling)
         / "local"
         / spec.variant
         / f"d{dim:03d}"
         / f"f{function_number:02d}"
-        / optimizer_key
-        / f"seed{seed:02d}"
     )
 
 
@@ -273,131 +270,192 @@ def probe_simplex_base_size(snapshot: CMAESSnapshot) -> float:
     return float(np.clip(3.0 * scale, 1e-6, 0.1 * SAMPLING_SPAN))
 
 
+def probe_cell_meta(
+    spec: Exp2Spec, scaling: str, dim: int, function_number: int, problem_name: str
+) -> dict[str, Any]:
+    """Provenance shared by every row of one probe cell, written once to the
+    cell's ``meta.yaml`` rather than repeated per row.
+
+    Anything that varies between rows belongs in the Parquet schema instead
+    (see :data:`~declivity.benchmarking.persistence._PROBE_SCHEMA`).
+    ``layout_version`` identifies the on-disk layout for a reader that finds
+    a tree written by a different version of this pipeline.
+    """
+    return {
+        "experiment": "exp2_hybrid",
+        "study": spec.name,
+        "problem": problem_name,
+        "variant": spec.variant,
+        "dimensions": dim,
+        "function_number": function_number,
+        "scaling": scaling,
+        "transform": spec.transform,
+        "layout_version": 2,
+        "spec": {
+            "granularity": spec.granularity,
+            "ks": list(spec.ks),
+            "probe_budget_per_dim": spec.probe_budget_per_dim,
+            "num_seeds": spec.num_seeds,
+            "optimizers": list(spec.optimizers),
+        },
+    }
+
+
+def _probe_row(
+    seed: int,
+    optimizer_key: str,
+    kind: str,
+    result: OptimizationResult,
+    *,
+    snapshot_iteration: int | None,
+    snapshot_evaluations: int | None,
+    budget_evaluations: int,
+    effective_norm: float | None,
+) -> dict[str, Any]:
+    """One row of a seed's probe Parquet file: everything :func:`trace_from_probe_row`
+    and downstream analysis need, keyed by (optimizer, kind, snapshot_iteration)."""
+    return {
+        "seed": seed,
+        "optimizer": optimizer_key,
+        "kind": kind,
+        "snapshot_iteration": snapshot_iteration,
+        "snapshot_evaluations": snapshot_evaluations,
+        "budget_evaluations": budget_evaluations,
+        "effective_norm": effective_norm,
+        "final_fitness": float(result.best_fitness),
+        "final_evaluations": int(result.evaluations),
+        "message": result.message,
+        "evaluations": [int(e) for e in result.diagnostic.evaluations],
+        "best_fitness": [float(f) for f in result.diagnostic.best_fitness],
+    }
+
+
 def run_probe_stage(spec: Exp2Spec, force: bool) -> None:
-    jobs = [
-        (scaling, dim, function_number, seed, optimizer_key)
-        for scaling in spec.scalings
-        for dim in spec.dimensions
-        for function_number in spec.functions
-        for seed in range(spec.num_seeds)
-        for optimizer_key in spec.optimizers
-    ]
+    for scaling in spec.scalings:
+        for dim in spec.dimensions:
+            for function_number in spec.functions:
+                family = family_for(spec, dim, function_number)
+                cell = probe_cell_dir(spec, scaling, dim, function_number)
+                dump_yaml(
+                    cell / "meta.yaml",
+                    probe_cell_meta(spec, scaling, dim, function_number, family.name),
+                )
+                probe_budget = spec.probe_budget_per_dim * dim
 
-    def one(
-        scaling: str, dim: int, function_number: int, seed: int, optimizer_key: str
-    ) -> str:
-        choice = LOCAL_CHOICES[optimizer_key]
-        family = family_for(spec, dim, function_number)
-        problem = family.instance(seed)
-        handler = problem.resolved_constraint_handler()
-        path_record = load_cmaes_path(
-            cmaes_dir(study_root(spec), spec.variant, dim, seed, function_number)
-        )
-        root = probe_root(spec, scaling, dim, function_number, seed, optimizer_key)
-        probe_budget = spec.probe_budget_per_dim * dim
-        base_payload = {
-            "experiment": "exp2_hybrid",
-            "study": spec.name,
-            "problem": problem.name,
-            "variant": spec.variant,
-            "dimensions": dim,
-            "function_number": function_number,
-            "seed": seed,
-            "optimizer": optimizer_key,
-            "transform": spec.transform,
-            "scaling": scaling,
-        }
-        executed = 0
-        # ADAPTIVE carries the previous probe's effective magnitude into the
-        # next one (see HessianScaling.ADAPTIVE); snapshots are temporally
-        # ordered along this seed's CMA-ES path, so probes are processed in
-        # that order and the chain is persisted per-probe (``effective_norm``
-        # in config.yaml) so a cached probe still hands the value on to the
-        # next uncached one when a run is resumed.
-        previous_scale: float | None = None
+                def one_seed(seed: int) -> str:
+                    problem = family.instance(seed)
+                    handler = problem.resolved_constraint_handler()
+                    path_record = load_cmaes_path(
+                        cmaes_dir(
+                            study_root(spec), spec.variant, dim, seed, function_number
+                        )
+                    )
+                    rows: list[dict[str, Any]] = []
+                    for optimizer_key in spec.optimizers:
+                        choice = LOCAL_CHOICES[optimizer_key]
+                        # ADAPTIVE carries the previous probe's effective
+                        # magnitude into the next one (see
+                        # HessianScaling.ADAPTIVE); snapshots are temporally
+                        # ordered along this seed's CMA-ES path, so probes
+                        # are processed in that order and the chain stays a
+                        # plain in-memory local -- a seed's whole probe file
+                        # is written atomically in one shot (see
+                        # save_probe_rows), so there is no partial-seed state
+                        # to resume the chain from.
+                        previous_scale: float | None = None
 
-        for snapshot in path_record.snapshots:
-            directory = root / f"it{snapshot.iteration:06d}"
-            if (directory / "run.parquet").exists() and not force:
-                cached = load_yaml(directory / "config.yaml").get("effective_norm")
-                previous_scale = None if cached is None else float(cached)
-                continue
-            geometry = snapshot_geometry(
-                snapshot, spec.transform, scaling, prev_norm=previous_scale
-            )
-            result, optimizer = run_conditioned_local(
-                choice,
-                problem,
-                snapshot.mean,
-                local_config_for(optimizer_key, dim, "probe"),
-                geometry,
-                constraint_handler=handler,
-                stopping_condition=MaxEvaluations(probe_budget),
-                seed=seed,
-                simplex_base_size=probe_simplex_base_size(snapshot),
-            )
-            effective_norm = effective_geometry_norm(choice, optimizer, geometry)
-            previous_scale = (
-                previous_scale if effective_norm is None else effective_norm
-            )
-            record_local_run(
-                directory,
-                result,
-                optimizer,
-                {
-                    **base_payload,
-                    "kind": "probe",
-                    "snapshot_iteration": snapshot.iteration,
-                    "snapshot_evaluations": snapshot.evaluations,
-                    "budget_evaluations": probe_budget,
-                    "effective_norm": effective_norm,
-                },
-            )
-            executed += 1
+                        for snapshot in path_record.snapshots:
+                            geometry = snapshot_geometry(
+                                snapshot,
+                                spec.transform,
+                                scaling,
+                                prev_norm=previous_scale,
+                            )
+                            result, optimizer = run_conditioned_local(
+                                choice,
+                                problem,
+                                snapshot.mean,
+                                local_config_for(optimizer_key, dim, "probe"),
+                                geometry,
+                                constraint_handler=handler,
+                                stopping_condition=MaxEvaluations(probe_budget),
+                                seed=seed,
+                                simplex_base_size=probe_simplex_base_size(snapshot),
+                            )
+                            effective_norm = effective_geometry_norm(
+                                choice, optimizer, geometry
+                            )
+                            previous_scale = (
+                                previous_scale
+                                if effective_norm is None
+                                else effective_norm
+                            )
+                            rows.append(
+                                _probe_row(
+                                    seed,
+                                    optimizer_key,
+                                    "probe",
+                                    result,
+                                    snapshot_iteration=snapshot.iteration,
+                                    snapshot_evaluations=snapshot.evaluations,
+                                    budget_evaluations=probe_budget,
+                                    effective_norm=effective_norm,
+                                )
+                            )
 
-        alone_dir = root / "alone"
-        if not (alone_dir / "run.parquet").exists() or force:
-            x0 = problem.starting_point(seed)
-            alone_budget = path_record.trace.final_evaluations
-            result, optimizer = run_conditioned_local(
-                choice,
-                problem,
-                x0,
-                local_config_for(optimizer_key, dim, "deep"),
-                None,
-                constraint_handler=handler,
-                stopping_condition=MaxEvaluations(alone_budget),
-                seed=seed,
-                simplex_base_size=0.1 * SAMPLING_SPAN,
-            )
-            record_local_run(
-                alone_dir,
-                result,
-                optimizer,
-                {**base_payload, "kind": "alone", "budget_evaluations": alone_budget},
-            )
-            executed += 1
-        return (
-            f"{scaling}/d{dim}/f{function_number}/seed{seed}/{optimizer_key}: "
-            f"{executed} runs"
-        )
+                        x0 = problem.starting_point(seed)
+                        alone_budget = path_record.trace.final_evaluations
+                        result, optimizer = run_conditioned_local(
+                            choice,
+                            problem,
+                            x0,
+                            local_config_for(optimizer_key, dim, "deep"),
+                            None,
+                            constraint_handler=handler,
+                            stopping_condition=MaxEvaluations(alone_budget),
+                            seed=seed,
+                            simplex_base_size=0.1 * SAMPLING_SPAN,
+                        )
+                        rows.append(
+                            _probe_row(
+                                seed,
+                                optimizer_key,
+                                "alone",
+                                result,
+                                snapshot_iteration=None,
+                                snapshot_evaluations=None,
+                                budget_evaluations=alone_budget,
+                                effective_norm=None,
+                            )
+                        )
 
-    results = Parallel(n_jobs=spec.num_workers, backend="loky")(
-        delayed(one)(*job) for job in jobs
-    )
-    print(f"[probes] {len(results or [])} probe groups ready")
+                    save_probe_rows(cell / f"seed{seed:02d}.parquet", rows)
+                    return f"{scaling}/d{dim}/f{function_number}/seed{seed}: {len(rows)} rows"
+
+                jobs = [
+                    seed
+                    for seed in range(spec.num_seeds)
+                    if force or not (cell / f"seed{seed:02d}.parquet").exists()
+                ]
+                results = Parallel(n_jobs=spec.num_workers, backend="loky")(
+                    delayed(one_seed)(seed) for seed in jobs
+                )
+                print(
+                    f"[probes] {scaling}/d{dim}/f{function_number}: "
+                    f"{len(results or [])} seed files written"
+                )
 
 
-def load_run_trace(
-    directory: Path, algorithm_name: str, problem_name: str, seed: int
+def trace_from_probe_row(
+    row: dict[str, Any], algorithm_name: str, problem_name: str
 ) -> RunTrace:
-    arrays = load_arrays_parquet(directory / "run.parquet")
-    evaluations = [int(e) for e in arrays["evaluations"][0]]
-    best_fitness = [float(f) for f in arrays["best_fitness"][0]]
+    """Adapt one row loaded from a probe Parquet file into a :class:`RunTrace`."""
+    evaluations = [int(e) for e in row["evaluations"]]
+    best_fitness = [float(f) for f in row["best_fitness"]]
     return RunTrace(
         algorithm=algorithm_name,
         problem=problem_name,
-        seed=seed,
+        seed=int(row["seed"]),
         evaluations=evaluations,
         best_fitness=best_fitness,
         final_evaluations=evaluations[-1] if evaluations else 0,
@@ -439,6 +497,7 @@ def run_compose_stage(spec: Exp2Spec) -> None:
             for function_number in spec.functions:
                 family = family_for(spec, dim, function_number)
                 problem_name = family.name
+                cell = probe_cell_dir(spec, scaling, dim, function_number)
                 traces: dict[tuple[str, str], list[RunTrace]] = {}
 
                 def add(name: str, trace: RunTrace) -> None:
@@ -451,17 +510,18 @@ def run_compose_stage(spec: Exp2Spec) -> None:
                         )
                     )
                     add("CMA-ES", path_record.trace)
+                    rows = load_probe_rows(cell / f"seed{seed:02d}.parquet")
+                    by_key = {
+                        (row["optimizer"], row["kind"], row["snapshot_iteration"]): row
+                        for row in rows
+                    }
                     for optimizer_key in spec.optimizers:
-                        root = probe_root(
-                            spec, scaling, dim, function_number, seed, optimizer_key
-                        )
                         add(
                             LOCAL_LABELS[optimizer_key],
-                            load_run_trace(
-                                root / "alone",
+                            trace_from_probe_row(
+                                by_key[(optimizer_key, "alone", None)],
                                 LOCAL_LABELS[optimizer_key],
                                 problem_name,
-                                seed,
                             ),
                         )
                         for k in spec.ks:
@@ -469,11 +529,16 @@ def run_compose_stage(spec: Exp2Spec) -> None:
                             probes = [
                                 (
                                     snapshot.evaluations,
-                                    load_run_trace(
-                                        root / f"it{snapshot.iteration:06d}",
+                                    trace_from_probe_row(
+                                        by_key[
+                                            (
+                                                optimizer_key,
+                                                "probe",
+                                                snapshot.iteration,
+                                            )
+                                        ],
                                         name,
                                         problem_name,
-                                        seed,
                                     ),
                                 )
                                 for snapshot in switch_snapshots(

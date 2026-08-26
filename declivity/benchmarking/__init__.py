@@ -56,8 +56,10 @@ from declivity.benchmarking.ecdf import (
 )
 from declivity.benchmarking.persistence import (
     load_arrays_parquet,
+    load_probe_rows,
     load_traces_parquet,
     save_arrays_parquet,
+    save_probe_rows,
     save_runs_csv,
     save_summary_csv,
     save_traces_parquet,
@@ -92,6 +94,7 @@ __all__ = [
     "initial_hessian_from_cmaes",
     "load_arrays_parquet",
     "load_cmaes_path",
+    "load_probe_rows",
     "load_traces_parquet",
     "local_seeding_kwargs",
     "probe_trace",
@@ -101,6 +104,7 @@ __all__ = [
     "run_ecdf",
     "save_arrays_parquet",
     "save_cmaes_path",
+    "save_probe_rows",
     "save_runs_csv",
     "save_summary_csv",
     "save_traces_parquet",

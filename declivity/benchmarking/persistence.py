@@ -235,6 +235,54 @@ def load_arrays_parquet(path: str | Path) -> dict[str, list[NDArray[np.float64]]
     }
 
 
+_PROBE_SCHEMA = pa.schema(
+    [
+        ("seed", pa.int64()),
+        ("optimizer", pa.string()),
+        ("kind", pa.string()),  # "probe" | "alone"
+        ("snapshot_iteration", pa.int64()),  # null for kind="alone"
+        ("snapshot_evaluations", pa.int64()),  # null for kind="alone"
+        ("budget_evaluations", pa.int64()),
+        ("effective_norm", pa.float64()),  # null for powell/neldermead*
+        ("final_fitness", pa.float64()),
+        ("final_evaluations", pa.int64()),
+        ("message", pa.string()),
+        ("evaluations", pa.list_(pa.int64())),
+        ("best_fitness", pa.list_(pa.float64())),
+    ]
+)
+
+
+def save_probe_rows(path: str | Path, rows: list[dict]) -> Path:
+    """Write one seed's worth of local-optimizer probe results as a single
+    Parquet file, atomically.
+
+    Unlike :func:`save_arrays_parquet` (numeric columns only), a probe row
+    mixes scalars, strings, and the nullable fields that distinguish a
+    "probe" row from an "alone" row (see :data:`_PROBE_SCHEMA`) -- so this
+    goes through ``pa.table(..., schema=...)`` instead, which preserves real
+    nulls rather than coercing them to a sentinel.
+    """
+    path = Path(path)
+    columns: dict[str, list] = {name: [] for name in _PROBE_SCHEMA.names}
+    for row in rows:
+        for name in _PROBE_SCHEMA.names:
+            columns[name].append(row[name])
+    table = pa.table(columns, schema=_PROBE_SCHEMA)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    pq.write_table(table, tmp_path, compression="zstd")
+    os.replace(tmp_path, path)
+    return path
+
+
+def load_probe_rows(path: str | Path) -> list[dict]:
+    """Reconstruct the row list written by :func:`save_probe_rows`."""
+    table = pq.read_table(path, schema=_PROBE_SCHEMA)
+    return table.to_pylist()
+
+
 def save_summary_csv(rows: Iterable[dict], path: str | Path) -> Path:
     """Write the aggregate summary table (one row per problem x algorithm)."""
     path = Path(path)

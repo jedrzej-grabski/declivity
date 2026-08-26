@@ -7,7 +7,9 @@ recomputing what already exists:
     setup/    per (dim, seed): x0 + rotation matrix        (cheap, deterministic)
     cmaes/    per (variant, dim[, function], seed): CMAESPath (expensive, cached)
     hessian/  per (dim, seed): FD Hessian at x0            (exp1 only)
-    local/    per local run: trace + final state + config.yaml
+    local/    per (scaling, dim, function): meta.yaml + one seedNN.parquet
+              per seed, batching every optimizer/snapshot/alone run for that
+              seed into one file                            (exp2 only)
     benchmarks/  Benchmark traces.parquet per stage           (what --replot reads)
 
 Every stage checks for existing artifacts and skips them unless forced.
@@ -43,11 +45,9 @@ from declivity.benchmarking import (
     RunTrace,
     load_cmaes_path,
     record_cmaes_path,
-    save_arrays_parquet,
     save_cmaes_path,
 )
 from declivity.cec.problem import CEC_LOWER_BOUND, CEC_UPPER_BOUND, CECProblem
-from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.core.config_base import BaseConfig
 from declivity.utils.benchmark_functions import Ellipsoid, RotatedFunction
 from declivity.utils.initial_point_generator import UniformBoxInitialPointGenerator
@@ -461,44 +461,6 @@ def ensure_cmaes_path(
     save_cmaes_path(directory, path_record)
     dump_yaml(directory / "config.yaml", config_payload)
     return path_record
-
-
-# Per-run persistence for conditioned local runs.
-
-
-def record_local_run(
-    directory: Path,
-    result: OptimizationResult,
-    optimizer: BaseOptimizer,
-    config_payload: dict[str, Any],
-) -> None:
-    directory.mkdir(parents=True, exist_ok=True)
-    # Per-evaluation best-x trajectories are dropped: nothing reads them back
-    # (only evaluations/best_fitness are consulted, in exp2_hybrid.py), and for
-    # simplex methods (Nelder-Mead family) they dwarf everything else this
-    # persists -- one dim-sized vector per evaluation, and those methods take
-    # far more evaluations to converge than gradient-based ones.
-    #
-    # The optimizer's final learned state (inverse Hessian / direction set /
-    # simplex / L-BFGS corrections) was previously persisted alongside this,
-    # but nothing downstream ever read it back, and it's O(d^2) for most of
-    # these optimizers -- dropped entirely rather than kept unread.
-    arrays: dict[str, NDArray[np.float64]] = {
-        "evaluations": np.asarray(result.diagnostic.evaluations, dtype=np.int64),
-        "best_fitness": np.asarray(result.diagnostic.best_fitness, dtype=float),
-    }
-    save_arrays_parquet(
-        directory / "run.parquet", {name: [value] for name, value in arrays.items()}
-    )
-    dump_yaml(
-        directory / "config.yaml",
-        {
-            **config_payload,
-            "final_fitness": float(result.best_fitness),
-            "final_evaluations": int(result.evaluations),
-            "message": result.message,
-        },
-    )
 
 
 @dataclass
