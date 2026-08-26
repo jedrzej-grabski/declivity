@@ -20,6 +20,7 @@ framework's primitives:
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Union, final
 
@@ -36,6 +37,7 @@ from declivity.utils.constraint_handlers import (
     BoxStrategy,
     ConstraintHandler,
 )
+from declivity.utils.initial_geometry import covariance_invertible_for_handoff
 from declivity.utils.population_initializers import (
     MeanSigmaPopulationInitializer,
     PopulationInitializer,
@@ -479,6 +481,27 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         dC = np.diag(self._C)
         sigma = self._sigma
         cfg = self.config
+
+        # Checked first: local-optimizer handoffs invert the covariance into
+        # a dense matrix (covariance_to_hessian_matrix) and Cholesky-factor
+        # it, which can lose enough precision to come back non-PD once the
+        # covariance has degenerated. Rather than guess a condition-number
+        # threshold, attempt that exact reconstruction here and stop if it
+        # actually fails, before any looser heuristic below gets a chance to
+        # fire first on a generation that's already past this point. A non-PD
+        # matrix supplied up front is still a real error (InitialGeometry's
+        # constructor keeps raising for that); this is only about a
+        # covariance going bad mid-run.
+        if not covariance_invertible_for_handoff(B, D):
+            warnings.warn(
+                "CMA-ES covariance degenerated: no longer invertible to a "
+                "positive-definite matrix, which a local-optimizer handoff "
+                "would need. Terminating instead of failing downstream.",
+                stacklevel=2,
+            )
+            return (
+                "Covariance no longer invertible to a positive-definite handoff matrix."
+            )
 
         if (
             self._generation > cfg.funhist_term

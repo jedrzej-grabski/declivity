@@ -162,6 +162,30 @@ def covariance_to_hessian_matrix(
     raise ValueError(f"Unknown handoff transform: {transform!r}. Use one of {valid}.")
 
 
+def covariance_invertible_for_handoff(
+    eigenvectors: NDArray[np.float64], eigenvalues_sqrt: NDArray[np.float64]
+) -> bool:
+    """Would :meth:`InitialGeometry.from_covariance` accept this ``(B, D)``?
+
+    Runs the exact same reconstruction (``covariance_to_hessian_matrix`` with
+    ``HandoffTransform.INVERSE``, symmetrized, Cholesky-factored) a
+    local-optimizer handoff would, so a caller producing ``(B, D)`` (CMA-ES)
+    can tell -- before persisting or acting on this state -- whether it has
+    already degenerated too far for that reconstruction to remain
+    positive-definite in float64.
+    """
+    matrix = covariance_to_hessian_matrix(
+        HandoffTransform.INVERSE, eigenvectors, eigenvalues_sqrt
+    )
+    if matrix is None:
+        return True
+    try:
+        cho_factor(0.5 * (matrix + matrix.T))
+    except np.linalg.LinAlgError:
+        return False
+    return True
+
+
 class InitialHessianMode(Enum):
     """How the initial Hessian B_0 is stored and applied."""
 
