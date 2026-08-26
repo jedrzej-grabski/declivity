@@ -29,6 +29,7 @@ from declivity.benchmarking.persistence import (
 from declivity.benchmarking.problem import Problem
 from declivity.benchmarking.run_trace import RunTrace
 from declivity.utils.constraint_handlers import ConstraintHandler
+from declivity.utils.initial_geometry import covariance_invertible_for_handoff
 from declivity.utils.stopping_conditions import MaxEvaluations, MaxIterations
 
 _SNAPSHOT_ARRAY_FIELDS = (
@@ -187,22 +188,31 @@ def record_cmaes_path(
 
         # get_state() caches (B, D) after every generation, so both are set.
         assert state.eigenvectors is not None and state.eigenvalues_sqrt is not None
-        snapshots.append(
-            CMAESSnapshot(
-                iteration=int(state.generation),
-                evaluations=cumulative_evaluations,
-                sigma=float(state.sigma),
-                mean=state.mean.copy(),
-                covariance=state.covariance.copy(),
-                evolution_path_c=state.evolution_path_c.copy(),
-                evolution_path_sigma=state.evolution_path_sigma.copy(),
-                eigenvectors=state.eigenvectors.copy(),
-                eigenvalues_sqrt=state.eigenvalues_sqrt.copy(),
-                funhist_values=state.funhist_values.copy(),
-                x_best=best_solution.copy(),
-                f_best=best_fitness,
+        # Checked directly against this state -- not by matching CMA-ES's own
+        # stop message -- because whichever termination heuristic happens to
+        # fire first (tolx, no-effect-axis, ...) can preempt CMA-ES's own
+        # invertibility check on a later, more degenerate generation.
+        # Recording an uninvertible state would only hand a local-optimizer
+        # handoff the exact matrix CMA-ES itself could no longer use.
+        if covariance_invertible_for_handoff(
+            state.eigenvectors, state.eigenvalues_sqrt
+        ):
+            snapshots.append(
+                CMAESSnapshot(
+                    iteration=int(state.generation),
+                    evaluations=cumulative_evaluations,
+                    sigma=float(state.sigma),
+                    mean=state.mean.copy(),
+                    covariance=state.covariance.copy(),
+                    evolution_path_c=state.evolution_path_c.copy(),
+                    evolution_path_sigma=state.evolution_path_sigma.copy(),
+                    eigenvectors=state.eigenvectors.copy(),
+                    eigenvalues_sqrt=state.eigenvalues_sqrt.copy(),
+                    funhist_values=state.funhist_values.copy(),
+                    x_best=best_solution.copy(),
+                    f_best=best_fitness,
+                )
             )
-        )
 
         if state.generation < target:
             break
