@@ -18,11 +18,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from declivity.algorithms.cmaes.cmaes_optimizer import (
-    _EPS,
-    CMAESOptimizer,
-    CMAESState,
-)
+from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
 from declivity.benchmarking.persistence import (
     load_arrays_parquet,
@@ -42,6 +38,8 @@ _SNAPSHOT_ARRAY_FIELDS = (
     "covariance",
     "evolution_path_c",
     "evolution_path_sigma",
+    "eigenvectors",
+    "eigenvalues_sqrt",
     "funhist_values",
     "x_best",
     "f_best",
@@ -264,29 +262,6 @@ def save_cmaes_path(directory: str | Path, path_record: CMAESPath) -> Path:
     return directory
 
 
-def _eigendecompose_covariance(
-    covariance: NDArray[np.float64],
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Reproduce ``CMAESOptimizer._eigen_decomposition``'s ``(B, D)`` from a
-    persisted covariance: that call reconstructs C into the resymmetrised
-    ``B @ diag(D**2) @ B.T``, which is what got persisted, so re-running the
-    same ``eigh`` (with the same ``_EPS`` clamp on negative eigenvalues)
-    recovers the pair CMA-ES had cached.
-
-    Agreement is to floating-point tolerance, roughly 1e-15, not bit-for-bit
-    -- ``eigh`` is not exactly invertible against its own reconstruction. That
-    is well inside any tolerance the handoff geometry cares about, but it does
-    mean a snapshot loaded here can seed a probe a hair differently than one
-    carrying the originally cached eigenvectors would have, so traces are not
-    reproducible against results generated before this became a load-time
-    recompute. Keep the clamp and the resymmetrisation in step with
-    ``CMAESOptimizer`` if either changes there."""
-    symmetric = (covariance + covariance.T) / 2.0
-    eigenvalues_sq, eigenvectors = np.linalg.eigh(symmetric)
-    eigenvalues_sqrt = np.sqrt(np.where(eigenvalues_sq < 0, _EPS, eigenvalues_sq))
-    return eigenvectors, eigenvalues_sqrt
-
-
 def load_cmaes_path(directory: str | Path) -> CMAESPath:
     """Load a :class:`CMAESPath` previously written by :func:`save_cmaes_path`."""
     directory = Path(directory)
@@ -296,26 +271,23 @@ def load_cmaes_path(directory: str | Path) -> CMAESPath:
 
     arrays = load_arrays_parquet(directory / "snapshots.parquet")
     count = len(arrays["iteration"])
-    snapshots: list[CMAESSnapshot] = []
-    for i in range(count):
-        covariance = arrays["covariance"][i]
-        eigenvectors, eigenvalues_sqrt = _eigendecompose_covariance(covariance)
-        snapshots.append(
-            CMAESSnapshot(
-                iteration=int(arrays["iteration"][i]),
-                evaluations=int(arrays["evaluations"][i]),
-                sigma=float(arrays["sigma"][i]),
-                mean=arrays["mean"][i],
-                covariance=covariance,
-                evolution_path_c=arrays["evolution_path_c"][i],
-                evolution_path_sigma=arrays["evolution_path_sigma"][i],
-                eigenvectors=eigenvectors,
-                eigenvalues_sqrt=eigenvalues_sqrt,
-                funhist_values=arrays["funhist_values"][i],
-                x_best=arrays["x_best"][i],
-                f_best=float(arrays["f_best"][i]),
-            )
+    snapshots: list[CMAESSnapshot] = [
+        CMAESSnapshot(
+            iteration=int(arrays["iteration"][i]),
+            evaluations=int(arrays["evaluations"][i]),
+            sigma=float(arrays["sigma"][i]),
+            mean=arrays["mean"][i],
+            covariance=arrays["covariance"][i],
+            evolution_path_c=arrays["evolution_path_c"][i],
+            evolution_path_sigma=arrays["evolution_path_sigma"][i],
+            eigenvectors=arrays["eigenvectors"][i],
+            eigenvalues_sqrt=arrays["eigenvalues_sqrt"][i],
+            funhist_values=arrays["funhist_values"][i],
+            x_best=arrays["x_best"][i],
+            f_best=float(arrays["f_best"][i]),
         )
+        for i in range(count)
+    ]
 
     meta = json.loads((directory / "meta.json").read_text())
     return CMAESPath(trace=trace, snapshots=snapshots, meta=meta)
