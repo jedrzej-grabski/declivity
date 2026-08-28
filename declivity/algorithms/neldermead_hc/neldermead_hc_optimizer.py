@@ -356,7 +356,10 @@ class NelderMeadHCOptimizer(
         # and the magnitude column differ by many orders of magnitude.
         norms = np.linalg.norm(design, axis=0)
         norms[norms == 0.0] = 1.0
-        solution, *_ = np.linalg.lstsq(design / norms, target, rcond=None)
+        try:
+            solution, *_ = np.linalg.lstsq(design / norms, target, rcond=None)
+        except np.linalg.LinAlgError:
+            return None
         solution = solution / norms
         if not np.all(np.isfinite(solution)):
             return None
