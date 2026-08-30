@@ -106,7 +106,7 @@ def save_traces_parquet(
     return path
 
 
-@functools.cache
+@functools.lru_cache(maxsize=8)
 def load_traces_parquet(path: str | Path) -> dict[tuple[str, str], list[RunTrace]]:
     """Reconstruct the trace dictionary from a previously saved Parquet file.
 
@@ -114,6 +114,13 @@ def load_traces_parquet(path: str | Path) -> dict[tuple[str, str], list[RunTrace
     marimo visualizer re-rendering on every UI interaction) skip the disk
     round trip on repeat calls. Pass a consistent path representation
     (``str`` or ``Path``, not a mix) so cache hits land.
+
+    Bounded (not ``functools.cache``): a whole-suite plot pass calls this
+    once per (scaling, function) -- dozens of distinct paths in one process
+    -- and an unbounded cache would pin every one of them in memory for the
+    process's lifetime, well past the point their data has already been
+    folded into the caller's own aggregate. That alone was enough to exceed
+    160GB regenerating a single d=100 study's suite ECDF.
     """
     table = pq.read_table(path)
     series_columns = [name for name in table.column_names if name.startswith("series_")]
