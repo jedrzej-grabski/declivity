@@ -37,6 +37,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
+from declivity.algorithms.bfgs.config import BFGSConfig
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.cmaes_optimizer import CMAESOptimizer, CMAESState
 from declivity.algorithms.cmaes.config import CMAESConfig
@@ -979,13 +980,22 @@ class InterleavedCMAESLocal(BenchmarkAlgorithm):
             geometry = InitialGeometry.from_curvature(curvature, dimensions)
 
             local_config = self.local_config_factory(dimensions)
-            if self.local_algorithm == AlgorithmChoice.LBFGSB:
+            if self.local_algorithm == AlgorithmChoice.LBFGSB and isinstance(
+                local_config, LBFGSBConfig
+            ):
                 local_config.factr = self.probe_factr
                 local_config.pgtol = self.probe_pgtol
-            else:
+            elif self.local_algorithm == AlgorithmChoice.BFGS and isinstance(
+                local_config, BFGSConfig
+            ):
                 # BFGS has no relative-decrease ("factr") test; its gradient
                 # tolerance is the closest analog to the probe's stop.
                 local_config.gtol = self.probe_pgtol
+            else:
+                raise TypeError(
+                    f"local_config_factory returned {type(local_config).__name__}, "
+                    f"which does not match local_algorithm={self.local_algorithm}."
+                )
             for flag in self.local_extra_diagnostics:
                 if hasattr(local_config, flag):
                     setattr(local_config, flag, True)
