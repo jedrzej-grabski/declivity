@@ -355,8 +355,12 @@ class CMA:
         if np.all(self._mean == self._mean + (0.1 * self._sigma * D[i] * B[:, i])):
             return True
 
-        # Stop if the condition number of the covariance matrix exceeds 1e14.
-        condition_cov = np.max(D) / np.min(D)
+        # Stop if the condition number of the covariance matrix exceeds
+        # tolconditioncov. D holds sqrt-eigenvalues, so the condition number
+        # is the squared ratio (pycma: condition_number property,
+        # evolution_strategy.py:3582-3593) -- comparing the unsquared ratio
+        # directly silently raises the real cutoff to tolconditioncov**2.
+        condition_cov = (np.max(D) / np.min(D)) ** 2
         if condition_cov > self._tolconditioncov:
             return True
 

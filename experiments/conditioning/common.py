@@ -7,7 +7,9 @@ recomputing what already exists:
     setup/    per (dim, seed): x0 + rotation matrix        (cheap, deterministic)
     cmaes/    per (variant, dim[, function], seed): CMAESPath (expensive, cached)
     hessian/  per (dim, seed): FD Hessian at x0            (exp1 only)
-    local/    per local run: trace + final state + config.yaml
+    local/    per (scaling, dim, function): meta.yaml + one seedNN.parquet
+              per seed, batching every optimizer/snapshot/alone run for that
+              seed into one file                            (exp2 only)
     benchmarks/  Benchmark traces.parquet per stage           (what --replot reads)
 
 Every stage checks for existing artifacts and skips them unless forced.
@@ -29,20 +31,13 @@ from matplotlib.colors import to_hex
 from matplotlib.pyplot import get_cmap
 from numpy.typing import NDArray
 
-from declivity.algorithms.bfgs.bfgs_optimizer import BFGSOptimizer
 from declivity.algorithms.bfgs.config import BFGSConfig
 from declivity.algorithms.choices import AlgorithmChoice
 from declivity.algorithms.cmaes.config import CMAESConfig, default_population_size
 from declivity.algorithms.lbfgsb.config import LBFGSBConfig
-from declivity.algorithms.lbfgsb.lbfgsb_optimizer import LBFGSBOptimizer
 from declivity.algorithms.neldermead.config import NelderMeadConfig
-from declivity.algorithms.neldermead.neldermead_optimizer import NelderMeadOptimizer
 from declivity.algorithms.neldermead_hc.config import NelderMeadHCConfig
-from declivity.algorithms.neldermead_hc.neldermead_hc_optimizer import (
-    NelderMeadHCOptimizer,
-)
 from declivity.algorithms.powell.config import PowellConfig
-from declivity.algorithms.powell.powell_optimizer import PowellOptimizer
 from declivity.benchmarking import (
     CMAESPath,
     Problem,
@@ -50,11 +45,9 @@ from declivity.benchmarking import (
     RunTrace,
     load_cmaes_path,
     record_cmaes_path,
-    save_arrays_parquet,
     save_cmaes_path,
 )
 from declivity.cec.problem import CEC_LOWER_BOUND, CEC_UPPER_BOUND, CECProblem
-from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.core.config_base import BaseConfig
 from declivity.utils.benchmark_functions import Ellipsoid, RotatedFunction
 from declivity.utils.initial_point_generator import UniformBoxInitialPointGenerator
@@ -468,60 +461,6 @@ def ensure_cmaes_path(
     save_cmaes_path(directory, path_record)
     dump_yaml(directory / "config.yaml", config_payload)
     return path_record
-
-
-# Per-run persistence for conditioned local runs.
-
-
-def final_state_arrays(optimizer: BaseOptimizer) -> dict[str, NDArray[np.float64]]:
-    if isinstance(optimizer, BFGSOptimizer):
-        matrix = optimizer.final_inverse_hessian
-        return {} if matrix is None else {"inverse_hessian": matrix}
-    if isinstance(optimizer, PowellOptimizer):
-        directions = optimizer.final_directions
-        return {} if directions is None else {"direction_set": directions}
-    if isinstance(optimizer, (NelderMeadOptimizer, NelderMeadHCOptimizer)):
-        simplex = optimizer.final_simplex
-        return {} if simplex is None else {"simplex": simplex}
-    if isinstance(optimizer, LBFGSBOptimizer):
-        steps, gradient_diffs, theta = optimizer.final_corrections()
-        return {
-            "correction_steps": steps,
-            "correction_gradient_diffs": gradient_diffs,
-            "theta": np.array([theta]),
-        }
-    return {}
-
-
-def record_local_run(
-    directory: Path,
-    result: OptimizationResult,
-    optimizer: BaseOptimizer,
-    config_payload: dict[str, Any],
-) -> None:
-    directory.mkdir(parents=True, exist_ok=True)
-    # Per-evaluation best-x trajectories are dropped: nothing reads them back
-    # (only evaluations/best_fitness are consulted, in exp2_hybrid.py), and for
-    # simplex methods (Nelder-Mead family) they dwarf everything else this
-    # persists -- one dim-sized vector per evaluation, and those methods take
-    # far more evaluations to converge than gradient-based ones.
-    arrays: dict[str, NDArray[np.float64]] = {
-        "evaluations": np.asarray(result.diagnostic.evaluations, dtype=np.int64),
-        "best_fitness": np.asarray(result.diagnostic.best_fitness, dtype=float),
-    }
-    arrays.update(final_state_arrays(optimizer))
-    save_arrays_parquet(
-        directory / "run.parquet", {name: [value] for name, value in arrays.items()}
-    )
-    dump_yaml(
-        directory / "config.yaml",
-        {
-            **config_payload,
-            "final_fitness": float(result.best_fitness),
-            "final_evaluations": int(result.evaluations),
-            "message": result.message,
-        },
-    )
 
 
 @dataclass

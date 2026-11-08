@@ -37,7 +37,6 @@ from declivity.benchmarking import (
     load_traces_parquet,
     snapshot_geometry,
 )
-from declivity.core.base_optimizer import BaseOptimizer, OptimizationResult
 from declivity.plotting import plot_convergence_overlay
 from declivity.utils.hessian import numerical_hessian, spd_regularize
 from declivity.utils.initial_geometry import HessianScaling, InitialGeometry
@@ -71,7 +70,6 @@ from experiments.conditioning.common import (
     plot_xmax,
     problem_optimum,
     ramp_colors,
-    record_local_run,
     resolve_population_size,
 )
 
@@ -309,84 +307,10 @@ def build_contenders(
                     ),
                     stopping_condition=MaxEvaluations(budget),
                     simplex_base_size=0.1 * SAMPLING_SPAN,
-                    record=make_recorder(
-                        spec, variant, optimizer_key, conditioner, scaling
-                    ),
                 )
             )
         contenders[optimizer_key] = runners
     return contenders
-
-
-def make_recorder(
-    spec: Exp1Spec,
-    variant: str,
-    optimizer_key: str,
-    conditioner: Conditioner,
-    scaling: str,
-):
-    def record(
-        problem: Problem,
-        seed: int,
-        result: OptimizationResult,
-        optimizer: BaseOptimizer,
-    ) -> None:
-        dim = problem.dimensions
-        directory = (
-            scaling_root(spec, scaling)
-            / "local"
-            / variant
-            / f"d{dim:03d}"
-            / optimizer_key
-            / conditioner.key
-            / f"seed{seed:02d}"
-        )
-        record_local_run(
-            directory,
-            result,
-            optimizer,
-            {
-                "experiment": "exp1_conditioners",
-                "study": spec.name,
-                "problem": problem.name,
-                "variant": variant,
-                "dimensions": dim,
-                "seed": seed,
-                "optimizer": optimizer_key,
-                "conditioner": conditioner.key,
-                "conditioner_kind": conditioner.kind,
-                "snapshot_iteration_requested": (
-                    conditioner.k * dim if conditioner.kind == "covariance" else None
-                ),
-                # Differs from the requested one when CMA-ES converged sooner.
-                "snapshot_iteration_used": (
-                    load_snapshot(spec, variant, dim, seed, conditioner.k).iteration
-                    if conditioner.kind == "covariance"
-                    else None
-                ),
-                "transform": spec.transform,
-                "scaling": scaling,
-                "budget_evaluations": spec.local_budget_per_dim * dim,
-                "x0_file": str(
-                    setup_root(spec).relative_to(study_root(spec))
-                    / f"d{dim:03d}"
-                    / f"seed{seed:02d}"
-                    / "x0.npy"
-                ),
-                "rotation_file": (
-                    str(
-                        setup_root(spec).relative_to(study_root(spec))
-                        / f"d{dim:03d}"
-                        / f"seed{seed:02d}"
-                        / "rotation.npy"
-                    )
-                    if spec.rotate
-                    else None
-                ),
-            },
-        )
-
-    return record
 
 
 # Stages.

@@ -522,7 +522,12 @@ class CMAESOptimizer(PopulationOptimizer["CMAESLogData", CMAESConfig]):
         if np.all(self._mean == self._mean + (0.1 * sigma * D[i] * B[:, i])):
             return "No effect in axis update."
 
-        if float(np.max(D)) / float(np.min(D)) > cfg.tolconditioncov:
+        # tolconditioncov bounds the covariance's own eigenvalue condition
+        # number, which is (max(D)/min(D))**2 since D holds sqrt-eigenvalues
+        # (pycma: condition_number property, evolution_strategy.py:3582-3593).
+        # Comparing the unsquared ratio against tolconditioncov directly, as
+        # this used to, silently raised the real cutoff to tolconditioncov**2.
+        if (float(np.max(D)) / float(np.min(D))) ** 2 > cfg.tolconditioncov:
             return "Condition number of covariance matrix exceeded tolerance."
 
         return None
