@@ -562,7 +562,9 @@ def _(
             v2_shifted, v2_template, v2_contenders, v2_opt, title=v2_title
         )
         if v2_fig is not None:
-            v2_figs.append(mo.as_html(v2_fig).style({"max-width": "900px", "width": "100%"}))
+            v2_figs.append(
+                mo.as_html(v2_fig).style({"max-width": "900px", "width": "100%"})
+            )
             plt.close(v2_fig)
 
     mo.stop(not v2_figs, mo.callout(mo.md("No data for this sweep."), kind="warn"))

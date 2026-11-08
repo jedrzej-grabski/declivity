@@ -5,6 +5,7 @@ notes/
 
 # Tooling state — not part of the framework
 CLAUDE.md
+AGENTS.md
 .claude/
 .DS_Store
 

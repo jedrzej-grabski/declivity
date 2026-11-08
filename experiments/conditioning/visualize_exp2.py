@@ -175,7 +175,9 @@ def discover_studies(data_root: Path) -> list[StudyInfo]:
             continue
         dims = sorted({dim for by_dim in cells.values() for dim in by_dim})
         spec = replace(spec, dimensions=tuple(dims))
-        infos.append(StudyInfo(name=spec.name, study_dir=study_dir, spec=spec, cells=cells))
+        infos.append(
+            StudyInfo(name=spec.name, study_dir=study_dir, spec=spec, cells=cells)
+        )
     return infos
 
 
@@ -196,7 +198,9 @@ def load_function_shifted(
     f0 = {
         seed: max(
             float(
-                family.instance(seed).function(family.instance(seed).starting_point(seed))
+                family.instance(seed).function(
+                    family.instance(seed).starting_point(seed)
+                )
             )
             - optimum,
             floor,
@@ -217,7 +221,9 @@ def load_suite_traces(
     suite_traces: dict[tuple[str, str], list[RunTrace]] = {}
     templates = []
     for function_number in functions:
-        traces_path = benchmark_dir(spec, scaling, dim, function_number) / "traces.parquet"
+        traces_path = (
+            benchmark_dir(spec, scaling, dim, function_number) / "traces.parquet"
+        )
         if not traces_path.exists():
             continue
         suite_traces.update(load_traces_parquet(traces_path))
@@ -269,7 +275,9 @@ def render_panel(
     """One ``plot_convergence_overlay`` panel for an arbitrary contender
     list, with the secondary CMA-ES-iteration axis exp2 always shows."""
     pooled = [
-        trace for runner in runners for trace in shifted.get((template.name, runner.name), [])
+        trace
+        for runner in runners
+        for trace in shifted.get((template.name, runner.name), [])
     ]
     if not pooled:
         return None
@@ -362,7 +370,9 @@ def _(mo, scaling_sel, study):
     mo.stop(scaling_sel.value is None)
 
     dims = sorted(study.cells[scaling_sel.value].keys())
-    dim_sel = mo.ui.dropdown([str(d) for d in dims], value=str(dims[0]), label="Dimension")
+    dim_sel = mo.ui.dropdown(
+        [str(d) for d in dims], value=str(dims[0]), label="Dimension"
+    )
     dim_sel
     return (dim_sel,)
 
@@ -396,7 +406,9 @@ def _(dim_sel, function_sel, mo, scaling_sel, study):
 
     v1_dim = int(dim_sel.value)
     v1_function = int(function_sel.value)
-    v1_result = load_function_shifted(study.spec, scaling_sel.value, v1_dim, v1_function)
+    v1_result = load_function_shifted(
+        study.spec, scaling_sel.value, v1_dim, v1_function
+    )
     mo.stop(
         v1_result is None,
         mo.callout(mo.md("No `traces.parquet` found for this selection."), kind="warn"),
@@ -459,7 +471,9 @@ def _(dim_sel, function_sel, mo, scaling_sel, study, v2_alone_sel, v2_k_sel):
     v2_dim = int(dim_sel.value)
     v2_function = int(function_sel.value)
     v2_k = float(v2_k_sel.value)
-    v2_result = load_function_shifted(study.spec, scaling_sel.value, v2_dim, v2_function)
+    v2_result = load_function_shifted(
+        study.spec, scaling_sel.value, v2_dim, v2_function
+    )
     mo.stop(
         v2_result is None,
         mo.callout(mo.md("No `traces.parquet` found for this selection."), kind="warn"),
