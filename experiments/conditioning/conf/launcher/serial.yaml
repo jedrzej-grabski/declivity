@@ -1,0 +1,21 @@
+# @package _global_
+# One machine, cells one at a time. Hydra's built-in basic launcher runs the
+# multirun sweep sequentially in-process, and each cell then parallelizes its
+# seeds across `num_workers` cores -- so the whole box goes to one cell at a
+# time instead of being split between them.
+#
+# This is the right shape for a local grid: `launcher=local` (submitit's local
+# executor) starts *every* cell at once, which on a 16-cell grid oversubscribes
+# the CPU by an order of magnitude and thrashes. Use `launcher=local` to
+# smoke-test the array decomposition, `launcher=serial` to actually compute a
+# grid here, `launcher=slurm` to compute it on the cluster.
+#
+# Because the sweep shares one process, a cell that raises aborts the cells
+# after it -- every stage is idempotent, so re-running resumes where it stopped.
+defaults:
+  - override /hydra/launcher: basic
+
+# Cores for joblib's per-cell seed parallelism. Sized for the machine, not for
+# an allocation; experiments/conditioning/run_grid_local.sh overrides this from
+# the host's core count.
+num_workers: 8
